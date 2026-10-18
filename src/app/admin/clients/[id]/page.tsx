@@ -9,6 +9,9 @@ import { Alert, Badge, PageHeader } from "@/components/ui";
 import { ClientForm } from "../client-form";
 import { updateClientRecord } from "../actions";
 import { PortalAccess } from "../portal-access";
+import { OnboardingSummary } from "../onboarding-summary";
+import { listOnboardingFiles } from "@/lib/client-files";
+import type { Answers } from "@/lib/onboarding";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const metadata: Metadata = { title: "Client" };
@@ -29,6 +32,12 @@ export default async function ClientPage(props: PageProps<"/admin/clients/[id]">
   // Who can sign in to this client's portal, and whether they've set a password.
   const admin = createAdminClient();
   const { data: profiles } = await admin.from("profiles").select("id, email").eq("client_id", client.id).order("email");
+  const { data: ob } = await admin.from("onboarding_responses").select("data, submitted_at").eq("client_id", client.id).maybeSingle();
+  const stored = await listOnboardingFiles(admin, client.id);
+  const { data: signed } = stored.length
+    ? await admin.storage.from("client-files").createSignedUrls(stored.map((f) => f.path), 60 * 60)
+    : { data: [] };
+  const files = stored.map((f, i) => ({ ...f, url: signed?.[i]?.signedUrl ?? null }));
   const members = await Promise.all(
     (profiles ?? []).map(async (p) => {
       const { data: u } = await admin.auth.admin.getUserById(p.id);
@@ -51,6 +60,7 @@ export default async function ClientPage(props: PageProps<"/admin/clients/[id]">
       />
       {created && <Alert tone="success">{client.name} was added.</Alert>}
       <PortalAccess clientId={client.id} members={members} />
+      <OnboardingSummary answers={(ob?.data as Answers) ?? null} submittedAt={ob?.submitted_at ?? null} files={files} />
       <ClientForm action={updateClientRecord.bind(null, client.id)} client={client} submitLabel="Save changes" cancelHref="/admin/clients" />
     </div>
   );

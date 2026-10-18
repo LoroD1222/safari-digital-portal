@@ -13,13 +13,10 @@ export default function ConfirmPage() {
     const hash = new URLSearchParams(window.location.hash.slice(1));
     const access_token = hash.get("access_token");
     const refresh_token = hash.get("refresh_token");
-    if (!access_token || !refresh_token) {
-      setFailed(true);
-      return;
-    }
-    createClient()
-      .auth.setSession({ access_token, refresh_token })
-      .then(({ error }) => {
+    const session: Promise<{ error: unknown }> = access_token && refresh_token
+      ? createClient().auth.setSession({ access_token, refresh_token })
+      : Promise.resolve({ error: new Error("missing") });
+    session.then(({ error }) => {
         if (error) setFailed(true);
         else window.location.replace("/reset-password?welcome=1");
       });

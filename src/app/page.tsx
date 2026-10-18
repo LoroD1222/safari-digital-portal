@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { getViewer } from "@/lib/auth";
+import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/env";
 
 export default async function Home() {
@@ -18,5 +19,13 @@ export default async function Home() {
   }
   const viewer = await getViewer();
   if (!viewer) redirect("/login");
-  redirect(viewer.role === "admin" ? "/admin" : "/portal");
+  if (viewer.role === "admin") redirect("/admin");
+
+  // New clients go straight into onboarding until they've submitted it.
+  if (viewer.clientId) {
+    const supabase = await createClient();
+    const { data } = await supabase.from("clients").select("onboarding_status").eq("id", viewer.clientId).maybeSingle();
+    if (data && (data.onboarding_status === "not_started" || data.onboarding_status === "in_progress")) redirect("/onboarding");
+  }
+  redirect("/portal");
 }

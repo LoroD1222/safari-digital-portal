@@ -38,7 +38,7 @@ export type Answers = {
 };
 
 export const OFFERS = ["Wildlife safaris", "Kilimanjaro treks", "Zanzibar holidays", "Day trips", "Cultural tours", "Lodge or camp"];
-export const MARKETS = ["United States", "United Kingdom", "Germany", "France", "Netherlands", "Italy", "Spain", "Other"];
+export const MARKETS = ["United States", "United Kingdom", "Germany", "France", "Netherlands", "Italy", "Spain"];
 export const AD_GOALS = ["More inquiries", "More WhatsApp messages", "Promote a special offer", "Reach new countries"];
 export const WEB_GOALS = ["Get more direct inquiries", "Show our safari packages", "Look more professional", "Be found on Google"];
 export const PAGES = ["Home", "Safari packages", "Destinations", "About us", "Reviews", "Blog", "Contact"];

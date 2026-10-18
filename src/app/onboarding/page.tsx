@@ -37,6 +37,7 @@ export default async function OnboardingPage() {
       initialStep={row?.submitted_at ? "done" : started ? "business" : "welcome"}
       metaBusinessId={process.env.NEXT_PUBLIC_META_BUSINESS_ID ?? null}
       driveShareEmail={process.env.NEXT_PUBLIC_DRIVE_SHARE_EMAIL ?? null}
+      metaAccessVideoUrl={process.env.META_ACCESS_VIDEO_URL ?? null}
     />
   );
 }

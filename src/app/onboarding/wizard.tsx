@@ -9,6 +9,7 @@ import {
   type Answers, type FileCategory, type StepKey, type StoredFile,
 } from "@/lib/onboarding";
 import { Alert, Button, Input, Textarea, buttonClass } from "@/components/ui";
+import { VideoEmbed } from "@/components/video-embed";
 import { removeFile, saveOnboarding, submitOnboarding } from "./actions";
 
 type Props = {
@@ -20,6 +21,7 @@ type Props = {
   initialStep: StepKey;
   metaBusinessId: string | null;
   driveShareEmail: string | null;
+  metaAccessVideoUrl: string | null;
 };
 
 type SaveState = "idle" | "saving" | "saved" | "error";
@@ -62,12 +64,31 @@ const chipCls = (on: boolean) =>
   "inline-flex h-9 cursor-pointer items-center gap-2 rounded-control border px-3 font-medium " +
   (on ? "border-brand bg-[#F1FAF6]" : "border-field bg-white hover:bg-[#F4F5F2]");
 
-function Chips({ legend, options, value = [], onChange }: { legend: string; options: string[]; value?: string[]; onChange: (v: string[]) => void }) {
+function Chips({ legend, options, value = [], onChange, addLabel = "Add your own", addPlaceholder = "Type and press Enter" }: {
+  legend: string; options: string[]; value?: string[]; onChange: (v: string[]) => void; addLabel?: string; addPlaceholder?: string;
+}) {
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState("");
+  // Anything the client typed themselves shows as an extra chip after the presets.
+  const custom = value.filter((v) => !options.includes(v));
+  const all = [...options, ...custom];
+
+  function add() {
+    const v = draft.trim().replace(/\s+/g, " ").slice(0, 60);
+    if (v) {
+      const existing = all.find((o) => o.toLowerCase() === v.toLowerCase());
+      if (existing) { if (!value.includes(existing)) onChange([...value, existing]); }
+      else onChange([...value, v]);
+    }
+    setDraft("");
+    setAdding(false);
+  }
+
   return (
     <fieldset className="flex flex-col gap-2">
       <legend className="pb-2 font-medium">{legend}</legend>
       <div className="flex flex-wrap gap-2">
-        {options.map((o) => {
+        {all.map((o) => {
           const on = value.includes(o);
           return (
             <label key={o} className={chipCls(on)}>
@@ -77,6 +98,30 @@ function Chips({ legend, options, value = [], onChange }: { legend: string; opti
             </label>
           );
         })}
+        {adding ? (
+          <span className="inline-flex h-9 items-center gap-1 rounded-control border border-brand bg-white pl-3 pr-1">
+            <input
+              autoFocus
+              value={draft}
+              aria-label={`${addLabel}: ${legend}`}
+              placeholder={addPlaceholder}
+              maxLength={60}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") { e.preventDefault(); add(); }
+                if (e.key === "Escape") { setDraft(""); setAdding(false); }
+              }}
+              onBlur={add}
+              className="w-44 bg-transparent text-sm outline-none placeholder:text-[#8A8FA3]"
+            />
+            <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={add} className="h-7 rounded-badge px-2 text-[13px] font-semibold text-brand hover:bg-[#F1FAF6]">Add</button>
+          </span>
+        ) : (
+          <button type="button" onClick={() => setAdding(true)}
+            className="inline-flex h-9 items-center gap-1.5 rounded-control border border-dashed border-[#B7BCC8] px-3 font-medium text-brand hover:border-brand hover:bg-[#F1FAF6]">
+            <span aria-hidden className="text-base leading-none">+</span>{addLabel}
+          </button>
+        )}
       </div>
     </fieldset>
   );
@@ -357,8 +402,8 @@ export function Wizard(p: Props) {
                   <TextField id="ob-wa" label="WhatsApp number" type="tel" placeholder="+255" value={b.whatsapp} onChange={(v) => update("business", { whatsapp: v })} />
                 </div>
                 <AreaField id="ob-about" label="About your company" placeholder="Who you are and what makes your safaris special. Rough notes are fine." value={b.about} onChange={(v) => update("business", { about: v })} />
-                <Chips legend="What do you offer?" options={OFFERS} value={b.offers} onChange={(v) => update("business", { offers: v })} />
-                <Chips legend="Which countries do your guests come from?" options={MARKETS} value={b.markets} onChange={(v) => update("business", { markets: v })} />
+                <Chips legend="What do you offer?" addPlaceholder="e.g. Birdwatching tours" options={OFFERS} value={b.offers} onChange={(v) => update("business", { offers: v })} />
+                <Chips legend="Which countries do your guests come from?" addLabel="Add a country" addPlaceholder="e.g. Australia" options={MARKETS} value={b.markets} onChange={(v) => update("business", { markets: v })} />
                 <Radios legend="Where should new inquiries go?" name="dest" value={b.inquiry_dest}
                   options={[["whatsapp", "WhatsApp"], ["email", "Email"], ["both", "Both"]]} onChange={(v) => update("business", { inquiry_dest: v })} />
                 {b.inquiry_dest !== "whatsapp" && (
@@ -383,6 +428,7 @@ export function Wizard(p: Props) {
                 </section>
                 <section className="flex flex-col gap-3 border-t border-line-soft pt-5">
                   <h2 className="text-[15px] font-semibold">2. Give Safari Digital access</h2>
+                  <VideoEmbed url={p.metaAccessVideoUrl} title="How to give Safari Digital access" />
                   <ol className="list-decimal space-y-1.5 pl-5">
                     <li>Open Meta Business Suite and go to <strong className="font-semibold">Settings → Partners</strong>.</li>
                     <li>Add a partner using Safari Digital&apos;s Business ID: <strong className="font-semibold">{p.metaBusinessId ?? "we'll send it to you on WhatsApp"}</strong></li>
@@ -424,7 +470,7 @@ export function Wizard(p: Props) {
                   <TextField id="ob-want" label="Domain you'd like" placeholder="e.g. yourcompany.com" value={w.wanted_domain} onChange={(v) => update("website", { wanted_domain: v })} hint="We'll check it's available before buying." />
                 )}
                 <Chips legend="What should your website do best?" options={WEB_GOALS} value={w.goals} onChange={(v) => update("website", { goals: v })} />
-                <Chips legend="Pages you need" options={PAGES} value={w.pages} onChange={(v) => update("website", { pages: v })} />
+                <Chips legend="Pages you need" addLabel="Add a page" addPlaceholder="e.g. Gallery" options={PAGES} value={w.pages} onChange={(v) => update("website", { pages: v })} />
                 <AreaField id="ob-likes" label="Websites you like" optional placeholder="Paste links and tell us what you like about them" value={w.likes} onChange={(v) => update("website", { likes: v })} />
               </div>
             )}

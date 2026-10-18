@@ -21,7 +21,7 @@ Client portal and admin dashboard for Safari Digital, at `portal.safaridigital.c
 2. **Turn off public sign-ups.** Supabase → Authentication → Sign In / Providers → turn off "Allow new users to sign up". Accounts are created by Safari Digital only.
 3. **Your admin account.** Supabase → Authentication → Users → Add user → Create new user (tick "Auto confirm"). Then run `supabase/make-admin.sql` with your email.
 4. **Redirect URLs.** Supabase → Authentication → URL Configuration: set Site URL to `https://portal.safaridigital.co.tz` and add `https://portal.safaridigital.co.tz/**` and `https://*.vercel.app/**` to Redirect URLs (password-reset links need these).
-5. **Optional settings** in Vercel → Environment Variables: `NEXT_PUBLIC_META_BUSINESS_ID` (shown in the Meta access step) and `NEXT_PUBLIC_DRIVE_SHARE_EMAIL` (the address clients share their Drive folder with).
+5. **Optional settings** in Vercel → Environment Variables: `NEXT_PUBLIC_META_BUSINESS_ID` (shown in the Meta access step) `NEXT_PUBLIC_DRIVE_SHARE_EMAIL` (the address clients share their Drive folder with) and `META_ACCESS_VIDEO_URL` (the how-to video in the Meta access step: a YouTube, Vimeo, Loom or Google Drive link, or a direct .mp4 link).
 6. **Vercel.** Import this repository, add the Supabase integration (it sets `NEXT_PUBLIC_SUPABASE_URL` and the key), and deploy.
 
 ## Local development

@@ -2,7 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { hasSupabaseEnv, supabaseEnv } from "./env";
 
-const PUBLIC_PATHS = ["/login", "/forgot-password", "/auth/callback"];
+const PUBLIC_PATHS = ["/login", "/forgot-password", "/auth/callback", "/auth/confirm"];
 
 // Keeps the session fresh on every request and sends signed-out visitors to /login.
 // This is only a fast first check; every page and action checks access again.

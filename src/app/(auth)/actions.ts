@@ -1,7 +1,7 @@
 "use server";
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { siteOrigin } from "@/lib/origin";
 
 export type FormState = { error?: string; done?: boolean };
 
@@ -25,12 +25,10 @@ export async function requestPasswordReset(_: FormState, form: FormData): Promis
   const email = str(form, "email");
   if (!email) return { error: "Enter the email you sign in with." };
 
-  const h = await headers();
-  const host = h.get("x-forwarded-host") ?? h.get("host");
-  const proto = h.get("x-forwarded-proto") ?? "https";
+  const origin = await siteOrigin();
   const supabase = await createClient();
   // Same answer whether or not the account exists, so emails can't be guessed.
-  await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${proto}://${host}/auth/callback?next=/reset-password` });
+  await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${origin}/auth/callback?next=/reset-password` });
   return { done: true };
 }
 

@@ -8,6 +8,8 @@ import { ACCOUNT_TONE, ONBOARDING_TONE } from "@/lib/status-tone";
 import { Alert, Badge, PageHeader } from "@/components/ui";
 import { ClientForm } from "../client-form";
 import { updateClientRecord } from "../actions";
+import { PortalAccess } from "../portal-access";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export const metadata: Metadata = { title: "Client" };
 
@@ -24,6 +26,16 @@ export default async function ClientPage(props: PageProps<"/admin/clients/[id]">
   if (!data) notFound();
   const client = data as Client;
 
+  // Who can sign in to this client's portal, and whether they've set a password.
+  const admin = createAdminClient();
+  const { data: profiles } = await admin.from("profiles").select("id, email").eq("client_id", client.id).order("email");
+  const members = await Promise.all(
+    (profiles ?? []).map(async (p) => {
+      const { data: u } = await admin.auth.admin.getUserById(p.id);
+      return { id: p.id, email: p.email as string, confirmed: !!u?.user?.last_sign_in_at };
+    }),
+  );
+
   return (
     <div className="flex max-w-[720px] flex-col gap-6">
       <Link href="/admin/clients" className="text-[13px] font-medium text-brand no-underline">← Clients</Link>
@@ -38,6 +50,7 @@ export default async function ClientPage(props: PageProps<"/admin/clients/[id]">
         }
       />
       {created && <Alert tone="success">{client.name} was added.</Alert>}
+      <PortalAccess clientId={client.id} members={members} />
       <ClientForm action={updateClientRecord.bind(null, client.id)} client={client} submitLabel="Save changes" cancelHref="/admin/clients" />
     </div>
   );

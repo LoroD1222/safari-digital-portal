@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import { getPortalContext } from "@/lib/portal";
+import { monthRange, vercelConfigured, websiteStats } from "@/lib/vercel";
 import { ONBOARDING_LABEL, packageSummary } from "@/lib/types";
 import { ONBOARDING_TONE } from "@/lib/status-tone";
-import { Badge, ButtonLink, Card, EmptyState, PageHeader } from "@/components/ui";
+import { Badge, ButtonLink, Card, EmptyState, PageHeader, Stat } from "@/components/ui";
 import Link from "next/link";
 
 export const metadata: Metadata = { title: "Overview" };
@@ -20,6 +21,8 @@ export default async function PortalOverview() {
       </>
     );
   }
+  const month = monthRange(0);
+  const web = company.vercel_project_id && vercelConfigured() ? await websiteStats(company.vercel_project_id, month) : null;
   return (
     <>
       <PageHeader title={`Welcome, ${company.name}`} subtitle="Your marketing, website and inquiries will appear here as we set them up." />
@@ -31,6 +34,12 @@ export default async function PortalOverview() {
           </span>
           <ButtonLink href="/onboarding">{company.onboarding_status === "in_progress" ? "Continue" : "Start"}</ButtonLink>
         </div>
+      )}
+      {web?.ok && (
+        <section aria-label="Results" className="grid grid-cols-[repeat(auto-fit,minmax(190px,1fr))] gap-3.5">
+          <Stat label="Website visitors" value={web.data.visitors.toLocaleString("en-US")} note={month.label} href="/portal/website" />
+          <Stat label="Page views" value={web.data.pageviews.toLocaleString("en-US")} note={month.label} href="/portal/website" />
+        </section>
       )}
       <Card className="flex flex-col gap-3 px-5 py-[18px]">
         <h2 className="text-[15px] font-semibold">Your package</h2>

@@ -10,6 +10,7 @@ import { ClientForm } from "../client-form";
 import { updateClientRecord } from "../actions";
 import { PortalAccess } from "../portal-access";
 import { OnboardingSummary } from "../onboarding-summary";
+import { DataSection } from "../data-section";
 import { listOnboardingFiles } from "@/lib/client-files";
 import type { Answers } from "@/lib/onboarding";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -60,6 +61,7 @@ export default async function ClientPage(props: PageProps<"/admin/clients/[id]">
       />
       {created && <Alert tone="success">{client.name} was added.</Alert>}
       <PortalAccess clientId={client.id} members={members} />
+      <DataSection client={client} />
       <OnboardingSummary answers={(ob?.data as Answers) ?? null} submittedAt={ob?.submitted_at ?? null} files={files} />
       <ClientForm action={updateClientRecord.bind(null, client.id)} client={client} submitLabel="Save changes" cancelHref="/admin/clients" />
     </div>

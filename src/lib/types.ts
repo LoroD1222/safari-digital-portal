@@ -16,6 +16,10 @@ export type Client = {
   onboarding_status: OnboardingStatus;
   account_status: AccountStatus;
   notes: string | null;
+  vercel_project_id?: string | null;
+  vercel_project_name?: string | null;
+  meta_ad_account_id?: string | null;
+  meta_page_id?: string | null;
   created_at: string;
   updated_at: string;
 };

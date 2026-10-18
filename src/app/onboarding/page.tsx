@@ -28,6 +28,8 @@ export default async function OnboardingPage() {
   const files = await listOnboardingFiles(supabase, company.id);
   const settings = await getSettings();
   const started = !!row && Object.keys(row.data ?? {}).length > 0;
+  // Safari Digital asked for more after a submission: open the form again.
+  const reopened = company.onboarding_status === "in_progress" || company.onboarding_status === "not_started";
 
   return (
     <Wizard
@@ -36,7 +38,8 @@ export default async function OnboardingPage() {
       services={{ marketing: !!company.marketing_package, website: !!company.website_package }}
       initialAnswers={merge((row?.data as Answers) ?? null)}
       initialFiles={files}
-      initialStep={row?.submitted_at ? "done" : started ? "business" : "welcome"}
+      initialStep={row?.submitted_at && !reopened ? "done" : started ? "business" : "welcome"}
+      note={company.onboarding_note ?? null}
       metaBusinessId={settings.meta_business_id}
       driveShareEmail={settings.drive_share_email}
       metaAccessVideoUrl={settings.meta_video_url}

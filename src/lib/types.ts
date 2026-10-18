@@ -20,6 +20,15 @@ export type Client = {
   vercel_project_name?: string | null;
   meta_ad_account_id?: string | null;
   meta_page_id?: string | null;
+  plan_reels?: number | null;
+  plan_posts?: number | null;
+  website_stage?: WebsiteStage;
+  website_preview_url?: string | null;
+  design_review?: "pending" | "approved" | "changes_requested" | null;
+  design_feedback?: string | null;
+  meta_access_confirmed?: boolean;
+  onboarding_note?: string | null;
+  inquiry_form_key?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -54,3 +63,77 @@ export function packageSummary(c: Pick<Client, "marketing_package" | "website_pa
   if (c.website_package) parts.push(`Website ${WEBSITE_LABEL[c.website_package]}`);
   return parts.length ? parts.join(" + ") : "No package yet";
 }
+
+// ───────────── Website project ─────────────
+export type WebsiteStage = "info_received" | "design" | "awaiting_approval" | "development" | "live";
+export const WEBSITE_STAGES: { key: WebsiteStage; label: string }[] = [
+  { key: "info_received", label: "Information received" },
+  { key: "design", label: "Design in progress" },
+  { key: "awaiting_approval", label: "Awaiting your approval" },
+  { key: "development", label: "Development" },
+  { key: "live", label: "Website launched" },
+];
+export const STAGE_LABEL = Object.fromEntries(WEBSITE_STAGES.map((s) => [s.key, s.label])) as Record<WebsiteStage, string>;
+
+// ───────────── Content ─────────────
+export type ContentStatus = "draft" | "awaiting_approval" | "changes_requested" | "approved" | "scheduled" | "published";
+export type ContentKind = "reel" | "post" | "story";
+export type Platform = "instagram" | "facebook" | "both";
+export type ContentItem = {
+  id: string; client_id: string; title: string; caption: string | null; kind: ContentKind; platform: Platform;
+  status: ContentStatus; scheduled_for: string | null; published_at: string | null; media_path: string | null;
+  media_type: string | null; version: number; created_at: string; updated_at: string;
+};
+export type ContentComment = {
+  id: string; content_id: string; author_role: Role; kind: "comment" | "changes_requested" | "approved" | "revision" | "sent";
+  body: string | null; version: number; created_at: string;
+};
+export const CONTENT_LABEL: Record<ContentStatus, string> = {
+  draft: "Draft", awaiting_approval: "Awaiting approval", changes_requested: "Changes requested",
+  approved: "Approved", scheduled: "Scheduled", published: "Published",
+};
+export const KIND_LABEL: Record<ContentKind, string> = { reel: "Reel", post: "Post", story: "Story" };
+export const PLATFORM_LABEL: Record<Platform, string> = { instagram: "Instagram", facebook: "Facebook", both: "Facebook & Instagram" };
+
+// ───────────── Inquiries ─────────────
+export type InquirySource = "meta_ads" | "meta_organic" | "website" | "direct" | "unknown";
+export type InquiryStatus = "new" | "contacted" | "booked" | "closed";
+export type Inquiry = {
+  id: string; client_id: string; customer_name: string; email: string | null; phone: string | null; country: string | null;
+  interested_in: string | null; travel_dates: string | null; travellers: string | null; message: string | null;
+  source: InquirySource; campaign: string | null; channel: string; status: InquiryStatus; received_at: string; origin: string;
+};
+export const SOURCE_LABEL: Record<InquirySource, string> = {
+  meta_ads: "Facebook & Instagram ads", meta_organic: "Facebook & Instagram", website: "Website", direct: "Direct", unknown: "Unknown",
+};
+export const INQUIRY_LABEL: Record<InquiryStatus, string> = { new: "New", contacted: "Contacted", booked: "Booked", closed: "Closed" };
+export const CHANNEL_LABEL: Record<string, string> = {
+  website_form: "Website form", meta_lead_form: "Meta lead form", whatsapp: "WhatsApp", facebook_message: "Facebook message",
+  instagram_message: "Instagram message", email: "Email", phone: "Phone", other: "Other",
+};
+
+// ───────────── Requests ─────────────
+export type RequestStatus = "submitted" | "in_progress" | "waiting_for_client" | "completed";
+export type RequestCategory = "website_change" | "support" | "problem";
+export type SupportRequest = {
+  id: string; client_id: string; category: RequestCategory; subject: string; status: RequestStatus;
+  last_message_at: string; last_message_role: Role; created_at: string;
+};
+export type RequestMessage = {
+  id: string; request_id: string; author_role: Role; body: string; attachment_path: string | null;
+  attachment_name: string | null; created_at: string;
+};
+export const REQUEST_LABEL: Record<RequestStatus, string> = {
+  submitted: "Submitted", in_progress: "In progress", waiting_for_client: "Waiting for you", completed: "Completed",
+};
+export const REQUEST_LABEL_ADMIN: Record<RequestStatus, string> = { ...REQUEST_LABEL, waiting_for_client: "Waiting for client" };
+export const CATEGORY_LABEL: Record<RequestCategory, string> = {
+  website_change: "Website change", support: "Question or help", problem: "Something isn't working",
+};
+
+// ───────────── Ads ─────────────
+export type Campaign = { name: string; status: "active" | "paused" | "ended"; spend: number; inquiries: number };
+export type AdReport = {
+  id: string; client_id: string; month: string; meta_spend: number; meta_inquiries: number; campaigns: Campaign[];
+  note: string | null; source: "manual" | "synced"; updated_at: string;
+};

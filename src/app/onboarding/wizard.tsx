@@ -22,6 +22,7 @@ type Props = {
   driveShareEmail: string | null;
   metaAccessVideoUrl: string | null;
   driveTutorialVideoUrl: string | null;
+  note?: string | null;
 };
 
 type SaveState = "idle" | "saving" | "saved" | "error";
@@ -363,6 +364,13 @@ export function Wizard(p: Props) {
 
         <main ref={mainRef} className="min-w-0 flex-[999_1_520px] px-4 pb-16 pt-10 sm:px-6">
           <div className="mx-auto flex max-w-[600px] flex-col gap-6">
+            {p.note && (
+              <div role="note" className="rounded-card border border-[#F1D9A8] bg-[#FFFAF0] px-4 py-3">
+                <p className="text-[13px] font-semibold text-[#8A5A12]">Safari Digital needs a little more from you</p>
+                <p className="whitespace-pre-wrap">{p.note}</p>
+                <p className="mt-1 text-[13px] text-slate">Add it in the steps below, then submit again from the last step.</p>
+              </div>
+            )}
 
             {step === "business" && (
               <div className="flex flex-col gap-5">

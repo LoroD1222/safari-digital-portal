@@ -74,6 +74,12 @@ export function SettingsForm({ initial }: { initial: Settings }) {
           <Field label="Email to share Drive folders with" htmlFor="drive_share_email" hint="Leave empty to ask for 'Anyone with the link'.">
             <Input id="drive_share_email" name="drive_share_email" type="email" defaultValue={v("drive_share_email")} />
           </Field>
+          <Field label="Support WhatsApp number" htmlFor="support_whatsapp" hint="Shows a WhatsApp button on the client Help page.">
+            <Input id="support_whatsapp" name="support_whatsapp" type="tel" placeholder="+255 7…" defaultValue={v("support_whatsapp")} />
+          </Field>
+          <Field label="Send staff notifications to" htmlFor="staff_email" hint="Empty = every admin's sign-in email. Separate several with commas.">
+            <Input id="staff_email" name="staff_email" defaultValue={v("staff_email")} placeholder="hello@safaridigital.co.tz" />
+          </Field>
         </div>
       </section>
       {state.error && <Alert>{state.error}</Alert>}

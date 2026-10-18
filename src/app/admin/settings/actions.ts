@@ -18,6 +18,9 @@ export async function saveSettings(_: SettingsState, form: FormData): Promise<Se
     return { error: "The Drive share email doesn't look like an email address.", values };
   }
 
+  const staff = values.staff_email.split(/[,;\s]+/).filter(Boolean);
+  if (staff.some((e) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e))) return { error: "Check the staff notification email.", values };
+
   const supabase = await createClient();
   const { error } = await supabase.from("app_settings").upsert(SETTING_KEYS.map((key) => ({ key, value: values[key] || null })));
   if (error) return { error: "Couldn't save. " + error.message, values };

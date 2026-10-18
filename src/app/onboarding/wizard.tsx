@@ -2,15 +2,14 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
-import { createClient } from "@/lib/supabase/client";
 import {
-  AD_GOALS, FILE_CATEGORIES, MARKETS, OFFERS, PAGES, WEB_GOALS,
+  AD_GOALS, MARKETS, OFFERS, PAGES, WEB_GOALS,
   isDriveLink, missingItems, stepsFor,
-  type Answers, type FileCategory, type StepKey, type StoredFile,
+  type Answers, type StepKey, type StoredFile,
 } from "@/lib/onboarding";
 import { Alert, Button, Input, Textarea, buttonClass } from "@/components/ui";
 import { VideoEmbed } from "@/components/video-embed";
-import { removeFile, saveOnboarding, submitOnboarding } from "./actions";
+import { saveOnboarding, submitOnboarding } from "./actions";
 
 type Props = {
   clientId: string;
@@ -22,6 +21,7 @@ type Props = {
   metaBusinessId: string | null;
   driveShareEmail: string | null;
   metaAccessVideoUrl: string | null;
+  driveTutorialVideoUrl: string | null;
 };
 
 type SaveState = "idle" | "saving" | "saved" | "error";
@@ -179,10 +179,8 @@ export function Wizard(p: Props) {
   const [step, setStep] = useState<StepKey>(p.initialStep);
   const [visited, setVisited] = useState<Set<StepKey>>(() => new Set(p.initialStep === "done" ? order : []));
   const [a, setA] = useState<Answers>(p.initialAnswers);
-  const [files, setFiles] = useState<StoredFile[]>(p.initialFiles);
+  const files = p.initialFiles;
   const [save, setSave] = useState<SaveState>("idle");
-  const [uploading, setUploading] = useState<FileCategory | null>(null);
-  const [uploadError, setUploadError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, startSubmit] = useTransition();
   const dirty = useRef(false);
@@ -213,30 +211,6 @@ export function Wizard(p: Props) {
   const idx = order.indexOf(step);
   const next = () => go(order[Math.min(idx + 1, order.length - 1)]);
   const back = () => go(order[Math.max(idx - 1, 0)]);
-
-  async function upload(category: FileCategory, list: FileList | null) {
-    if (!list?.length) return;
-    setUploadError(null);
-    setUploading(category);
-    const supabase = createClient();
-    const added: StoredFile[] = [];
-    const stamp = new Date().getTime();
-    for (const [n, file] of Array.from(list).entries()) {
-      if (file.size > 50 * 1024 * 1024) { setUploadError(`${file.name} is over 50 MB. Share big videos through Google Drive instead.`); continue; }
-      const safe = file.name.replace(/[^\w.\-]+/g, "_").slice(-120);
-      const path = `${p.clientId}/onboarding/${category}/${stamp + n}-${safe}`;
-      const { error } = await supabase.storage.from("client-files").upload(path, file, { contentType: file.type || undefined });
-      if (error) setUploadError(`${file.name} didn't upload. Please try again.`);
-      else added.push({ path, name: safe, category });
-    }
-    setFiles((f) => [...f, ...added]);
-    setUploading(null);
-  }
-
-  async function remove(f: StoredFile) {
-    const res = await removeFile(f.path);
-    if (res.ok) setFiles((list) => list.filter((x) => x.path !== f.path));
-  }
 
   function submit() {
     setSubmitError(null);
@@ -291,7 +265,7 @@ export function Wizard(p: Props) {
             <div className="flex flex-col gap-2 rounded-card bg-sidebar px-4 py-3.5">
               <span className="font-semibold">Good to have nearby</span>
               <ul className="list-disc space-y-1 pl-5 text-body">
-                <li>Your logo and a few favourite safari photos (or a Google Drive folder)</li>
+                <li>A Google Drive folder with your logo and favourite safari photos</li>
                 {steps.some((s) => s.key === "marketing") && <li>Your Facebook login, to give us access in Meta Business Suite</li>}
                 <li>Itineraries you already send to guests</li>
               </ul>
@@ -486,60 +460,22 @@ export function Wizard(p: Props) {
                     ))}
                   </ul>
                 </div>
-                <fieldset className="flex flex-col gap-2.5">
-                  <legend className="pb-2.5 font-medium">How would you like to share them?</legend>
-                  <div className="grid gap-2.5 sm:grid-cols-2">
-                    {([["drive", "Share a Google Drive folder", "Best for lots of photos and videos. Recommended."], ["upload", "Upload here", "Good for a logo and a handful of files."]] as const).map(([v, t, d]) => (
-                      <label key={v} className={"flex cursor-pointer items-start gap-3 rounded-card border-[1.5px] px-4 py-3.5 " + (f.mode === v ? "border-brand bg-[#F1FAF6]" : "border-field bg-white")}>
-                        <input type="radio" name="share" className="mt-1 accent-brand" checked={f.mode === v} onChange={() => update("files", { mode: v })} />
-                        <span className="flex flex-col gap-0.5"><span className="font-semibold">{t}</span><span className="text-[13px] text-slate">{d}</span></span>
-                      </label>
-                    ))}
+                <section className="flex flex-col gap-3.5">
+                  <h2 className="text-[15px] font-semibold">Share a Google Drive folder</h2>
+                  <VideoEmbed url={p.driveTutorialVideoUrl} title="How to share a Google Drive folder" />
+                  <ol className="list-decimal space-y-1.5 pl-5">
+                    <li>Create a folder in Google Drive, e.g. &ldquo;{p.companyName} – Safari Digital&rdquo;.</li>
+                    <li>Add sub-folders if you like: <span className="font-medium">Logo, Photos, Videos, Itineraries</span>.</li>
+                    <li>Share it {p.driveShareEmail ? <>with <strong className="font-semibold">{p.driveShareEmail}</strong> as Editor, or</> : null} set it to &ldquo;Anyone with the link can view&rdquo;.</li>
+                    <li>Copy the folder link and paste it below.</li>
+                  </ol>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="ob-drive">Folder link</Label>
+                    <Input id="ob-drive" value={f.drive_link ?? ""} aria-invalid={driveBad} placeholder="https://drive.google.com/drive/folders/…" onChange={(e) => update("files", { drive_link: e.target.value })} />
+                    {driveBad && <span className="text-xs text-danger-text">That doesn&apos;t look like a Google Drive link.</span>}
                   </div>
-                </fieldset>
-
-                {f.mode === "drive" ? (
-                  <div className="flex flex-col gap-3.5">
-                    <ol className="list-decimal space-y-1.5 pl-5">
-                      <li>Create a folder in Google Drive, e.g. &ldquo;{p.companyName} – Safari Digital&rdquo;.</li>
-                      <li>Add sub-folders if you like: <span className="font-medium">Logo, Photos, Videos, Itineraries</span>.</li>
-                      <li>Share it {p.driveShareEmail ? <>with <strong className="font-semibold">{p.driveShareEmail}</strong> as Editor, or</> : null} set it to &ldquo;Anyone with the link can view&rdquo;.</li>
-                    </ol>
-                    <div className="flex flex-col gap-1.5">
-                      <Label htmlFor="ob-drive">Folder link</Label>
-                      <Input id="ob-drive" value={f.drive_link ?? ""} aria-invalid={driveBad} placeholder="https://drive.google.com/drive/folders/…" onChange={(e) => update("files", { drive_link: e.target.value })} />
-                      {driveBad && <span className="text-xs text-danger-text">That doesn&apos;t look like a Google Drive link.</span>}
-                    </div>
-                    <Check checked={f.drive_shared} onChange={(v) => update("files", { drive_shared: v })}>I&apos;ve shared the folder with Safari Digital</Check>
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-2.5">
-                    {uploadError && <Alert>{uploadError}</Alert>}
-                    {FILE_CATEGORIES.map((c) => {
-                      const mine = files.filter((x) => x.category === c.key);
-                      return (
-                        <div key={c.key} className="flex flex-col gap-2 rounded-card border border-dashed border-[#C9CDD6] px-4 py-3.5">
-                          <label className="flex cursor-pointer items-center gap-3.5">
-                            <span className="flex min-w-0 flex-1 flex-col"><span className="font-medium">{c.label}</span><span className="text-[13px] text-slate">{c.hint}</span></span>
-                            <span className={buttonClass("secondary", "h-9")}>{uploading === c.key ? "Uploading…" : "Choose files"}</span>
-                            <input type="file" className="sr-only" multiple={c.multiple} accept={c.accept} disabled={!!uploading}
-                              onChange={(e) => { upload(c.key, e.target.files); e.target.value = ""; }} />
-                          </label>
-                          {mine.length > 0 && (
-                            <ul className="flex flex-col gap-1 border-t border-line-soft pt-2">
-                              {mine.map((x) => (
-                                <li key={x.path} className="flex items-center justify-between gap-3 text-[13px]">
-                                  <span className="flex min-w-0 items-center gap-2"><CheckIcon className="flex-none text-brand" /><span className="truncate">{x.name}</span></span>
-                                  <button type="button" onClick={() => remove(x)} className="font-medium text-slate hover:text-ink">Remove</button>
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+                  <Check checked={f.drive_shared} onChange={(v) => update("files", { drive_shared: v })}>I&apos;ve shared the folder with Safari Digital</Check>
+                </section>
                 <AreaField id="ob-reviews" label="Guest reviews" optional placeholder="Paste a few reviews, or your TripAdvisor link" value={f.reviews} onChange={(v) => update("files", { reviews: v })} />
               </div>
             )}
@@ -554,8 +490,7 @@ export function Wizard(p: Props) {
                       s.key === "business" ? [b.contact_name, b.whatsapp, b.markets?.length ? `${b.markets.length} guest ${b.markets.length === 1 ? "country" : "countries"}` : null].filter(Boolean).join(" · ") || "Not filled in yet"
                         : s.key === "marketing" ? (m.invite_sent ? "Access invitation sent" : "Access invitation not sent yet")
                           : s.key === "website" ? (w.domain_choice === "have" ? (w.domain || "Existing domain") : w.domain_choice === "need" ? "New domain needed" : "Domain: not sure yet")
-                            : f.mode === "drive" ? (isDriveLink(f.drive_link) ? (f.drive_shared ? "Google Drive folder shared" : "Drive link added, not marked as shared") : "No Drive link yet")
-                              : `${files.length} file${files.length === 1 ? "" : "s"} uploaded`;
+                            : isDriveLink(f.drive_link) ? (f.drive_shared ? "Google Drive folder shared" : "Drive link added, not marked as shared") : "No Drive link yet";
                     return (
                       <li key={s.key} className={"flex items-center gap-3 px-4 py-3.5 " + (i ? "border-t border-line-soft" : "")}>
                         {warn.length ? <span aria-hidden className="inline-flex size-[22px] flex-none items-center justify-center rounded-full bg-warn-bg text-[13px] font-bold text-warn-text">!</span>

@@ -67,7 +67,7 @@ export function stepsFor(services: { marketing: boolean; website: boolean }) {
     { key: "business" as const, label: "Your business", desc: "Contact details, what you offer, where guests come from" },
     ...(services.marketing || both ? [{ key: "marketing" as const, label: "Facebook & Instagram", desc: "Your pages, access and ad budget" }] : []),
     ...(services.website || both ? [{ key: "website" as const, label: "Your website", desc: "Domain, goals and the pages you need" }] : []),
-    { key: "files" as const, label: "Photos & brand files", desc: "Google Drive folder or upload" },
+    { key: "files" as const, label: "Photos & brand files", desc: "Share a Google Drive folder" },
     { key: "review" as const, label: "Check & submit", desc: "A quick review, then send" },
   ];
 }
@@ -81,9 +81,7 @@ export function missingItems(a: Answers, files: StoredFile[], hasMarketing: bool
   const out: { step: StepKey; text: string }[] = [];
   if (!a.business?.whatsapp?.trim()) out.push({ step: "business", text: "WhatsApp number" });
   if (hasMarketing && !a.marketing?.invite_sent) out.push({ step: "marketing", text: "Meta access invitation not sent yet" });
-  const shared = a.files?.mode === "drive" ? isDriveLink(a.files?.drive_link) : files.length > 0;
-  if (!shared) out.push({ step: "files", text: "No photos or brand files shared yet" });
-  else if (a.files?.mode === "drive" && !a.files?.drive_shared) out.push({ step: "files", text: "Drive folder not marked as shared" });
-  if (!files.some((f) => f.category === "logo") && a.files?.mode !== "drive") out.push({ step: "files", text: "Logo not uploaded" });
+  if (!isDriveLink(a.files?.drive_link) && files.length === 0) out.push({ step: "files", text: "Google Drive folder not shared yet" });
+  else if (isDriveLink(a.files?.drive_link) && !a.files?.drive_shared) out.push({ step: "files", text: "Drive folder not marked as shared" });
   return out;
 }

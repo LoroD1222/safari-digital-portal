@@ -11,6 +11,7 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
       nav={[
         { href: "/admin", label: "Overview", icon: "home", exact: true },
         { href: "/admin/clients", label: "Clients", icon: "users" },
+        { href: "/admin/settings", label: "Settings", icon: "settings" },
       ]}
       footer={<AccountFooter name={viewer.fullName ?? viewer.email} sub="Safari Digital" dark />}
     >

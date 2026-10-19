@@ -24,6 +24,7 @@ export type Client = {
   plan_posts?: number | null;
   website_stage?: WebsiteStage;
   website_preview_url?: string | null;
+  cms_url?: string | null;
   design_review?: "pending" | "approved" | "changes_requested" | null;
   design_feedback?: string | null;
   meta_access_confirmed?: boolean;

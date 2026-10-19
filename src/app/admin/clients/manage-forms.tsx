@@ -30,6 +30,11 @@ export function WebsiteProjectForm({ client }: { client: Client }) {
           <Field label="Design preview link" htmlFor="website_preview_url" optional>
             <Input id="website_preview_url" name="website_preview_url" type="url" placeholder="https://…vercel.app" defaultValue={client.website_preview_url ?? ""} />
           </Field>
+          <div className="sm:col-span-2">
+            <Field label="Sanity Studio link" htmlFor="cms_url" optional hint="Shows an “Edit content” button on the client's Website page.">
+              <Input id="cms_url" name="cms_url" type="url" placeholder="https://goldentrips.sanity.studio" defaultValue={client.cms_url ?? ""} />
+            </Field>
+          </div>
         </div>
         <p className="text-xs text-slate">Setting the stage to <em>Awaiting client approval</em> sends the preview link to the client, who can approve it or ask for changes on their Website page.</p>
         <Feedback state={state} />

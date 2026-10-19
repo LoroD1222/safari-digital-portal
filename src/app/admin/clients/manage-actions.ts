@@ -18,6 +18,8 @@ export async function saveWebsiteProject(clientId: string, _: FormState, form: F
   await requireAdmin();
   const stage = str(form, "website_stage") as WebsiteStage;
   const preview = str(form, "website_preview_url");
+  const cms = str(form, "cms_url");
+  if (cms && !/^https:\/\//.test(cms)) return { error: "The Sanity Studio link must start with https://" };
   if (!STAGES.includes(stage)) return { error: "Choose a stage." };
   if (preview && !/^https?:\/\//.test(preview)) return { error: "The preview link must start with https://" };
   const supabase = await createClient();
@@ -25,10 +27,10 @@ export async function saveWebsiteProject(clientId: string, _: FormState, form: F
   const { data: before } = await supabase.from("clients").select("website_stage, design_review").eq("id", clientId).single();
   const askReview = stage === "awaiting_approval" && before?.design_review !== "pending";
   const { error } = await supabase.from("clients").update({
-    website_stage: stage, website_preview_url: preview || null,
+    website_stage: stage, website_preview_url: preview || null, cms_url: cms || null,
     ...(askReview ? { design_review: "pending", design_feedback: null } : {}),
   }).eq("id", clientId);
-  if (error) return { error: error.message.includes("website_stage") ? "Run 0005_portal.sql in Supabase first." : error.message };
+  if (error) return { error: error.message.includes("cms_url") ? "Run 0006_cms.sql in Supabase first." : error.message.includes("website_stage") ? "Run 0005_portal.sql in Supabase first." : error.message };
   if (askReview) {
     await logActivity({ clientId, actor: "admin", message: "Website design ready for your review", clientLink: "/portal/website" });
     await notifyClient(clientId, {

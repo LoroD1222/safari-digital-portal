@@ -35,6 +35,9 @@ export function ProjectStatus({ company, live }: { company: Client; live: boolea
           </span>
           <span className="text-[13px] text-body">{live ? (company.website_url ? company.website_url.replace(/^https?:\/\//, "") : "Online") : STEPS[stage].now}</span>
         </span>
+        {live && company.cms_url && (
+          <a href={company.cms_url} target="_blank" rel="noreferrer" className={buttonClass("primary")}><Icon name="edit" size={15} />Edit content</a>
+        )}
         {live && company.website_url && (
           <a href={href(company.website_url)} target="_blank" rel="noreferrer" className={buttonClass("secondary")}>Visit website<Icon name="external" size={14} /></a>
         )}

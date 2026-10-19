@@ -77,6 +77,9 @@ export function SettingsForm({ initial }: { initial: Settings }) {
           <Field label="Support WhatsApp number" htmlFor="support_whatsapp" hint="Shows a WhatsApp button on the client Help page.">
             <Input id="support_whatsapp" name="support_whatsapp" type="tel" placeholder="+255 7…" defaultValue={v("support_whatsapp")} />
           </Field>
+          <Field label="Support email" htmlFor="support_email" hint="Shows a “Send an email” button in the client Help panel.">
+            <Input id="support_email" name="support_email" type="email" placeholder="hello@safaridigital.co.tz" defaultValue={v("support_email")} />
+          </Field>
           <Field label="Send staff notifications to" htmlFor="staff_email" hint="Empty = every admin's sign-in email. Separate several with commas.">
             <Input id="staff_email" name="staff_email" defaultValue={v("staff_email")} placeholder="hello@safaridigital.co.tz" />
           </Field>

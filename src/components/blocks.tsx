@@ -61,12 +61,20 @@ export function Row({ href, children, className }: { href?: string; children: Re
   return <li>{href ? <Link href={href} className={cx(cls, "text-ink no-underline hover:bg-[#FAFAF8]")}>{children}</Link> : <div className={cls}>{children}</div>}</li>;
 }
 
-export type AttentionItem = { key: string; title: string; detail?: string; href: string; tone?: "amber" | "red" | "blue" };
+export type AttentionItem = { key: string; title: string; detail?: string; href: string; tone?: "amber" | "red" | "blue"; action?: string };
 const DOT = { amber: "bg-[#E0A458]", red: "bg-[#C2413B]", blue: "bg-[#5B7BE0]" };
 
-export function AttentionList({ items, empty }: { items: AttentionItem[]; empty: string }) {
+export function AttentionList({ items, empty, emptyNote }: { items: AttentionItem[]; empty: string; emptyNote?: string }) {
   if (!items.length) {
-    return <p className="flex items-center gap-2 rounded-card border border-line px-4 py-4 text-slate"><span className="size-2 rounded-full bg-mint" />{empty}</p>;
+    return (
+      <div className="flex flex-col items-center gap-2 rounded-card border border-line px-5 py-7 text-center">
+        <span className="inline-flex size-9 items-center justify-center rounded-full bg-[#E3F4EA] text-brand">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.25} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
+        </span>
+        <span className="font-semibold">{empty}</span>
+        {emptyNote && <span className="text-[13px] text-slate">{emptyNote}</span>}
+      </div>
+    );
   }
   return (
     <RowList>
@@ -77,7 +85,9 @@ export function AttentionList({ items, empty }: { items: AttentionItem[]; empty:
             <span className="font-medium">{it.title}</span>
             {it.detail && <span className="truncate text-xs text-slate">{it.detail}</span>}
           </span>
-          <span aria-hidden="true" className="text-slate">›</span>
+          {it.action
+            ? <span className="inline-flex h-8 items-center whitespace-nowrap rounded-control border border-field px-3 text-[13px] font-medium">{it.action}</span>
+            : <span aria-hidden="true" className="text-slate">›</span>}
         </Row>
       ))}
     </RowList>
@@ -93,7 +103,7 @@ export function ActivityList({ items, empty }: { items: ActivityEntry[]; empty: 
       {items.map((a) => {
         const body = (
           <>
-            <span className="mt-[7px] size-1.5 flex-none rounded-full bg-[#C9CDD6]" />
+            <span className="mt-[7px] size-[7px] flex-none rounded-full bg-mint" />
             <span className="flex min-w-0 flex-1 flex-col">
               <span>{a.who && <span className="font-medium">{a.who} · </span>}{a.message}</span>
               <span className="text-xs text-slate">{ago(a.created_at)}</span>
@@ -101,10 +111,10 @@ export function ActivityList({ items, empty }: { items: ActivityEntry[]; empty: 
           </>
         );
         return (
-          <li key={a.id} className="border-t border-line-soft first:border-t-0">
+          <li key={a.id}>
             {a.href
-              ? <Link href={a.href} className="flex gap-3 py-2.5 text-ink no-underline hover:text-brand">{body}</Link>
-              : <div className="flex gap-3 py-2.5">{body}</div>}
+              ? <Link href={a.href} className="flex gap-3 py-[7px] text-ink no-underline hover:text-brand">{body}</Link>
+              : <div className="flex gap-3 py-[7px]">{body}</div>}
           </li>
         );
       })}
@@ -120,8 +130,8 @@ export function Progress({ label, done, total }: { label: string; done: number; 
         <span className="font-medium">{label}</span>
         <span className="tabular-nums text-slate">{done} of {total} published</span>
       </div>
-      <div className="h-2 overflow-hidden rounded-full bg-line-soft" role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={total} aria-valuenow={done}>
-        <div className="h-full rounded-full bg-mint" style={{ width: `${pct}%` }} />
+      <div className="h-1.5 overflow-hidden rounded-full bg-line-soft" role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={total} aria-valuenow={done}>
+        <div className="h-full rounded-full bg-brand" style={{ width: `${pct}%` }} />
       </div>
     </div>
   );

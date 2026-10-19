@@ -31,6 +31,7 @@ export function WebsiteProjectForm({ client }: { client: Client }) {
             <Input id="website_preview_url" name="website_preview_url" type="url" placeholder="https://…vercel.app" defaultValue={client.website_preview_url ?? ""} />
           </Field>
         </div>
+        <p className="text-xs text-slate">Setting the stage to <em>Awaiting client approval</em> sends the preview link to the client, who can approve it or ask for changes on their Website page.</p>
         <Feedback state={state} />
         <div className="flex flex-wrap items-center justify-end gap-2">
           <SubmitButton variant="secondary">Save</SubmitButton>

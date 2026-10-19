@@ -21,12 +21,27 @@ export async function saveWebsiteProject(clientId: string, _: FormState, form: F
   if (!STAGES.includes(stage)) return { error: "Choose a stage." };
   if (preview && !/^https?:\/\//.test(preview)) return { error: "The preview link must start with https://" };
   const supabase = await createClient();
-  const { data: before } = await supabase.from("clients").select("website_stage").eq("id", clientId).single();
-  const { error } = await supabase.from("clients").update({ website_stage: stage, website_preview_url: preview || null }).eq("id", clientId);
+  if (stage === "awaiting_approval" && !preview) return { error: "Add the design preview link so the client can review it." };
+  const { data: before } = await supabase.from("clients").select("website_stage, design_review").eq("id", clientId).single();
+  const askReview = stage === "awaiting_approval" && before?.design_review !== "pending";
+  const { error } = await supabase.from("clients").update({
+    website_stage: stage, website_preview_url: preview || null,
+    ...(askReview ? { design_review: "pending", design_feedback: null } : {}),
+  }).eq("id", clientId);
   if (error) return { error: error.message.includes("website_stage") ? "Run 0005_portal.sql in Supabase first." : error.message };
+  if (askReview) {
+    await logActivity({ clientId, actor: "admin", message: "Website design ready for your review", clientLink: "/portal/website" });
+    await notifyClient(clientId, {
+      subject: "Your website design is ready to review",
+      intro: "Your new website design is ready. Take a look and approve it, or tell us what to change.",
+      path: "/portal/website", button: "Review the design",
+    });
+    done();
+    return { saved: true, message: "Saved and sent to the client for review." };
+  }
   if (before?.website_stage !== stage) {
     const label = { info_received: "Information received", design: "Design in progress", awaiting_approval: "Awaiting your approval", development: "Development", live: "Website launched" }[stage];
-    await logActivity({ clientId, actor: "admin", message: stage === "live" ? "Your website is live" : `Website moved to: ${label}`, clientLink: "/portal/website?tab=manage" });
+    await logActivity({ clientId, actor: "admin", message: stage === "live" ? "Your website is live" : `Website moved to: ${label}`, clientLink: "/portal/website" });
   }
   done();
   return { saved: true };
@@ -39,11 +54,11 @@ export async function requestDesignReview(clientId: string): Promise<FormState> 
   if (!c?.website_preview_url) return { error: "Add a preview link first." };
   const { error } = await supabase.from("clients").update({ design_review: "pending", design_feedback: null, website_stage: "awaiting_approval" }).eq("id", clientId);
   if (error) return { error: error.message };
-  await logActivity({ clientId, actor: "admin", message: "Website design ready for your review", clientLink: "/portal/website?tab=manage" });
+  await logActivity({ clientId, actor: "admin", message: "Website design ready for your review", clientLink: "/portal/website" });
   await notifyClient(clientId, {
     subject: "Your website design is ready to review",
     intro: "Your new website design is ready. Take a look and approve it, or tell us what to change.",
-    path: "/portal/website?tab=manage", button: "Review the design",
+    path: "/portal/website", button: "Review the design",
   });
   done();
   return { saved: true, message: "Sent to the client for review." };

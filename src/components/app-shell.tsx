@@ -2,8 +2,8 @@ import Image from "next/image";
 import type { ReactNode } from "react";
 import { SidebarNav, type NavItem } from "./sidebar-nav";
 
-export function AppShell({ nav, navLabel, badge, footer, children }: {
-  nav: NavItem[]; navLabel: string; badge?: string; footer: ReactNode; children: ReactNode;
+export function AppShell({ nav, navLabel, badge, footer, children, bottom }: {
+  nav: NavItem[]; navLabel: string; badge?: string; footer: ReactNode; children: ReactNode; bottom?: ReactNode;
 }) {
   return (
     <div className="flex min-h-screen flex-wrap">
@@ -14,6 +14,7 @@ export function AppShell({ nav, navLabel, badge, footer, children }: {
         </div>
         <SidebarNav items={nav} label={navLabel} />
         <div className="min-h-6 flex-1" />
+        {bottom}
         {footer}
       </nav>
       <main className="min-w-0 flex-[999_1_560px] px-4 pb-16 pt-10 sm:px-10">

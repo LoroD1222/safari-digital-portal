@@ -13,7 +13,7 @@ export async function reviewDesign(approve: boolean, feedback: string): Promise<
   if (error) return { error: "The design isn't waiting for review any more. Refresh the page." };
   const { data: c } = await supabase.from("clients").select("id, name").eq("id", viewer.clientId!).single();
   if (c) {
-    await logActivity({ clientId: c.id, actor: "client", message: approve ? "Website design approved" : "Changes requested on the website design", clientLink: "/portal/website?tab=manage", adminLink: `/admin/clients/${c.id}` });
+    await logActivity({ clientId: c.id, actor: "client", message: approve ? "Website design approved" : "Changes requested on the website design", clientLink: "/portal/website", adminLink: `/admin/clients/${c.id}` });
     await notifyStaff({
       subject: `${c.name} ${approve ? "approved the website design" : "sent design feedback"}`,
       intro: approve ? `${c.name} approved their website design. It's moved to Development.` : `${c.name} asked for changes to their website design:`,

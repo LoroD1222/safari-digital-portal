@@ -7,18 +7,11 @@ import type { RequestCategory, SupportRequest } from "@/lib/types";
 import { PageHeader, buttonClass } from "@/components/ui";
 import { Section } from "@/components/blocks";
 import { Icon } from "@/components/icons";
+import { FAQS } from "@/lib/faqs";
 import { NewRequestForm } from "@/components/request-forms";
 import { RequestList } from "@/components/request-list";
 
-export const metadata: Metadata = { title: "Help" };
-
-const FAQS: [string, string][] = [
-  ["How do I approve a Reel or post?", "Open Marketing → Content and choose anything marked “Needs your approval”. Tap Approve, or Request changes and tell us what to change."],
-  ["Where do my inquiries come from?", "Your website form sends them in automatically. Inquiries from WhatsApp, Messenger or calls are added by Safari Digital. Mark each one as Contacted, Booked or Closed so your results stay accurate."],
-  ["Why do the ad inquiries differ from my Inquiries list?", "Meta counts inquiries its own way (for example, within a set time after someone saw an ad). Your Inquiries list counts every inquiry we tracked, from every source."],
-  ["Can I change my website myself?", "Yes, for safari packages, photos and text: see the training videos under Website → Management. For anything else, send a website change request."],
-  ["Do you need my Facebook password?", "Never. You give Safari Digital access through Meta Business Suite, and you can remove it at any time."],
-];
+export const metadata: Metadata = { title: "Requests" };
 
 export default async function HelpPage() {
   const { company } = await getPortalContext();
@@ -34,7 +27,7 @@ export default async function HelpPage() {
 
   return (
     <>
-      <PageHeader title="Help" subtitle="Ask us anything. We usually reply within one working day." />
+      <PageHeader title="Requests" subtitle="Ask us anything. We usually reply within one working day." />
       {wa && (
         <div className="flex flex-wrap items-center gap-3 rounded-card border border-line px-4 py-3.5">
           <span className="flex min-w-[200px] flex-1 flex-col"><span className="font-semibold">Need us quickly?</span><span className="text-[13px] text-slate">Message Safari Digital on WhatsApp.</span></span>

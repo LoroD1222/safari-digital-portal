@@ -3,7 +3,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Icon, type IconName } from "./icons";
 
-export type NavItem = { href: string; label: string; icon: IconName; exact?: boolean };
+export type NavItem = { href: string; label: string; icon: IconName; exact?: boolean; badge?: number };
 
 export function SidebarNav({ items, label }: { items: NavItem[]; label: string }) {
   const path = usePathname();
@@ -24,7 +24,10 @@ export function SidebarNav({ items, label }: { items: NavItem[]; label: string }
               }
             >
               <Icon name={item.icon} />
-              {item.label}
+              <span className="flex-1">{item.label}</span>
+              {!!item.badge && (
+                <span aria-label={`${item.badge} new`} className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-brand px-1.5 text-[11px] font-semibold text-white">{item.badge}</span>
+              )}
             </Link>
           </li>
         );

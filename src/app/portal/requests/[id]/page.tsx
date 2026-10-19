@@ -22,7 +22,7 @@ export default async function RequestPage(props: PageProps<"/portal/requests/[id
   if (!data) notFound();
   const r = data as SupportRequest;
   const { msgs, urls } = await loadThread(supabase, id);
-  const back = r.category === "website_change" ? { href: "/portal/website?tab=manage", label: "Website" } : { href: "/portal/help", label: "Help" };
+  const back = r.category === "website_change" ? { href: "/portal/website", label: "Website" } : { href: "/portal/help", label: "Help" };
 
   return (
     <div className="flex max-w-[720px] flex-col gap-6">

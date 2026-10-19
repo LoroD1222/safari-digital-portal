@@ -1,7 +1,7 @@
 import "server-only";
 import { createClient } from "./supabase/server";
 
-export const SETTING_KEYS = ["meta_video_url", "drive_video_url", "meta_business_id", "drive_share_email", "support_whatsapp", "staff_email"] as const;
+export const SETTING_KEYS = ["meta_video_url", "drive_video_url", "meta_business_id", "drive_share_email", "support_whatsapp", "staff_email", "support_email"] as const;
 export type SettingKey = (typeof SETTING_KEYS)[number];
 export type Settings = Record<SettingKey, string | null>;
 
@@ -12,6 +12,7 @@ const ENV_FALLBACK: Record<SettingKey, string | undefined> = {
   drive_share_email: process.env.NEXT_PUBLIC_DRIVE_SHARE_EMAIL,
   support_whatsapp: process.env.SUPPORT_WHATSAPP,
   staff_email: process.env.STAFF_EMAIL,
+  support_email: process.env.SUPPORT_EMAIL,
 };
 
 export async function getSettings(): Promise<Settings> {

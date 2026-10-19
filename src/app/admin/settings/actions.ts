@@ -18,6 +18,7 @@ export async function saveSettings(_: SettingsState, form: FormData): Promise<Se
     return { error: "The Drive share email doesn't look like an email address.", values };
   }
 
+  if (values.support_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.support_email)) return { error: "The support email doesn't look like an email address.", values };
   const staff = values.staff_email.split(/[,;\s]+/).filter(Boolean);
   if (staff.some((e) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e))) return { error: "Check the staff notification email.", values };
 

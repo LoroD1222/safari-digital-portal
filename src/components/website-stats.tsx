@@ -9,7 +9,18 @@ function dayLabel(iso: string) {
   return new Date(iso + "T00:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
 }
 
-export function WebsiteStatsView({ stats, rangeLabel }: { stats: WebsiteStats; rangeLabel: string }) {
+type Extra = { label: string; value: number; delta?: string | null };
+
+function delta(now: number, before: number | null | undefined, label: string) {
+  if (before === null || before === undefined) return null;
+  if (before === 0) return now > 0 ? `New this month` : null;
+  const pct = Math.round(((now - before) / before) * 100);
+  return `${pct >= 0 ? "+" : ""}${pct}% vs ${label}`;
+}
+
+export function WebsiteStatsView({ stats, rangeLabel, previous, previousLabel, extra, between }: {
+  stats: WebsiteStats; rangeLabel: string; previous?: Pick<WebsiteStats, "visitors" | "pageviews"> | null; previousLabel?: string; extra?: Extra; between?: React.ReactNode;
+}) {
   const max = Math.max(1, ...stats.daily.map((d) => d.visitors));
   const best = stats.daily.reduce((a, d) => (d.visitors > (a?.visitors ?? -1) ? d : a), stats.daily[0]);
   const pageMax = Math.max(1, ...stats.pages.map((p) => p.pageviews));
@@ -18,12 +29,16 @@ export function WebsiteStatsView({ stats, rangeLabel }: { stats: WebsiteStats; r
   return (
     <div className="flex flex-col gap-6">
       <div className="overflow-hidden rounded-card border border-line shadow-[0_1px_2px_rgba(0,3,33,0.04)]">
-        <div className="grid grid-cols-2 border-b border-line-soft">
-          {[["Visitors", stats.visitors], ["Page views", stats.pageviews]].map(([label, v], i) => (
-            <div key={label} className={"flex flex-col gap-0.5 px-5 py-4 " + (i ? "border-l border-line-soft" : "")}>
-              <span className="text-[13px] text-slate">{label}</span>
-              <span className="text-[28px] font-semibold leading-tight tracking-[-0.03em] tabular-nums">{fmt(Number(v))}</span>
-              <span className="text-xs text-slate">{rangeLabel}</span>
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] border-b border-line-soft">
+          {([
+            { label: "Visitors", value: stats.visitors, note: delta(stats.visitors, previous?.visitors, previousLabel ?? "last month") },
+            { label: "Page views", value: stats.pageviews, note: delta(stats.pageviews, previous?.pageviews, previousLabel ?? "last month") },
+            ...(extra ? [{ label: extra.label, value: extra.value, note: extra.delta ?? null }] : []),
+          ]).map((x) => (
+            <div key={x.label} className="-ml-px flex flex-col gap-0.5 border-l border-line-soft px-5 py-4">
+              <span className="text-[13px] text-slate">{x.label}</span>
+              <span className="text-[28px] font-semibold leading-tight tracking-[-0.03em] tabular-nums">{fmt(x.value)}</span>
+              <span className="text-xs text-slate">{x.note ?? rangeLabel}</span>
             </div>
           ))}
         </div>
@@ -55,6 +70,7 @@ export function WebsiteStatsView({ stats, rangeLabel }: { stats: WebsiteStats; r
         )}
       </div>
 
+      {between}
       <div className="flex flex-wrap gap-8">
         <section className="flex min-w-0 flex-[1_1_300px] flex-col">
           <h2 className="mb-1.5 text-[13px] font-semibold text-slate">Most visited pages</h2>

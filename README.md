@@ -33,8 +33,9 @@ Client portal and admin dashboard for Safari Digital, at `portal.safaridigital.c
 5. **Website analytics.** Create a Vercel access token (Account Settings → Tokens) and add it in this project's Environment Variables as `ANALYTICS_VERCEL_TOKEN`; then pick each client's Vercel project under Data connections on the client page. Web Analytics must be enabled on each client site.
 6. **Tutorial videos and client-facing details** (Meta Business ID, Drive share email) are set in the app under Admin → Settings.
 7. **Email notifications (optional).** Create a Resend account (resend.com), verify the `safaridigital.co.tz` domain (DNS records), create an API key, then add `RESEND_API_KEY` and `EMAIL_FROM` (e.g. `Safari Digital <portal@safaridigital.co.tz>`) in Vercel's Environment Variables and redeploy. Optionally set `PORTAL_URL=https://portal.safaridigital.co.tz` so email links use the custom domain.
-8. **Uploads.** Content videos follow your Supabase plan's per-file upload limit (50 MB on Free).
-9. **Vercel.** Import this repository, add the Supabase integration (it sets `NEXT_PUBLIC_SUPABASE_URL` and the key), and deploy.
+8. **Meta ad results (optional).** Create a Business-type Meta app (use case "Measure ad performance data with Marketing API") in the Safari Digital business portfolio, add a system user, assign it the app and each client's ad account (View performance), and generate a never-expiring token with `ads_read` and `business_management`. Add it in Vercel as `META_SYSTEM_USER_TOKEN`, plus a random `CRON_SECRET`, and redeploy. Pick each client's ad account under Connections; results sync every morning (vercel.json) or with **Sync now**.
+9. **Uploads.** Content videos follow your Supabase plan's per-file upload limit (50 MB on Free).
+10. **Vercel.** Import this repository, add the Supabase integration (it sets `NEXT_PUBLIC_SUPABASE_URL` and the key), and deploy.
 
 ## Local development
 

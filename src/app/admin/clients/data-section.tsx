@@ -6,6 +6,7 @@ import { MetaForm } from "./manage-forms";
 import { createInquiryKey } from "./manage-actions";
 import { CopyButton } from "@/components/copy-button";
 import { siteOrigin } from "@/lib/origin";
+import { listAdAccounts, metaConfigured } from "@/lib/meta";
 
 function Card({ title, what, status, children }: { title: string; what: string; status: React.ReactNode; children: React.ReactNode }) {
   return (
@@ -21,6 +22,7 @@ function Card({ title, what, status, children }: { title: string; what: string; 
 
 export async function DataSection({ client }: { client: Client }) {
   const configured = vercelConfigured();
+  const meta = metaConfigured() ? await listAdAccounts() : null;
   const projects = configured ? await listProjects() : null;
   const linked = client.vercel_project_id ?? null;
   const month = monthRange(0);
@@ -53,8 +55,8 @@ export async function DataSection({ client }: { client: Client }) {
 
       <Card title="Facebook & Instagram" what="Access to the client's Meta Business Suite"
         status={client.meta_access_confirmed ? <Badge tone="green">Access confirmed</Badge> : <Badge tone="amber">Not confirmed</Badge>}>
-        <MetaForm client={client} />
-        <p className="text-[13px] text-slate">Ad results are entered monthly in the Reporting tab. Syncing them from Meta automatically comes later.</p>
+        <MetaForm client={client} accounts={meta?.ok ? meta.data : null} accountsError={meta && !meta.ok ? meta.error : null} />
+        {!meta && <p className="text-[13px] text-slate">Add META_SYSTEM_USER_TOKEN in Vercel to sync ad results automatically. Until then, enter them monthly in the Reporting tab.</p>}
       </Card>
     </section>
   );

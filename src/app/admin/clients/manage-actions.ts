@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { logActivity } from "@/lib/activity";
 import { notifyClient } from "@/lib/email";
 import type { Campaign, OnboardingStatus, WebsiteStage } from "@/lib/types";
+import { syncClient } from "@/lib/meta";
 
 export type FormState = { error?: string; saved?: boolean; message?: string };
 
@@ -157,4 +158,12 @@ export async function saveAdReport(clientId: string, _: FormState, form: FormDat
   await logActivity({ clientId, actor: "admin", message: "Advertising results updated", clientLink: "/portal/marketing/advertising", visibleToClient: true });
   done();
   return { saved: true };
+}
+
+export async function syncMetaNow(clientId: string): Promise<FormState> {
+  await requireAdmin();
+  const r = await syncClient(clientId);
+  if (!r.ok) return { error: r.message };
+  done();
+  return { saved: true, message: "Synced. The client's Advertising page now shows this month's results from Meta." };
 }

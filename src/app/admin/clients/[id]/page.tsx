@@ -170,7 +170,7 @@ async function ReportingTab({ client, month }: { client: Client; month: string |
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex flex-col gap-0.5">
           <h2 className="text-[15px] font-semibold">Advertising results · {current.label}</h2>
-          <p className="text-[13px] text-slate">{report ? `Last updated ${fmtDate(report.updated_at, true)}` : "Not entered yet."} The client sees exactly these figures.</p>
+          <p className="text-[13px] text-slate">{report ? `${report.source === "synced" ? "Synced from Meta" : "Last updated"} ${fmtDate(report.updated_at, true)}` : "Not entered yet."} The client sees exactly these figures.{client.meta_ad_account_id ? " Synced daily from Meta; manual edits are replaced on the next sync." : ""}</p>
         </div>
         <form className="flex items-center gap-2">
           <input type="hidden" name="tab" value="reporting" />

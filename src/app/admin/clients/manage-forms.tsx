@@ -4,7 +4,7 @@ import { Alert, Button, Field, Input, Select, Textarea } from "@/components/ui";
 import { SubmitButton } from "@/components/submit-button";
 import { WEBSITE_STAGES, type AdReport, type Campaign, type Client } from "@/lib/types";
 import {
-  requestDesignReview, requestMissingInfo, saveAdReport, saveMeta, savePlan, saveWebsiteProject, type FormState,
+  requestDesignReview, requestMissingInfo, saveAdReport, saveMeta, savePlan, saveWebsiteProject, syncMetaNow, type FormState,
 } from "./manage-actions";
 
 function Feedback({ state }: { state: FormState }) {
@@ -87,24 +87,44 @@ export function MissingInfoForm({ client }: { client: Client }) {
   );
 }
 
-export function MetaForm({ client }: { client: Client }) {
+export function MetaForm({ client, accounts, accountsError }: { client: Client; accounts?: { id: string; name: string }[] | null; accountsError?: string | null }) {
   const [state, action] = useActionState<FormState, FormData>(saveMeta.bind(null, client.id), {});
+  const [sync, setSync] = useState<FormState>({});
+  const [pending, start] = useTransition();
+  const current = client.meta_ad_account_id ?? "";
   return (
-    <form action={action} className="flex flex-col gap-3">
-      <label className="flex items-center gap-2.5 font-medium">
-        <input type="checkbox" name="meta_access_confirmed" defaultChecked={!!client.meta_access_confirmed} className="size-4 accent-[#1A6647]" />
-        Access confirmed in Meta Business Suite
-      </label>
-      <div className="flex flex-wrap items-end gap-2">
-        <div className="min-w-[220px] flex-1">
-          <Field label="Ad account ID" htmlFor="meta_ad_account_id" optional hint="Business Suite → Ad accounts. Used when ad reporting is connected.">
-            <Input id="meta_ad_account_id" name="meta_ad_account_id" inputMode="numeric" defaultValue={client.meta_ad_account_id?.replace(/^act_/, "") ?? ""} />
+    <div className="flex flex-col gap-3">
+      <form action={action} className="flex flex-col gap-3">
+        <label className="flex items-center gap-2.5 font-medium">
+          <input type="checkbox" name="meta_access_confirmed" defaultChecked={!!client.meta_access_confirmed} className="size-4 accent-[#1A6647]" />
+          Access confirmed in Meta Business Suite
+        </label>
+        {accounts ? (
+          <Field label="Ad account" htmlFor="meta_ad_account_id" hint="Accounts assigned to the Portal system user in Business Suite.">
+            <Select id="meta_ad_account_id" name="meta_ad_account_id" defaultValue={current}>
+              <option value="">Not connected</option>
+              {current && !accounts.some((a) => a.id === current) && <option value={current}>{current} (not visible to the system user)</option>}
+              {accounts.map((a) => <option key={a.id} value={a.id}>{a.name} · {a.id.replace("act_", "")}</option>)}
+            </Select>
           </Field>
+        ) : (
+          <Field label="Ad account ID" htmlFor="meta_ad_account_id" optional hint={accountsError ?? "Business Suite → Ad accounts. Used for automatic ad results."}>
+            <Input id="meta_ad_account_id" name="meta_ad_account_id" inputMode="numeric" defaultValue={current.replace(/^act_/, "")} />
+          </Field>
+        )}
+        <Feedback state={state} />
+        <div className="flex justify-end"><SubmitButton variant="secondary">Save</SubmitButton></div>
+      </form>
+      {accounts && current && (
+        <div className="flex flex-wrap items-center gap-3 rounded-control bg-sidebar px-3.5 py-3">
+          <span className="min-w-[200px] flex-1 text-[13px] text-body">Ad results sync automatically every morning. Sync now to check it works.</span>
+          <Button type="button" variant="secondary" disabled={pending} onClick={() => start(async () => setSync(await syncMetaNow(client.id)))}>
+            {pending ? "Syncing…" : "Sync now"}
+          </Button>
         </div>
-      </div>
-      <Feedback state={state} />
-      <div className="flex justify-end"><SubmitButton variant="secondary">Save</SubmitButton></div>
-    </form>
+      )}
+      <Feedback state={sync} />
+    </div>
   );
 }
 

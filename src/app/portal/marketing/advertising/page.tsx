@@ -5,7 +5,7 @@ import { getPortalContext } from "@/lib/portal";
 import { createClient } from "@/lib/supabase/server";
 import { fmtDate, money, monthBounds } from "@/lib/dates";
 import type { AdReport, Campaign } from "@/lib/types";
-import { Badge, EmptyState, PageHeader, Stat } from "@/components/ui";
+import { Badge, EmptyState, Stat } from "@/components/ui";
 import { Row, RowList, Section } from "@/components/blocks";
 import { MarketingTabs } from "../tabs";
 
@@ -29,8 +29,10 @@ export default async function AdvertisingPage(props: PageProps<"/portal/marketin
 
   const header = (
     <>
-      <PageHeader title="Marketing" subtitle="Your social media content and advertising." />
-      <MarketingTabs active="advertising" awaiting={awaiting ?? 0} />
+      <div className="-mb-1 flex flex-col gap-4">
+        <h1 className="text-2xl font-semibold tracking-[-0.02em]">Marketing</h1>
+        <MarketingTabs active="advertising" awaiting={awaiting ?? 0} />
+      </div>
     </>
   );
   if (!report) {

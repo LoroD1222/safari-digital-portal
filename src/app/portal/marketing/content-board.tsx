@@ -35,6 +35,21 @@ function Badge({ s }: { s: ContentStatus }) {
   );
 }
 
+// Calm savanna illustration (as in the design) when there's no image yet.
+const SKIES = [["#F6D9A8", "#E9A23B", "#7FA36B", "#2F5D46"], ["#CFE3EA", "#F2C14E", "#9DB774", "#3B6B4F"], ["#F3C6A5", "#E0763F", "#A7B36A", "#44663A"]];
+function Scene({ seed }: { seed: string }) {
+  const n = [...seed].reduce((a, c) => a + c.charCodeAt(0), 0);
+  const [sky, sun, ground, tree] = SKIES[n % SKIES.length];
+  const sunX = 30 + (n % 5) * 22;
+  return (
+    <svg viewBox="0 0 160 120" preserveAspectRatio="xMidYMid slice" aria-hidden="true" className="absolute inset-0 h-full w-full" style={{ background: sky }}>
+      <circle cx={sunX} cy="44" r="14" fill={sun} />
+      <path d="M0 80 Q40 66 80 76 T160 72 V120 H0Z" fill={ground} />
+      <path d="M112 78 v-20 M96 58 q16 -9 32 0" stroke={tree} strokeWidth="4" fill="none" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function Thumb({ item, url, className }: { item: ContentItem; url?: string; className?: string }) {
   const video = item.media_type?.startsWith("video/");
   return (
@@ -43,8 +58,8 @@ function Thumb({ item, url, className }: { item: ContentItem; url?: string; clas
         ? <video src={`${url}#t=0.5`} muted playsInline preload="metadata" className="absolute inset-0 h-full w-full object-cover" />
         // eslint-disable-next-line @next/next/no-img-element
         : <img src={url} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover" />)}
-      {!url && <span className="absolute inset-0 flex items-center justify-center text-[#5E8572]"><Icon name="film" size={24} /></span>}
-      {video && url && (
+      {!url && <Scene seed={item.id} />}
+      {video && (
         <span className="absolute left-1/2 top-1/2 inline-flex size-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white/90">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="#0D3B2E" aria-hidden="true"><path d="M7 4v16l13-8z" /></svg>
         </span>
@@ -158,7 +173,7 @@ export function ContentBoard({ items, urls, comments, openId }: { items: Content
                   ? <video src={urls[cur.id]} controls playsInline preload="metadata" className="absolute inset-0 h-full w-full object-contain" />
                   // eslint-disable-next-line @next/next/no-img-element
                   : <img src={urls[cur.id]} alt={cur.title} className="absolute inset-0 h-full w-full object-contain" />)
-                  : <span className="absolute inset-0 flex items-center justify-center text-white/60"><Icon name="film" size={28} /></span>}
+                  : <Scene seed={cur.id} />}
               </div>
             </div>
             <div className="flex flex-[1_1_320px] flex-col gap-4 px-6 py-[22px]">

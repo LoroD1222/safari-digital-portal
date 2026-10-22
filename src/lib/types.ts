@@ -150,35 +150,50 @@ export function formatMoney(amount: number, currency: Currency) {
   return "$" + amount.toLocaleString("en-US", { maximumFractionDigits: 2 });
 }
 
-// Monthly recurring revenue from active clients, one total per currency.
-export function mrr(clients: Pick<Client, "id" | "account_status">[], billing: ClientPrivate[]) {
-  const active = new Set(clients.filter((c) => c.account_status === "active").map((c) => c.id));
-  const totals: Partial<Record<Currency, number>> = {};
-  let paying = 0;
-  for (const b of billing) {
-    if (!active.has(b.client_id) || !b.monthly_fee) continue;
-    totals[b.currency] = (totals[b.currency] ?? 0) + Number(b.monthly_fee);
-    paying++;
-  }
-  return { totals, paying };
+// Clients we bill: everyone except paused accounts. "Invited" clients pay too,
+// they just haven't logged in yet.
+const billable = (c: Pick<Client, "account_status">) => c.account_status !== "paused";
+
+function startOf(b: ClientPrivate, c: Pick<Client, "created_at">) {
+  return b.billing_start ?? c.created_at.slice(0, 10);
 }
 
-// MRR per month for the last `months` months, from today's active clients,
-// their monthly price and when they started paying (or were added).
+// Monthly recurring revenue today, one total per currency. Prices with a
+// start date in the future count as "upcoming", not MRR yet.
+export function mrr(clients: Pick<Client, "id" | "account_status" | "created_at">[], billing: ClientPrivate[], now = new Date()) {
+  const live = new Map(clients.filter(billable).map((c) => [c.id, c]));
+  const today = now.toISOString().slice(0, 10);
+  const totals: Partial<Record<Currency, number>> = {};
+  let paying = 0, upcoming = 0;
+  for (const b of billing) {
+    const c = live.get(b.client_id);
+    const fee = Number(b.monthly_fee);
+    if (!c || !fee || !Number.isFinite(fee)) continue;
+    if (startOf(b, c) > today) { upcoming++; continue; }
+    totals[b.currency] = (totals[b.currency] ?? 0) + fee;
+    paying++;
+  }
+  return { totals, paying, upcoming, billable: live.size };
+}
+
+// MRR per month for the last `months` months: each client's price counts from
+// the month they started paying (or were added), unless they're paused now.
 export function mrrHistory(
   clients: Pick<Client, "id" | "account_status" | "created_at">[], billing: ClientPrivate[], currency: Currency, months = 12, now = new Date(),
 ) {
-  const active = new Map(clients.filter((c) => c.account_status === "active").map((c) => [c.id, c]));
+  const live = new Map(clients.filter(billable).map((c) => [c.id, c]));
+  const today = now.toISOString().slice(0, 10);
   const out: { month: string; label: string; value: number }[] = [];
   for (let i = months - 1; i >= 0; i--) {
-    const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i + 1, 0)).toISOString().slice(0, 10);
     const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
+    // The current month only counts what has started by today, so the last bar matches the MRR card.
+    const end = i === 0 ? today : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i + 1, 0)).toISOString().slice(0, 10);
     let value = 0;
     for (const b of billing) {
-      const c = active.get(b.client_id);
-      if (!c || !b.monthly_fee || b.currency !== currency) continue;
-      const from = b.billing_start ?? c.created_at.slice(0, 10);
-      if (from <= end) value += Number(b.monthly_fee);
+      const c = live.get(b.client_id);
+      const fee = Number(b.monthly_fee);
+      if (!c || !fee || !Number.isFinite(fee) || b.currency !== currency) continue;
+      if (startOf(b, c) <= end) value += fee;
     }
     out.push({ month: start.toISOString().slice(0, 7), label: start.toLocaleDateString("en-GB", { month: "short", timeZone: "UTC" }), value });
   }

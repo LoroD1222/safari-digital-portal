@@ -1,8 +1,20 @@
 import { formatMoney, type Currency } from "@/lib/types";
 
+// Round the top of the axis up to 1, 2, 2.5 or 5 × 10ⁿ so the labels are readable.
+function niceMax(v: number) {
+  if (!(v > 0)) return 1;
+  const p = 10 ** Math.floor(Math.log10(v));
+  return ([1, 2, 2.5, 5, 10].find((m) => m * p >= v) ?? 10) * p;
+}
+
+function axisMoney(v: number, currency: Currency) {
+  const n = v >= 1_000_000 ? `${+(v / 1_000_000).toFixed(1)}M` : v >= 1_000 ? `${+(v / 1_000).toFixed(1)}k` : `${Math.round(v)}`;
+  return currency === "TZS" ? `TZS ${n}` : `$${n}`;
+}
+
 // Monthly recurring revenue, one column per month (single series, brand green).
 export function MrrChart({ data, currency, note }: { data: { month: string; label: string; value: number }[]; currency: Currency; note?: string }) {
-  const max = Math.max(1, ...data.map((d) => d.value));
+  const max = niceMax(Math.max(...data.map((d) => d.value)));
   const last = data[data.length - 1];
   const prev = data[data.length - 2];
   const change = prev && prev.value > 0 ? Math.round(((last.value - prev.value) / prev.value) * 100) : null;
@@ -12,7 +24,7 @@ export function MrrChart({ data, currency, note }: { data: { month: string; labe
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <div className="flex flex-col">
           <h2 id="mrr-h" className="text-[15px] font-semibold">MRR · last 12 months</h2>
-          <span className="text-[13px] text-slate">{note ?? "From active clients' monthly prices and start dates"}</span>
+          <span className="text-[13px] text-slate">{note ?? "From each client's monthly price and start date (paused clients excluded)"}</span>
         </div>
         <div className="flex flex-col items-end">
           <span className="text-[22px] font-semibold tabular-nums tracking-[-0.02em]">{formatMoney(last?.value ?? 0, currency)}</span>
@@ -21,8 +33,8 @@ export function MrrChart({ data, currency, note }: { data: { month: string; labe
       </div>
       <figure className="m-0 flex flex-col gap-1.5">
         <div className="flex gap-2">
-          <div aria-hidden="true" className="flex h-[140px] w-14 flex-col justify-between text-right text-[11px] tabular-nums text-slate">
-            {ticks.map((t) => <span key={t} className="-translate-y-1/2 first:translate-y-0 last:translate-y-0">{formatMoney(Math.round(t), currency)}</span>)}
+          <div aria-hidden="true" className="flex h-[140px] w-16 flex-none flex-col justify-between text-right text-[11px] tabular-nums text-slate">
+            {ticks.map((t) => <span key={t} className="-translate-y-1/2 first:translate-y-0 last:translate-y-0">{axisMoney(t, currency)}</span>)}
           </div>
           <div className="relative flex h-[140px] flex-1 items-end gap-[2px] border-b border-line">
             <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-1/2 border-t border-dashed border-line-soft" />
@@ -36,7 +48,7 @@ export function MrrChart({ data, currency, note }: { data: { month: string; labe
             ))}
           </div>
         </div>
-        <div aria-hidden="true" className="ml-16 flex gap-[2px] text-[11px] text-slate">
+        <div aria-hidden="true" className="ml-[72px] flex gap-[2px] text-[11px] text-slate">
           {data.map((d, i) => <span key={d.month} className="flex-1 text-center">{(data.length - 1 - i) % 2 === 0 ? d.label : ""}</span>)}
         </div>
         <table className="sr-only">

@@ -19,7 +19,7 @@ export default async function ClientsPage(props: PageProps<"/admin/clients">) {
   if (query) req = req.or(`name.ilike.%${query.replace(/[%,()]/g, "")}%,contact_name.ilike.%${query.replace(/[%,()]/g, "")}%`);
   const { data, error } = await req;
   const clients = (data ?? []) as Client[];
-  const { data: bills } = await supabase.from("client_private").select("client_id, monthly_fee, currency");
+  const { data: bills } = await supabase.from("client_private").select("client_id, monthly_fee, currency, billing_start");
   const billing = (bills ?? []) as ClientPrivate[];
   const price = Object.fromEntries(billing.filter((b) => b.monthly_fee).map((b) => [b.client_id, formatMoney(Number(b.monthly_fee), b.currency)]));
   const totals = (Object.entries(mrr(clients, billing).totals) as [Currency, number][]).filter(([, v]) => v > 0);
@@ -28,7 +28,7 @@ export default async function ClientsPage(props: PageProps<"/admin/clients">) {
     <>
       <PageHeader
         title="Clients"
-        subtitle={totals.length && !query ? <>MRR from active clients: <span className="font-medium text-ink">{totals.map(([c, v]) => formatMoney(v, c)).join(" + ")}</span> / month</> : undefined}
+        subtitle={totals.length && !query ? <>MRR: <span className="font-medium text-ink">{totals.map(([c, v]) => formatMoney(v, c)).join(" + ")}</span> / month</> : undefined}
         actions={<ButtonLink href="/admin/clients/new"><Icon name="plus" size={16} />Add client</ButtonLink>}
       />
       <form role="search" className="flex max-w-sm items-center gap-2">

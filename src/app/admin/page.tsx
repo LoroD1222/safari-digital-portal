@@ -17,7 +17,7 @@ function greeting() {
 export default async function AdminOverview() {
   const viewer = await requireAdmin();
   const supabase = await createClient();
-  const [{ data: cs }, { data: content }, { data: reqs }, { data: act }, { data: bills }] = await Promise.all([
+  const [{ data: cs }, { data: content }, { data: reqs }, { data: act }, { data: bills, error: billsError }] = await Promise.all([
     supabase.from("clients").select("*").order("updated_at", { ascending: false }),
     supabase.from("content_items").select("id, client_id, title, status, updated_at").in("status", ["awaiting_approval", "changes_requested", "approved"]),
     supabase.from("requests").select("*").neq("status", "completed").order("last_message_at", { ascending: false }),
@@ -30,10 +30,10 @@ export default async function AdminOverview() {
   const name = Object.fromEntries(clients.map((c) => [c.id, c.name]));
   const revenue = mrr(clients, (bills ?? []) as ClientPrivate[]);
   const totals = (Object.entries(revenue.totals) as [Currency, number][]).filter(([, v]) => v > 0);
-  const activeCount = clients.filter((c) => c.account_status === "active").length;
+  const activeCount = clients.filter((c) => c.account_status !== "paused").length;
   // Chart the main currency (the one with the most revenue).
   const chartCurrency = (totals.slice().sort((a, b) => b[1] - a[1])[0]?.[0] ?? "USD") as Currency;
-  const history = totals.length ? mrrHistory(clients, (bills ?? []) as ClientPrivate[], chartCurrency) : [];
+  const history = totals.length || revenue.upcoming ? mrrHistory(clients, (bills ?? []) as ClientPrivate[], chartCurrency) : [];
 
   const live = clients.filter((c) => c.account_status !== "paused");
   const awaitingOnboarding = live.filter((c) => c.onboarding_status !== "setup_complete");
@@ -53,7 +53,7 @@ export default async function AdminOverview() {
       <PageHeader title={`${greeting()}${first ? `, ${first}` : ""}`} subtitle="Here's what needs doing today." />
       <section aria-label="Summary" className="grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-3">
         <Stat label="MRR" value={totals.length ? totals.map(([c, v]) => formatMoney(v, c)).join(" + ") : "—"}
-          note={totals.length ? `${revenue.paying} of ${activeCount} active clients priced` : "Add each client's monthly price"} href="/admin/clients" />
+          note={billsError ? "Run 0007_billing.sql in Supabase" : totals.length ? `${revenue.paying} of ${revenue.billable} clients priced${revenue.upcoming ? ` · ${revenue.upcoming} starting later` : ""}` : revenue.upcoming ? `${revenue.upcoming} starting later` : "Add each client's monthly price"} href="/admin/clients" />
         <Stat label="Active clients" value={activeCount} href="/admin/clients" />
         <Stat label="Awaiting onboarding" value={awaitingOnboarding.length} href="/admin/clients" />
         <Stat label="Content awaiting approval" value={awaitingApproval.length} href="/admin/content?status=awaiting_approval" />
@@ -61,7 +61,7 @@ export default async function AdminOverview() {
       </section>
       {history.length > 0 && (
         <MrrChart data={history} currency={chartCurrency}
-          note={totals.length > 1 ? `In ${chartCurrency}, from active clients' prices and start dates. Other currencies aren't included in the chart.` : undefined} />
+          note={totals.length > 1 ? `In ${chartCurrency}, from each client's price and start date. Other currencies aren't included in the chart.` : undefined} />
       )}
       {clients.length === 0 ? (
         <EmptyState title="No clients yet" body="Add your first client to start tracking their onboarding, content and inquiries."

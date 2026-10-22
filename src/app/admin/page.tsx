@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { requireAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import type { Client, ContentItem, SupportRequest } from "@/lib/types";
+import { formatMoney, mrr, type Client, type ClientPrivate, type ContentItem, type Currency, type SupportRequest } from "@/lib/types";
 import { ButtonLink, EmptyState, PageHeader, Stat } from "@/components/ui";
 import { ActivityList, AttentionList, Section, type AttentionItem } from "@/components/blocks";
 import { Icon } from "@/components/icons";
@@ -16,16 +16,20 @@ function greeting() {
 export default async function AdminOverview() {
   const viewer = await requireAdmin();
   const supabase = await createClient();
-  const [{ data: cs }, { data: content }, { data: reqs }, { data: act }] = await Promise.all([
+  const [{ data: cs }, { data: content }, { data: reqs }, { data: act }, { data: bills }] = await Promise.all([
     supabase.from("clients").select("*").order("updated_at", { ascending: false }),
     supabase.from("content_items").select("id, client_id, title, status, updated_at").in("status", ["awaiting_approval", "changes_requested", "approved"]),
     supabase.from("requests").select("*").neq("status", "completed").order("last_message_at", { ascending: false }),
     supabase.from("activity").select("id, client_id, message, created_at, admin_link, actor_role").order("created_at", { ascending: false }).limit(8),
+    supabase.from("client_private").select("client_id, monthly_fee, currency"),
   ]);
   const clients = (cs ?? []) as Client[];
   const items = (content ?? []) as ContentItem[];
   const requests = (reqs ?? []) as SupportRequest[];
   const name = Object.fromEntries(clients.map((c) => [c.id, c.name]));
+  const revenue = mrr(clients, (bills ?? []) as ClientPrivate[]);
+  const totals = (Object.entries(revenue.totals) as [Currency, number][]).filter(([, v]) => v > 0);
+  const activeCount = clients.filter((c) => c.account_status === "active").length;
 
   const live = clients.filter((c) => c.account_status !== "paused");
   const awaitingOnboarding = live.filter((c) => c.onboarding_status !== "setup_complete");
@@ -44,7 +48,9 @@ export default async function AdminOverview() {
     <>
       <PageHeader title={`${greeting()}${first ? `, ${first}` : ""}`} subtitle="Here's what needs doing today." />
       <section aria-label="Summary" className="grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-3">
-        <Stat label="Active clients" value={clients.filter((c) => c.account_status === "active").length} href="/admin/clients" />
+        <Stat label="MRR" value={totals.length ? totals.map(([c, v]) => formatMoney(v, c)).join(" + ") : "—"}
+          note={totals.length ? `${revenue.paying} of ${activeCount} active clients priced` : "Add each client's monthly price"} href="/admin/clients" />
+        <Stat label="Active clients" value={activeCount} href="/admin/clients" />
         <Stat label="Awaiting onboarding" value={awaitingOnboarding.length} href="/admin/clients" />
         <Stat label="Content awaiting approval" value={awaitingApproval.length} href="/admin/content?status=awaiting_approval" />
         <Stat label="Open requests" value={requests.length} href="/admin/requests" />

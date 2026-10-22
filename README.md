@@ -26,7 +26,7 @@ Client portal and admin dashboard for Safari Digital, at `portal.safaridigital.c
 
 ## Setting it up
 
-1. **Database.** In Supabase → SQL Editor, paste and run each file in `supabase/migrations/` in order (`0001_init.sql` to `0006_cms.sql`).
+1. **Database.** In Supabase → SQL Editor, paste and run each file in `supabase/migrations/` in order (`0001_init.sql` to `0007_billing.sql`).
 2. **Turn off public sign-ups.** Supabase → Authentication → Sign In / Providers → turn off "Allow new users to sign up". Accounts are created by Safari Digital only.
 3. **Your admin account.** Supabase → Authentication → Users → Add user → Create new user (tick "Auto confirm"). Then run `supabase/make-admin.sql` with your email.
 4. **Redirect URLs.** Supabase → Authentication → URL Configuration: set Site URL to `https://portal.safaridigital.co.tz` and add `https://portal.safaridigital.co.tz/**` and `https://*.vercel.app/**` to Redirect URLs (password-reset links need these).

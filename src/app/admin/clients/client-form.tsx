@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useActionState } from "react";
-import type { Client } from "@/lib/types";
+import type { Client, ClientPrivate } from "@/lib/types";
 import { ACCOUNT_LABEL, MARKETING_LABEL, ONBOARDING_LABEL } from "@/lib/types";
 import { Alert, Field, Input, Select, Textarea, buttonClass } from "@/components/ui";
 import { SubmitButton } from "@/components/submit-button";
@@ -10,11 +10,12 @@ import type { ClientFormState } from "./actions";
 type Props = {
   action: (state: ClientFormState, form: FormData) => Promise<ClientFormState>;
   client?: Client;
+  billing?: ClientPrivate | null;
   submitLabel: string;
   cancelHref: string;
 };
 
-export function ClientForm({ action, client, submitLabel, cancelHref }: Props) {
+export function ClientForm({ action, client, billing, submitLabel, cancelHref }: Props) {
   const [state, formAction] = useActionState<ClientFormState, FormData>(action, {});
   const fe = state.fieldErrors ?? {};
   const val = (key: string, fallback: string | null | undefined) => state.values?.[key] ?? fallback ?? "";
@@ -64,6 +65,27 @@ export function ClientForm({ action, client, submitLabel, cancelHref }: Props) {
         </div>
       </section>
 
+      <section className="flex flex-col gap-4 border-t border-line-soft pt-6">
+        <div className="flex flex-col gap-0.5">
+          <h2 className="text-[15px] font-semibold">Price</h2>
+          <p className="text-[13px] text-slate">What this client pays per month. Only Safari Digital sees this; it adds up to MRR on your Overview.</p>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <Field label="Monthly price" htmlFor="monthly_fee" optional error={fe.monthly_fee}>
+            <Input id="monthly_fee" name="monthly_fee" inputMode="decimal" placeholder="450" defaultValue={val("monthly_fee", billing?.monthly_fee != null ? String(billing.monthly_fee) : "")} aria-invalid={!!fe.monthly_fee} />
+          </Field>
+          <Field label="Currency" htmlFor="currency">
+            <Select id="currency" name="currency" defaultValue={val("currency", billing?.currency ?? "USD")}>
+              <option value="USD">USD ($)</option>
+              <option value="TZS">TZS</option>
+            </Select>
+          </Field>
+          <Field label="Paying since" htmlFor="billing_start" optional>
+            <Input id="billing_start" name="billing_start" type="date" defaultValue={val("billing_start", billing?.billing_start ?? "")} />
+          </Field>
+        </div>
+      </section>
+
       {client && (
         <section className="flex flex-col gap-4 border-t border-line-soft pt-6">
           <h2 className="text-[15px] font-semibold">Status</h2>
@@ -84,7 +106,7 @@ export function ClientForm({ action, client, submitLabel, cancelHref }: Props) {
 
       <section className="flex flex-col gap-4 border-t border-line-soft pt-6">
         <Field label="Internal notes" htmlFor="notes" optional hint="Only Safari Digital sees these.">
-          <Textarea id="notes" name="notes" rows={3} defaultValue={val("notes", client?.notes)} />
+          <Textarea id="notes" name="notes" rows={3} defaultValue={val("notes", billing?.notes)} />
         </Field>
       </section>
 

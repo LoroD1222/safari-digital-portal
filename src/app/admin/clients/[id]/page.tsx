@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   ACCOUNT_LABEL, CATEGORY_LABEL, ONBOARDING_LABEL, REQUEST_LABEL_ADMIN, packageSummary,
-  type AdReport, type Client, type SupportRequest,
+  type AdReport, type Client, type ClientPrivate, type SupportRequest,
 } from "@/lib/types";
 import { ACCOUNT_TONE, ONBOARDING_TONE, REQUEST_TONE } from "@/lib/status-tone";
 import { monthBounds, fmtDate, money } from "@/lib/dates";
@@ -81,6 +81,7 @@ async function OverviewTab({ client }: { client: Client }) {
   );
   const { data: reqs } = await supabase.from("requests").select("*").eq("client_id", client.id).order("last_message_at", { ascending: false }).limit(5);
   const requests = (reqs ?? []) as SupportRequest[];
+  const { data: billing } = await supabase.from("client_private").select("*").eq("client_id", client.id).maybeSingle();
 
   return (
     <>
@@ -109,7 +110,7 @@ async function OverviewTab({ client }: { client: Client }) {
         )}
       </Section>
       <div className="border-t border-line-soft pt-6">
-        <ClientForm action={updateClientRecord.bind(null, client.id)} client={client} submitLabel="Save changes" cancelHref="/admin/clients" />
+        <ClientForm action={updateClientRecord.bind(null, client.id)} client={client} billing={billing as ClientPrivate | null} submitLabel="Save changes" cancelHref="/admin/clients" />
       </div>
     </>
   );

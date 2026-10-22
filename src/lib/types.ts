@@ -138,3 +138,27 @@ export type AdReport = {
   id: string; client_id: string; month: string; meta_spend: number; meta_inquiries: number; campaigns: Campaign[];
   note: string | null; source: "manual" | "synced"; updated_at: string;
 };
+
+// ───────────── Billing (admin only) ─────────────
+export type Currency = "USD" | "TZS";
+export type ClientPrivate = { client_id: string; monthly_fee: number | null; currency: Currency; billing_start: string | null; notes: string | null };
+
+export function formatMoney(amount: number, currency: Currency) {
+  if (currency === "TZS") {
+    return "TZS " + (amount >= 1_000_000 ? (amount / 1_000_000).toFixed(amount % 1_000_000 ? 1 : 0) + "M" : amount.toLocaleString("en-US"));
+  }
+  return "$" + amount.toLocaleString("en-US", { maximumFractionDigits: 2 });
+}
+
+// Monthly recurring revenue from active clients, one total per currency.
+export function mrr(clients: Pick<Client, "id" | "account_status">[], billing: ClientPrivate[]) {
+  const active = new Set(clients.filter((c) => c.account_status === "active").map((c) => c.id));
+  const totals: Partial<Record<Currency, number>> = {};
+  let paying = 0;
+  for (const b of billing) {
+    if (!active.has(b.client_id) || !b.monthly_fee) continue;
+    totals[b.currency] = (totals[b.currency] ?? 0) + Number(b.monthly_fee);
+    paying++;
+  }
+  return { totals, paying };
+}

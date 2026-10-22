@@ -28,6 +28,26 @@ function oneOf(form: FormData, key: string, allowed: string[]) {
   return v && allowed.includes(v) ? v : null;
 }
 
+function readPrivate(form: FormData): { values: Record<string, unknown>; error?: string } {
+  const feeText = text(form, "monthly_fee")?.replace(/[, ]/g, "") ?? null;
+  const fee = feeText === null ? null : Number(feeText);
+  if (fee !== null && (!Number.isFinite(fee) || fee < 0)) return { values: {}, error: "The monthly price must be a number." };
+  const start = text(form, "billing_start");
+  return {
+    values: {
+      monthly_fee: fee === null ? null : Math.round(fee * 100) / 100,
+      currency: oneOf(form, "currency", ["USD", "TZS"]) ?? "USD",
+      billing_start: start && /^\d{4}-\d{2}-\d{2}$/.test(start) ? start : null,
+      notes: text(form, "notes"),
+    },
+  };
+}
+
+async function savePrivate(supabase: Awaited<ReturnType<typeof createClient>>, clientId: string, values: Record<string, unknown>) {
+  const { error } = await supabase.from("client_private").upsert({ client_id: clientId, ...values });
+  return error ? (error.message.includes("client_private") ? "Run 0007_billing.sql in Supabase to save prices and notes." : error.message) : null;
+}
+
 function readClient(form: FormData) {
   const fieldErrors: Record<string, string> = {};
   const name = text(form, "name");
@@ -42,7 +62,6 @@ function readClient(form: FormData) {
     website_url: text(form, "website_url"),
     marketing_package: oneOf(form, "marketing_package", MARKETING),
     website_package: oneOf(form, "website_package", WEBSITE),
-    notes: text(form, "notes"),
   };
   return { values, fieldErrors };
 }
@@ -50,11 +69,14 @@ function readClient(form: FormData) {
 export async function createClientRecord(_: ClientFormState, form: FormData): Promise<ClientFormState> {
   await requireAdmin();
   const { values, fieldErrors } = readClient(form);
+  const priv = readPrivate(form);
+  if (priv.error) fieldErrors.monthly_fee = priv.error;
   if (Object.keys(fieldErrors).length) return { fieldErrors, values: echo(form) };
 
   const supabase = await createClient();
   const { data, error } = await supabase.from("clients").insert(values).select("id").single();
   if (error || !data) return { error: "Couldn't add the client. " + (error?.message ?? ""), values: echo(form) };
+  await savePrivate(supabase, data.id, priv.values);
   revalidatePath("/admin", "layout");
   redirect(`/admin/clients/${data.id}?created=1`);
 }
@@ -62,6 +84,8 @@ export async function createClientRecord(_: ClientFormState, form: FormData): Pr
 export async function updateClientRecord(id: string, _: ClientFormState, form: FormData): Promise<ClientFormState> {
   await requireAdmin();
   const { values, fieldErrors } = readClient(form);
+  const priv = readPrivate(form);
+  if (priv.error) fieldErrors.monthly_fee = priv.error;
   if (Object.keys(fieldErrors).length) return { fieldErrors, values: echo(form) };
   const update = {
     ...values,
@@ -72,6 +96,8 @@ export async function updateClientRecord(id: string, _: ClientFormState, form: F
   const supabase = await createClient();
   const { error } = await supabase.from("clients").update(update).eq("id", id);
   if (error) return { error: "Couldn't save the changes. " + error.message, values: echo(form) };
+  const privError = await savePrivate(supabase, id, priv.values);
+  if (privError) return { error: privError, values: echo(form) };
   revalidatePath("/admin", "layout");
   return { saved: true };
 }

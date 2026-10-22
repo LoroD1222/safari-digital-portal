@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { requireAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { ACCOUNT_LABEL, ONBOARDING_LABEL, packageSummary, type Client } from "@/lib/types";
+import { ACCOUNT_LABEL, ONBOARDING_LABEL, formatMoney, mrr, packageSummary, type Client, type ClientPrivate, type Currency } from "@/lib/types";
 import { ACCOUNT_TONE, ONBOARDING_TONE } from "@/lib/status-tone";
 import { Badge, ButtonLink, EmptyState, Input, PageHeader } from "@/components/ui";
 import { Icon } from "@/components/icons";
@@ -19,11 +19,16 @@ export default async function ClientsPage(props: PageProps<"/admin/clients">) {
   if (query) req = req.or(`name.ilike.%${query.replace(/[%,()]/g, "")}%,contact_name.ilike.%${query.replace(/[%,()]/g, "")}%`);
   const { data, error } = await req;
   const clients = (data ?? []) as Client[];
+  const { data: bills } = await supabase.from("client_private").select("client_id, monthly_fee, currency");
+  const billing = (bills ?? []) as ClientPrivate[];
+  const price = Object.fromEntries(billing.filter((b) => b.monthly_fee).map((b) => [b.client_id, formatMoney(Number(b.monthly_fee), b.currency)]));
+  const totals = (Object.entries(mrr(clients, billing).totals) as [Currency, number][]).filter(([, v]) => v > 0);
 
   return (
     <>
       <PageHeader
         title="Clients"
+        subtitle={totals.length && !query ? <>MRR from active clients: <span className="font-medium text-ink">{totals.map(([c, v]) => formatMoney(v, c)).join(" + ")}</span> / month</> : undefined}
         actions={<ButtonLink href="/admin/clients/new"><Icon name="plus" size={16} />Add client</ButtonLink>}
       />
       <form role="search" className="flex max-w-sm items-center gap-2">
@@ -53,7 +58,7 @@ export default async function ClientsPage(props: PageProps<"/admin/clients">) {
                     <span className="font-medium">{c.name}</span>
                     <span className="truncate text-xs text-slate">{c.contact_name ?? c.contact_email ?? "No contact yet"}</span>
                   </span>
-                  <span className="flex-[1_1_220px] text-[13px] text-body">{packageSummary(c)}</span>
+                  <span className="flex flex-[1_1_220px] flex-col text-[13px] text-body"><span>{packageSummary(c)}</span>{price[c.id] && <span className="text-xs text-slate">{price[c.id]} / month</span>}</span>
                   <span className="w-36"><Badge tone={ONBOARDING_TONE[c.onboarding_status]}>{ONBOARDING_LABEL[c.onboarding_status]}</Badge></span>
                   <span className="w-24"><Badge tone={ACCOUNT_TONE[c.account_status]}>{ACCOUNT_LABEL[c.account_status]}</Badge></span>
                 </Link>

@@ -9,7 +9,7 @@ function cx(...c: (string | false | null | undefined)[]) {
 // Link tabs (each tab is its own URL, so they work without JavaScript).
 export function Tabs({ items, label }: { items: { href: string; label: string; active: boolean; count?: number }[]; label: string }) {
   return (
-    <nav aria-label={label} className="-mt-2 flex gap-5 overflow-x-auto border-b border-line">
+    <nav aria-label={label} className="-mt-2 flex flex-wrap gap-x-5 border-b border-line">
       {items.map((t) => (
         <Link key={t.href} href={t.href} aria-current={t.active ? "page" : undefined} scroll={false}
           className={cx("-mb-px flex h-10 items-center gap-1.5 whitespace-nowrap border-b-2 text-sm font-medium no-underline",

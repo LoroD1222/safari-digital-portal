@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import { requireAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { formatMoney, mrr, type Client, type ClientPrivate, type ContentItem, type Currency, type SupportRequest } from "@/lib/types";
+import { formatMoney, mrr, mrrHistory, type Client, type ClientPrivate, type ContentItem, type Currency, type SupportRequest } from "@/lib/types";
 import { ButtonLink, EmptyState, PageHeader, Stat } from "@/components/ui";
 import { ActivityList, AttentionList, Section, type AttentionItem } from "@/components/blocks";
 import { Icon } from "@/components/icons";
+import { MrrChart } from "@/components/mrr-chart";
 
 export const metadata: Metadata = { title: "Overview" };
 
@@ -21,7 +22,7 @@ export default async function AdminOverview() {
     supabase.from("content_items").select("id, client_id, title, status, updated_at").in("status", ["awaiting_approval", "changes_requested", "approved"]),
     supabase.from("requests").select("*").neq("status", "completed").order("last_message_at", { ascending: false }),
     supabase.from("activity").select("id, client_id, message, created_at, admin_link, actor_role").order("created_at", { ascending: false }).limit(8),
-    supabase.from("client_private").select("client_id, monthly_fee, currency"),
+    supabase.from("client_private").select("client_id, monthly_fee, currency, billing_start"),
   ]);
   const clients = (cs ?? []) as Client[];
   const items = (content ?? []) as ContentItem[];
@@ -30,6 +31,9 @@ export default async function AdminOverview() {
   const revenue = mrr(clients, (bills ?? []) as ClientPrivate[]);
   const totals = (Object.entries(revenue.totals) as [Currency, number][]).filter(([, v]) => v > 0);
   const activeCount = clients.filter((c) => c.account_status === "active").length;
+  // Chart the main currency (the one with the most revenue).
+  const chartCurrency = (totals.slice().sort((a, b) => b[1] - a[1])[0]?.[0] ?? "USD") as Currency;
+  const history = totals.length ? mrrHistory(clients, (bills ?? []) as ClientPrivate[], chartCurrency) : [];
 
   const live = clients.filter((c) => c.account_status !== "paused");
   const awaitingOnboarding = live.filter((c) => c.onboarding_status !== "setup_complete");
@@ -55,6 +59,10 @@ export default async function AdminOverview() {
         <Stat label="Content awaiting approval" value={awaitingApproval.length} href="/admin/content?status=awaiting_approval" />
         <Stat label="Open requests" value={requests.length} href="/admin/requests" />
       </section>
+      {history.length > 0 && (
+        <MrrChart data={history} currency={chartCurrency}
+          note={totals.length > 1 ? `In ${chartCurrency}, from active clients' prices and start dates. Other currencies aren't included in the chart.` : undefined} />
+      )}
       {clients.length === 0 ? (
         <EmptyState title="No clients yet" body="Add your first client to start tracking their onboarding, content and inquiries."
           action={<ButtonLink href="/admin/clients/new"><Icon name="plus" size={16} />Add client</ButtonLink>} />

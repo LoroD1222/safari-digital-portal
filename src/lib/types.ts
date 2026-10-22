@@ -162,3 +162,25 @@ export function mrr(clients: Pick<Client, "id" | "account_status">[], billing: C
   }
   return { totals, paying };
 }
+
+// MRR per month for the last `months` months, from today's active clients,
+// their monthly price and when they started paying (or were added).
+export function mrrHistory(
+  clients: Pick<Client, "id" | "account_status" | "created_at">[], billing: ClientPrivate[], currency: Currency, months = 12, now = new Date(),
+) {
+  const active = new Map(clients.filter((c) => c.account_status === "active").map((c) => [c.id, c]));
+  const out: { month: string; label: string; value: number }[] = [];
+  for (let i = months - 1; i >= 0; i--) {
+    const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i + 1, 0)).toISOString().slice(0, 10);
+    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
+    let value = 0;
+    for (const b of billing) {
+      const c = active.get(b.client_id);
+      if (!c || !b.monthly_fee || b.currency !== currency) continue;
+      const from = b.billing_start ?? c.created_at.slice(0, 10);
+      if (from <= end) value += Number(b.monthly_fee);
+    }
+    out.push({ month: start.toISOString().slice(0, 7), label: start.toLocaleDateString("en-GB", { month: "short", timeZone: "UTC" }), value });
+  }
+  return out;
+}

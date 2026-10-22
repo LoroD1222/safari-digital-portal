@@ -49,6 +49,16 @@ export default async function ContentPage(props: PageProps<"/portal/marketing">)
           <h2 className="text-[17px] font-semibold">Your social media content</h2>
           <span className="text-[13px] text-slate">{MARKETING_LABEL[company.marketing_package]} Marketing · {month.label}</span>
         </div>
+        {plan.length === 0 && (
+          <div className="flex flex-wrap gap-6" aria-label="Monthly plan not set yet">
+            {["Reels", "Social posts"].map((l) => (
+              <div key={l} className="flex w-[170px] flex-col gap-1.5">
+                <div className="flex justify-between text-[13px]"><span className="font-medium">{l}</span><span className="text-slate">plan coming soon</span></div>
+                <div className="h-1.5 rounded-full bg-line-soft" />
+              </div>
+            ))}
+          </div>
+        )}
         {plan.length > 0 && (
           <div className="flex flex-wrap gap-6">
             {plan.map((p) => (

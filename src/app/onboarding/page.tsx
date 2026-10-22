@@ -2,8 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getPortalContext } from "@/lib/portal";
 import { createClient } from "@/lib/supabase/server";
-import { DEFAULT_ANSWERS, type Answers } from "@/lib/onboarding";
-import { listOnboardingFiles } from "@/lib/client-files";
+import { DEFAULT_ANSWERS, inferDone, type Answers } from "@/lib/onboarding";
 import { Wizard } from "./wizard";
 import { getSettings } from "@/lib/settings";
 
@@ -16,6 +15,7 @@ function merge(saved: Answers | null): Answers {
     marketing: { ...DEFAULT_ANSWERS.marketing, ...s.marketing },
     website: { ...DEFAULT_ANSWERS.website, ...s.website },
     files: { ...DEFAULT_ANSWERS.files, ...s.files, mode: "drive" },
+    done: s.done ?? inferDone(s),
   };
 }
 
@@ -25,9 +25,7 @@ export default async function OnboardingPage() {
 
   const supabase = await createClient();
   const { data: row } = await supabase.from("onboarding_responses").select("data, submitted_at").eq("client_id", company.id).maybeSingle();
-  const files = await listOnboardingFiles(supabase, company.id);
   const settings = await getSettings();
-  const started = !!row && Object.keys(row.data ?? {}).length > 0;
   // Safari Digital asked for more after a submission: open the form again.
   const reopened = company.onboarding_status === "in_progress" || company.onboarding_status === "not_started";
 
@@ -35,10 +33,13 @@ export default async function OnboardingPage() {
     <Wizard
       clientId={company.id}
       companyName={company.name}
+      contactName={company.contact_name ?? null}
       services={{ marketing: !!company.marketing_package, website: !!company.website_package }}
       initialAnswers={merge((row?.data as Answers) ?? null)}
-      initialFiles={files}
-      initialStep={row?.submitted_at && !reopened ? "done" : started ? "business" : "welcome"}
+      initialView={row?.submitted_at && !reopened ? "done" : "hub"}
+      submitted={!!row?.submitted_at && !reopened}
+      metaConfirmed={!!company.meta_access_confirmed}
+      supportWhatsapp={settings.support_whatsapp}
       note={company.onboarding_note ?? null}
       metaBusinessId={settings.meta_business_id}
       driveShareEmail={settings.drive_share_email}

@@ -35,6 +35,8 @@ export type Answers = {
     drive_shared?: boolean;
     reviews?: string;
   };
+  // Which checklist tasks the client has saved as finished.
+  done?: Partial<Record<TaskKey, boolean>>;
 };
 
 export const OFFERS = ["Wildlife safaris", "Kilimanjaro treks", "Zanzibar holidays", "Day trips", "Cultural tours", "Lodge or camp"];
@@ -58,30 +60,47 @@ export const DEFAULT_ANSWERS: Answers = {
   files: { mode: "drive" },
 };
 
-export type StepKey = "welcome" | "business" | "marketing" | "website" | "files" | "review" | "done";
+export type TaskKey = "business" | "ads" | "website" | "meta" | "photos";
 
-export function stepsFor(services: { marketing: boolean; website: boolean }) {
-  // A client with no package set yet sees both, so nothing is missed.
+export type Task = { key: TaskKey; group: "ask" | "access"; title: string; desc: string; why: string; minutes: number };
+
+const ALL_TASKS: (Task & { needs?: "marketing" | "website" })[] = [
+  { key: "business", group: "ask", title: "Your business", desc: "Contact details, what you offer, where guests come from", why: "We use this in your posts, ads and website, and to send guest inquiries to the right place.", minutes: 5 },
+  { key: "ads", group: "ask", title: "Advertising goals", desc: "Budget and what ads should bring you", why: "So we can plan your first campaigns around the trips that matter most.", minutes: 2, needs: "marketing" },
+  { key: "website", group: "ask", title: "Website plans", desc: "Domain, goals and the pages you need", why: "Everything we need to plan the structure and design of your new site.", minutes: 3, needs: "website" },
+  { key: "meta", group: "access", title: "Facebook & Instagram access", desc: "Add Safari Digital as a partner in Meta Business Suite", why: "Partner access lets us post and run ads for you without ever knowing your password. You stay the owner.", minutes: 4, needs: "marketing" },
+  { key: "photos", group: "access", title: "Photos & logo", desc: "Share a Google Drive folder with us", why: "Real photos of your trips make the best posts, ads and website. Send what you have now and add more anytime.", minutes: 3 },
+];
+
+export function tasksFor(services: { marketing: boolean; website: boolean }): Task[] {
+  // A client with no package set yet sees everything, so nothing is missed.
   const both = !services.marketing && !services.website;
-  return [
-    { key: "business" as const, label: "Your business", desc: "Contact details, what you offer, where guests come from" },
-    ...(services.marketing || both ? [{ key: "marketing" as const, label: "Facebook & Instagram", desc: "Your pages, access and ad budget" }] : []),
-    ...(services.website || both ? [{ key: "website" as const, label: "Your website", desc: "Domain, goals and the pages you need" }] : []),
-    { key: "files" as const, label: "Photos & brand files", desc: "Share a Google Drive folder" },
-    { key: "review" as const, label: "Check & submit", desc: "A quick review, then send" },
-  ];
+  return ALL_TASKS.filter((t) => !t.needs || both || services[t.needs]).map((t) => ({ key: t.key, group: t.group, title: t.title, desc: t.desc, why: t.why, minutes: t.minutes }));
 }
 
 export function isDriveLink(v?: string) {
   return !!v && /^https:\/\/(drive|docs)\.google\.com\//.test(v.trim());
 }
 
-// What's still missing. None of these block submitting; they're shown as reminders.
-export function missingItems(a: Answers, files: StoredFile[], hasMarketing: boolean) {
-  const out: { step: StepKey; text: string }[] = [];
-  if (!a.business?.whatsapp?.trim()) out.push({ step: "business", text: "WhatsApp number" });
-  if (hasMarketing && !a.marketing?.invite_sent) out.push({ step: "marketing", text: "Meta access invitation not sent yet" });
-  if (!isDriveLink(a.files?.drive_link) && files.length === 0) out.push({ step: "files", text: "Google Drive folder not shared yet" });
-  else if (isDriveLink(a.files?.drive_link) && !a.files?.drive_shared) out.push({ step: "files", text: "Drive folder not marked as shared" });
-  return out;
+// An access task only counts once the client has confirmed they did it.
+export function canFinish(key: TaskKey, a: Answers) {
+  if (key === "meta") return !!a.marketing?.invite_sent;
+  if (key === "photos") return isDriveLink(a.files?.drive_link) && !!a.files?.drive_shared;
+  return true;
+}
+
+export function isTaskDone(key: TaskKey, a: Answers) {
+  return !!a.done?.[key] && canFinish(key, a);
+}
+
+// Older saved answers have no checklist state: work it out from what was filled in.
+export function inferDone(a: Answers): Answers["done"] {
+  const b = a.business ?? {}, m = a.marketing ?? {}, w = a.website ?? {};
+  return {
+    business: !!(b.contact_name?.trim() && b.whatsapp?.trim()),
+    ads: !!(m.budget?.trim() || m.promote?.trim()),
+    website: !!(w.current_site?.trim() || w.domain?.trim() || w.wanted_domain?.trim() || w.likes?.trim()),
+    meta: !!m.invite_sent,
+    photos: canFinish("photos", a),
+  };
 }

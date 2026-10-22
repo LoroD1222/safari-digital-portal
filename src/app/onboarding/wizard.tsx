@@ -2,10 +2,11 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
+import { CopyButton } from "@/components/copy-button";
 import {
   AD_GOALS, MARKETS, OFFERS, PAGES, WEB_GOALS,
-  isDriveLink, missingItems, stepsFor,
-  type Answers, type StepKey, type StoredFile,
+  canFinish, isDriveLink, isTaskDone, tasksFor,
+  type Answers, type Task, type TaskKey,
 } from "@/lib/onboarding";
 import { Alert, Button, Input, Textarea, buttonClass } from "@/components/ui";
 import { VideoEmbed } from "@/components/video-embed";
@@ -14,10 +15,13 @@ import { saveOnboarding, submitOnboarding } from "./actions";
 type Props = {
   clientId: string;
   companyName: string;
+  contactName: string | null;
   services: { marketing: boolean; website: boolean };
   initialAnswers: Answers;
-  initialFiles: StoredFile[];
-  initialStep: StepKey;
+  initialView: View;
+  submitted: boolean;
+  metaConfirmed: boolean;
+  supportWhatsapp: string | null;
   metaBusinessId: string | null;
   driveShareEmail: string | null;
   metaAccessVideoUrl: string | null;
@@ -26,6 +30,7 @@ type Props = {
 };
 
 type SaveState = "idle" | "saving" | "saved" | "error";
+type View = "hub" | "done" | TaskKey;
 
 // ───────────────────────── Small form pieces ─────────────────────────
 
@@ -155,15 +160,6 @@ function Check({ checked, onChange, children }: { checked?: boolean; onChange: (
   );
 }
 
-function StepTitle({ title, intro }: { title: string; intro: string }) {
-  return (
-    <div className="flex flex-col gap-1">
-      <h1 className="text-2xl font-semibold tracking-[-0.02em]">{title}</h1>
-      <p className="text-slate">{intro}</p>
-    </div>
-  );
-}
-
 function CheckIcon({ className = "" }: { className?: string }) {
   return (
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={className}>
@@ -172,20 +168,53 @@ function CheckIcon({ className = "" }: { className?: string }) {
   );
 }
 
-// ───────────────────────── Wizard ─────────────────────────
+
+function Section({ title, children, first }: { title: string; children: ReactNode; first?: boolean }) {
+  return (
+    <section className={"flex flex-col gap-3 " + (first ? "" : "border-t border-line-soft pt-5")}>
+      <h2 className="text-[15px] font-semibold">{title}</h2>
+      {children}
+    </section>
+  );
+}
+
+function Timeline({ stage, steps }: { stage: number; steps: [string, string][] }) {
+  return (
+    <ol>
+      {steps.map(([label, desc], i) => {
+        const done = i < stage, here = i === stage, last = i === steps.length - 1;
+        return (
+          <li key={label} className="flex gap-3">
+            <div className="flex flex-col items-center">
+              <span aria-hidden className={"mt-1 size-3 flex-none rounded-full " + (done ? "bg-brand" : here ? "bg-white shadow-[inset_0_0_0_3px_#1A6647]" : "bg-field")} />
+              <span className={"min-h-3.5 w-[1.5px] flex-1 " + (last ? "bg-transparent" : done ? "bg-brand" : "bg-line")} />
+            </div>
+            <div className="pb-3.5">
+              <div className={"text-[13px] " + (here ? "font-semibold" : "font-medium")}>{label}{here && <span className="sr-only"> (current)</span>}</div>
+              <div className="text-xs text-slate">{desc}</div>
+            </div>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+// ───────────────────────── Checklist ─────────────────────────
 
 export function Wizard(p: Props) {
-  const steps = useMemo(() => stepsFor(p.services), [p.services]);
-  const order: StepKey[] = ["welcome", ...steps.map((s) => s.key), "done"];
-  const [step, setStep] = useState<StepKey>(p.initialStep);
-  const [visited, setVisited] = useState<Set<StepKey>>(() => new Set(p.initialStep === "done" ? order : []));
+  const tasks = useMemo(() => tasksFor(p.services), [p.services]);
+  const keys = tasks.map((t) => t.key);
+  const [view, setView] = useState<View>(p.initialView);
   const [a, setA] = useState<Answers>(p.initialAnswers);
-  const files = p.initialFiles;
+  const [submitted, setSubmitted] = useState(p.submitted);
   const [save, setSave] = useState<SaveState>("idle");
-  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [nudge, setNudge] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
   const [submitting, startSubmit] = useTransition();
   const dirty = useRef(false);
-  const mainRef = useRef<HTMLDivElement>(null);
+  const mainRef = useRef<HTMLElement>(null);
 
   // Save a moment after the last change.
   useEffect(() => {
@@ -198,331 +227,422 @@ export function Wizard(p: Props) {
     return () => clearTimeout(t);
   }, [a]);
 
-  function update<K extends keyof Answers>(section: K, patch: Partial<NonNullable<Answers[K]>>) {
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 2600);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  function update<K extends Exclude<keyof Answers, "done">>(section: K, patch: Partial<NonNullable<Answers[K]>>) {
     dirty.current = true;
+    setNudge(false);
     setA((prev) => ({ ...prev, [section]: { ...prev[section], ...patch } }));
   }
 
-  function go(next: StepKey) {
-    setVisited((v) => new Set(v).add(step));
-    setStep(next);
+  function go(next: View) {
+    setView(next);
+    setNudge(false);
+    setError(null);
     window.scrollTo({ top: 0 });
     requestAnimationFrame(() => mainRef.current?.querySelector("h1")?.focus());
   }
-  const idx = order.indexOf(step);
-  const next = () => go(order[Math.min(idx + 1, order.length - 1)]);
-  const back = () => go(order[Math.max(idx - 1, 0)]);
+
+  const done = (k: TaskKey) => isTaskDone(k, a);
+  const left = tasks.filter((t) => !done(t.key));
+  const doneCount = tasks.length - left.length;
+  const minutesLeft = left.reduce((n, t) => n + t.minutes, 0);
+  const allDone = left.length === 0;
+  const task = tasks.find((t) => t.key === view);
+  const nextOpen = (k: TaskKey) => {
+    const i = keys.indexOf(k);
+    for (let j = 1; j < keys.length; j++) { const n = keys[(i + j) % keys.length]; if (!done(n)) return n; }
+    return null;
+  };
+
+  function statusOf(t: Task): { label: string; tone: string } {
+    if (!done(t.key)) return { label: "To do", tone: "bg-[#F4F5F2] text-slate" };
+    const confirmed = t.key === "meta" ? p.metaConfirmed : t.key === "photos" ? false : true;
+    return confirmed || t.group === "ask"
+      ? { label: "Done", tone: "bg-[#F1FAF6] text-brand" }
+      : { label: "We're checking", tone: "bg-[#FFF7E8] text-[#8A5A12]" };
+  }
+
+  function saveTask() {
+    if (!task) return;
+    if (!canFinish(task.key, a)) { setNudge(true); return; }
+    dirty.current = true;
+    const nextA = { ...a, done: { ...a.done, [task.key]: true } };
+    setA(nextA);
+    setToast(`${task.title} saved`);
+    const after = nextOpen(task.key);
+    // isTaskDone on the old answers still counts this task as open, so skip it explicitly.
+    go(after && after !== task.key ? after : submitted ? "done" : "hub");
+  }
 
   function submit() {
-    setSubmitError(null);
+    setError(null);
     startSubmit(async () => {
       const res = await submitOnboarding(a);
-      if (res.ok) { setSave("saved"); go("done"); }
-      else setSubmitError(res.error ?? "Something went wrong.");
+      if (res.ok) { setSave("saved"); setSubmitted(true); go("done"); }
+      else setError(res.error ?? "Something went wrong.");
     });
   }
 
-  const formSteps = steps.filter((s) => s.key !== "review");
-  const doneCount = formSteps.filter((s) => visited.has(s.key) && s.key !== step).length;
-  const missing = missingItems(a, files, steps.some((s) => s.key === "marketing"));
+  const hasMk = keys.includes("meta"), hasWeb = keys.includes("website");
+  const serviceWords = hasMk && hasWeb ? "marketing and website" : hasMk ? "marketing" : "website";
+  const firstName = (a.business?.contact_name || p.contactName || "").trim().split(/\s+/)[0];
+  const wa = p.supportWhatsapp?.replace(/\D/g, "") || null;
+  const timeline: [string, string][] = [
+    ["You finish setup", "The tasks on this page"],
+    ["We check everything", "Access, files and answers · 1–2 working days"],
+    ["Your plan is ready", hasMk ? "First month of posts and ads to approve" : "Website structure to approve"],
+    ["We go live", hasMk && hasWeb ? "Posts, ads and website design start" : hasMk ? "Posts and ads start" : "Website design starts"],
+  ];
   const b = a.business ?? {}, m = a.marketing ?? {}, w = a.website ?? {}, f = a.files ?? {};
-  const inForm = step !== "welcome" && step !== "done";
   const driveBad = !!f.drive_link?.trim() && !isDriveLink(f.drive_link);
 
   const header = (
-    <header className="flex h-16 items-center justify-between gap-3 border-b border-line-soft px-4 sm:px-6">
+    <header className="flex h-16 items-center justify-between gap-3 border-b border-line-soft bg-white px-4 sm:px-6">
       <Image src="/safari-digital-logo.svg" alt="Safari Digital" width={140} height={22} priority className="h-[22px] w-auto" />
       <div className="flex items-center gap-3">
-        {inForm && (
-          <span role="status" className="hidden items-center gap-1.5 text-[13px] text-slate sm:inline-flex">
-            {save === "saving" ? "Saving…" : save === "error" ? <span className="text-danger-text">Not saved. Check your connection</span> : (<><CheckIcon className="text-brand" />Saves as you go</>)}
-          </span>
+        {view !== "done" && (
+          <>
+            <span role="status" className="hidden items-center gap-1.5 text-[13px] text-slate sm:inline-flex">
+              {save === "saving" ? "Saving…" : save === "error" ? <span className="text-danger-text">Not saved. Check your connection</span> : (<><CheckIcon className="text-brand" />Saved automatically</>)}
+            </span>
+            <Link href="/portal" className={buttonClass("secondary", "h-9")}>Finish later</Link>
+          </>
         )}
-        {step !== "done" && <Link href="/portal" className={buttonClass("secondary", "h-9")}>Finish later</Link>}
+        {view === "done" && <Link href="/portal" className={buttonClass("primary", "h-9")}>Go to Overview</Link>}
       </div>
     </header>
   );
 
-  // ── Welcome ──
-  if (step === "welcome") {
+  const toastEl = toast && (
+    <div role="status" className="fixed bottom-6 left-1/2 z-50 max-w-[calc(100%-32px)] -translate-x-1/2 rounded-control bg-forest px-3.5 py-2.5 text-[13px] text-white shadow-[0_8px_24px_rgba(0,3,33,0.2)]">{toast}</div>
+  );
+
+  function row(t: Task, i: number) {
+    const d = done(t.key), s = statusOf(t);
     return (
-      <div className="flex min-h-screen flex-col">
-        {header}
-        <main ref={mainRef} className="flex-1 px-4 pb-16 pt-14">
-          <div className="mx-auto flex max-w-[600px] flex-col gap-7">
-            <div className="flex flex-col gap-2">
-              <span className="text-[13px] font-semibold text-brand">Welcome to Safari Digital</span>
-              <h1 tabIndex={-1} className="text-[28px] font-semibold leading-tight tracking-[-0.02em] outline-none">Let&apos;s get {p.companyName} set up</h1>
-              <p className="text-[15px] text-slate">A few short steps so we can get started. It takes about 15 minutes, and everything saves as you go, so you can stop and come back anytime.</p>
-            </div>
-            <ol className="overflow-hidden rounded-card border border-line">
-              {steps.map((s, i) => (
-                <li key={s.key} className={"flex items-start gap-3.5 px-4 py-3.5 " + (i ? "border-t border-line-soft" : "")}>
-                  <span className="inline-flex size-6 flex-none items-center justify-center rounded-full bg-[#F1F2F4] text-xs font-semibold">{i + 1}</span>
-                  <span className="flex flex-col"><span className="font-medium">{s.label}</span><span className="text-[13px] text-slate">{s.desc}</span></span>
-                </li>
-              ))}
-            </ol>
-            <div className="flex flex-col gap-2 rounded-card bg-sidebar px-4 py-3.5">
-              <span className="font-semibold">Good to have nearby</span>
-              <ul className="list-disc space-y-1 pl-5 text-body">
-                <li>A Google Drive folder with your logo and favourite safari photos</li>
-                {steps.some((s) => s.key === "marketing") && <li>Your Facebook login, to give us access in Meta Business Suite</li>}
-                <li>Itineraries you already send to guests</li>
-              </ul>
-            </div>
-            <Button className="h-11 self-start px-6 text-[15px]" onClick={next}>Get started</Button>
+      <li key={t.key} className={i ? "border-t border-line-soft" : ""}>
+        <div className="flex items-center gap-3.5 px-4 py-3.5 hover:bg-[#FAFBF9] sm:px-[18px]">
+          {d
+            ? <span aria-hidden className="inline-flex size-[30px] flex-none items-center justify-center rounded-full bg-brand text-white"><CheckIcon className="size-3.5" /></span>
+            : <span aria-hidden className="inline-flex size-[30px] flex-none items-center justify-center rounded-full border-[1.5px] border-field text-[13px] font-semibold text-slate">{keys.indexOf(t.key) + 1}</span>}
+          <div className="min-w-0 flex-1">
+            <div className="font-semibold">{t.title}</div>
+            <div className="text-[13px] text-slate">{t.desc}</div>
           </div>
-        </main>
-      </div>
+          {!d && <span className="hidden flex-none whitespace-nowrap text-xs text-slate sm:inline">{t.minutes} min</span>}
+          <span className={"hidden flex-none whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium sm:inline " + s.tone}>{s.label}</span>
+          <Button variant={d ? "secondary" : "primary"} className="h-[34px] w-[84px] flex-none px-0" onClick={() => go(t.key)} aria-label={`${d ? "Edit" : "Start"} ${t.title}`}>
+            {d ? "Edit" : "Start"}
+          </Button>
+        </div>
+      </li>
     );
   }
 
-  // ── Submitted ──
-  if (step === "done") {
-    const status = [
-      ["Submitted", "You sent your information"],
-      ["Being reviewed", "Safari Digital checks everything and confirms access"],
-      ["Setup complete", "Your first posts, ads or website design start"],
-    ];
+  function group(id: string, title: string, intro: string, list: Task[]) {
+    if (!list.length) return null;
     return (
-      <div className="flex min-h-screen flex-col">
+      <section aria-labelledby={id} className="overflow-hidden rounded-card border border-line bg-white">
+        <div className="border-b border-line-soft px-4 pb-3 pt-4 sm:px-[18px]">
+          <h2 id={id} className="text-base font-semibold">{title}</h2>
+          <p className="mt-0.5 text-[13px] text-slate">{intro}</p>
+        </div>
+        <ul>{list.map(row)}</ul>
+      </section>
+    );
+  }
+
+  // ── Sent ──
+  if (view === "done") {
+    return (
+      <div className="flex min-h-screen flex-col bg-sidebar">
         {header}
         <main ref={mainRef} className="flex-1 px-4 pb-16 pt-14">
-          <div className="mx-auto flex max-w-[600px] flex-col gap-6">
-            <div className="flex flex-col items-start gap-3">
-              <span className="inline-flex size-11 items-center justify-center rounded-full bg-[#E3F4EA] text-brand"><CheckIcon className="size-5" /></span>
-              <h1 tabIndex={-1} className="text-2xl font-semibold tracking-[-0.02em] outline-none">Thanks! We&apos;ve received your information</h1>
-              <p className="text-slate">We&apos;ll review your setup within 2 working days and get in touch if we need anything else. You can still add files or change answers.</p>
+          <div className="mx-auto flex max-w-[640px] flex-col gap-5">
+            <div className="flex flex-col items-center gap-2 text-center">
+              <span className="inline-flex size-[52px] items-center justify-center rounded-full bg-[#E3F4EA] text-brand"><CheckIcon className="size-6" /></span>
+              <h1 tabIndex={-1} className="mt-1.5 text-2xl font-semibold tracking-[-0.02em] outline-none">Thanks{firstName ? `, ${firstName}` : ""}. We&apos;ve got it.</h1>
+              <p className="text-body">We&apos;ll check everything within 2 working days and message you on WhatsApp if we need anything.</p>
             </div>
-            <section aria-labelledby="nx-h" className="flex flex-col gap-2.5">
-              <h2 id="nx-h" className="text-[15px] font-semibold">What happens next</h2>
-              <ol>
-                {status.map(([label, desc], i) => (
-                  <li key={label} className="flex items-center gap-3 border-t border-line-soft py-2.5">
-                    {i === 0 ? <span className="inline-flex size-5 flex-none items-center justify-center rounded-full bg-brand text-white"><CheckIcon className="size-[11px]" /></span>
-                      : i === 1 ? <span className="inline-flex size-5 flex-none items-center justify-center rounded-full border-2 border-brand"><span className="size-2 rounded-full bg-brand" /></span>
-                        : <span className="size-5 flex-none rounded-full border-[1.5px] border-[#C9CDD6]" />}
-                    <span className="flex flex-col"><span className={i === 1 ? "font-semibold" : i > 1 ? "text-slate" : ""}>{label}</span><span className="text-xs text-slate">{desc}</span></span>
-                  </li>
-                ))}
-              </ol>
-            </section>
-            {missing.length > 0 && (
-              <div className="flex flex-col gap-2 rounded-card border border-[#F1D9A8] bg-[#FFFAF0] px-4 py-3.5">
-                <span className="font-semibold">Still to do when you can</span>
-                <ul className="flex flex-col gap-1.5">
-                  {missing.map((x) => (
-                    <li key={x.text} className="flex items-center justify-between gap-3 text-body">
-                      {x.text}
-                      <button type="button" onClick={() => go(x.step)} className="text-[13px] font-medium text-brand">Fix</button>
+            {left.length > 0 && (
+              <section aria-labelledby="left-h" className="overflow-hidden rounded-card border border-[#F2DDB0] bg-white">
+                <div className="bg-[#FFF7E8] px-[18px] py-3.5">
+                  <h2 id="left-h" className="text-sm font-semibold">Still to do</h2>
+                  <p className="text-[13px] text-body">We can&apos;t start until these are done.</p>
+                </div>
+                <ul>
+                  {left.map((t) => (
+                    <li key={t.key} className="flex items-center gap-3 border-t border-[#F5EBD3] px-[18px] py-3">
+                      <span className="flex-1 font-medium">{t.title}</span>
+                      <Button variant="secondary" className="h-8 px-3" onClick={() => go(t.key)}>Finish now</Button>
                     </li>
                   ))}
                 </ul>
-              </div>
+              </section>
             )}
-            <div className="flex flex-wrap gap-2">
-              <Link href="/portal" className={buttonClass("primary")}>Go to Overview</Link>
-              <Button variant="secondary" onClick={() => go("files")}>Add more files</Button>
-            </div>
+            <section aria-labelledby="nx-h" className="rounded-card border border-line bg-white p-5">
+              <h2 id="nx-h" className="mb-3.5 text-sm font-semibold">What happens next</h2>
+              <Timeline stage={1} steps={timeline} />
+            </section>
+            <p className="text-center text-[13px] text-slate">
+              Need to change something? <button type="button" onClick={() => go("hub")} className="font-medium text-brand hover:underline">Open your setup checklist</button>
+            </p>
           </div>
         </main>
+        {toastEl}
       </div>
     );
   }
 
-  // ── Form steps ──
-  return (
-    <div className="flex min-h-screen flex-col">
-      {header}
-      <div className="flex flex-1 flex-wrap">
-        <nav aria-label="Onboarding steps" className="max-w-full flex-[1_1_240px] border-r border-line-soft bg-[#FAFAF8] px-4 py-8 md:max-w-[280px]">
-          <div className="flex flex-col gap-2.5 px-2 pb-4">
-            <span className="text-[13px] text-slate">{doneCount} of {formSteps.length} steps done</span>
-            <div role="progressbar" aria-label="Onboarding progress" aria-valuenow={doneCount} aria-valuemin={0} aria-valuemax={formSteps.length} className="h-1.5 overflow-hidden rounded-full bg-line">
-              <div className="h-full bg-brand transition-[width]" style={{ width: `${Math.round((doneCount / formSteps.length) * 100)}%` }} />
-            </div>
+  // ── One task ──
+  if (task) {
+    const after = nextOpen(task.key);
+    return (
+      <div className="flex min-h-screen flex-col bg-sidebar">
+        {header}
+        <main ref={mainRef} className="mx-auto w-full max-w-[760px] flex-1 px-4 pb-16 pt-7 sm:px-6">
+          <button type="button" onClick={() => go("hub")} className="inline-flex items-center gap-1.5 text-[13px] font-medium text-brand hover:underline">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="m15 18-6-6 6-6" /></svg>
+            Setup checklist
+          </button>
+          <div className="mb-5 mt-3.5">
+            <span className="text-[13px] text-slate">{task.group === "ask" ? "Tell us about your business" : "Give us access"} · about {task.minutes} min</span>
+            <h1 tabIndex={-1} className="mb-1.5 mt-0.5 text-2xl font-semibold leading-tight tracking-[-0.02em] outline-none">{task.title}</h1>
+            <p className="text-body">{task.why}</p>
           </div>
-          <ol className="flex flex-col gap-0.5">
-            {steps.map((s, i) => {
-              const here = s.key === step;
-              const done = visited.has(s.key) && !here;
-              return (
-                <li key={s.key}>
-                  <button type="button" onClick={() => go(s.key)} aria-current={here ? "step" : undefined}
-                    className={"flex min-h-11 w-full items-center gap-3 rounded-control px-2.5 py-1.5 text-left " + (here ? "bg-white font-semibold shadow-[0_0_0_1px_#E6E8EC,0_1px_2px_rgba(0,3,33,0.04)]" : "font-medium hover:bg-[#EDEFEB]")}>
-                    {done
-                      ? <span className="inline-flex size-[22px] flex-none items-center justify-center rounded-full bg-brand text-white"><CheckIcon className="size-[11px]" /></span>
-                      : <span className={"inline-flex size-[22px] flex-none items-center justify-center rounded-full border-[1.5px] text-[11px] font-semibold " + (here ? "border-brand text-brand" : "border-[#8A8FA3] text-[#8A8FA3]")}>{i + 1}</span>}
-                    {s.label}
-                  </button>
-                </li>
-              );
-            })}
-          </ol>
-        </nav>
 
-        <main ref={mainRef} className="min-w-0 flex-[999_1_520px] px-4 pb-16 pt-10 sm:px-6">
-          <div className="mx-auto flex max-w-[600px] flex-col gap-6">
-            {p.note && (
-              <div role="note" className="rounded-card border border-[#F1D9A8] bg-[#FFFAF0] px-4 py-3">
-                <p className="text-[13px] font-semibold text-[#8A5A12]">Safari Digital needs a little more from you</p>
-                <p className="whitespace-pre-wrap">{p.note}</p>
-                <p className="mt-1 text-[13px] text-slate">Add it in the steps below, then submit again from the last step.</p>
-              </div>
-            )}
-
-            {step === "business" && (
-              <div className="flex flex-col gap-5">
-                <StepTitle title="Tell us about your business" intro="The basics we use everywhere: your posts, ads and website." />
-                <div className="flex flex-col gap-1.5">
-                  <span className="font-medium">Company</span>
-                  <span className="flex h-10 items-center rounded-control bg-sidebar px-3">{p.companyName}</span>
+          <div className="flex flex-col gap-[22px] rounded-card border border-line bg-white p-5 sm:p-6">
+            {task.key === "business" && (
+              <>
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-control bg-sidebar px-3 py-2.5 text-[13px]">
+                  <span><span className="text-slate">Company</span> <strong className="font-semibold">{p.companyName}</strong></span>
+                  <span className="text-slate">Wrong name? Tell us on WhatsApp.</span>
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <TextField id="ob-contact" label="Your name" placeholder="Main contact person" value={b.contact_name} onChange={(v) => update("business", { contact_name: v })} />
-                  <TextField id="ob-wa" label="WhatsApp number" type="tel" placeholder="+255" value={b.whatsapp} onChange={(v) => update("business", { whatsapp: v })} />
+                  <TextField id="ob-wa" label="WhatsApp number" type="tel" placeholder="+255 7xx xxx xxx" value={b.whatsapp} onChange={(v) => update("business", { whatsapp: v })} />
                 </div>
-                <AreaField id="ob-about" label="About your company" placeholder="Who you are and what makes your safaris special. Rough notes are fine." value={b.about} onChange={(v) => update("business", { about: v })} />
-                <Chips legend="What do you offer?" addPlaceholder="e.g. Birdwatching tours" options={OFFERS} value={b.offers} onChange={(v) => update("business", { offers: v })} />
-                <Chips legend="Which countries do your guests come from?" addLabel="Add a country" addPlaceholder="e.g. Australia" options={MARKETS} value={b.markets} onChange={(v) => update("business", { markets: v })} />
-                <Radios legend="Where should new inquiries go?" name="dest" value={b.inquiry_dest}
+                <div className="flex flex-col gap-1.5">
+                  <AreaField id="ob-about" label="About your company" placeholder="Who you are and what makes your safaris special. Rough notes are fine." value={b.about} onChange={(v) => update("business", { about: v })} />
+                  <span className="text-xs text-slate">We use this for your bio, ads and the About page.</span>
+                </div>
+                <Chips legend="What do you offer?" addPlaceholder="e.g. Honeymoon safaris" options={OFFERS} value={b.offers} onChange={(v) => update("business", { offers: v })} />
+                <Chips legend="Where do your guests come from?" addLabel="Add a country" addPlaceholder="e.g. Australia" options={MARKETS} value={b.markets} onChange={(v) => update("business", { markets: v })} />
+                <Radios legend="Where should new guest inquiries go?" name="dest" value={b.inquiry_dest}
                   options={[["whatsapp", "WhatsApp"], ["email", "Email"], ["both", "Both"]]} onChange={(v) => update("business", { inquiry_dest: v })} />
                 {b.inquiry_dest !== "whatsapp" && (
-                  <TextField id="ob-inqemail" label="Inquiry email" type="email" placeholder="bookings@yourcompany.com" value={b.inquiry_email} onChange={(v) => update("business", { inquiry_email: v })} />
+                  <div className="max-w-[360px]">
+                    <TextField id="ob-inqemail" label="Inquiry email" type="email" placeholder="bookings@yourcompany.com" value={b.inquiry_email} onChange={(v) => update("business", { inquiry_email: v })} />
+                  </div>
                 )}
-              </div>
+              </>
             )}
 
-            {step === "marketing" && (
-              <div className="flex flex-col gap-6">
-                <StepTitle title="Facebook & Instagram" intro="Your pages, access for Safari Digital, and what to focus on." />
-                <section className="flex flex-col gap-3">
-                  <h2 className="text-[15px] font-semibold">1. Your pages</h2>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <TextField id="ob-ig" label="Instagram account" placeholder="@yourcompany" value={m.instagram} onChange={(v) => update("marketing", { instagram: v })} />
-                    <TextField id="ob-fb" label="Facebook page" placeholder="facebook.com/yourpage" value={m.facebook} onChange={(v) => update("marketing", { facebook: v })} />
-                  </div>
-                  <label className="flex min-h-10 cursor-pointer items-center gap-2.5 font-medium">
-                    <input type="checkbox" className="size-4 accent-brand" checked={!!m.no_instagram} onChange={(e) => update("marketing", { no_instagram: e.target.checked })} />
-                    We don&apos;t have an Instagram account yet. Please set one up for us.
-                  </label>
-                </section>
-                <section className="flex flex-col gap-3 border-t border-line-soft pt-5">
-                  <h2 className="text-[15px] font-semibold">2. Give Safari Digital access</h2>
-                  <VideoEmbed url={p.metaAccessVideoUrl} title="How to give Safari Digital access" />
-                  <ol className="list-decimal space-y-1.5 pl-5">
-                    <li>Open Meta Business Suite and go to <strong className="font-semibold">Settings → Partners</strong>.</li>
-                    <li>Add a partner using Safari Digital&apos;s Business ID: <strong className="font-semibold">{p.metaBusinessId ?? "we'll send it to you on WhatsApp"}</strong></li>
-                    <li>Give access to your Facebook page, Instagram account and ad account.</li>
-                  </ol>
-                  <div className="flex flex-wrap items-center gap-3">
-                    <a href="https://business.facebook.com/" target="_blank" rel="noopener noreferrer" className={buttonClass("secondary")}>Open Meta Business Suite ↗</a>
-                    <span className="text-[13px] text-slate">We never ask for your password.</span>
-                  </div>
-                  <Check checked={m.invite_sent} onChange={(v) => update("marketing", { invite_sent: v })}>I&apos;ve sent the access invitation</Check>
-                </section>
-                <section className="flex flex-col gap-4 border-t border-line-soft pt-5">
-                  <h2 className="text-[15px] font-semibold">3. Your advertising</h2>
-                  <div className="max-w-[280px]">
-                    <TextField id="ob-budget" label="Monthly ad budget (USD)" placeholder="e.g. 600" value={m.budget} onChange={(v) => update("marketing", { budget: v.replace(/[^\d.,]/g, "") })} hint="Paid directly to Meta, not to us." />
-                  </div>
-                  <Chips legend="What should ads achieve?" options={AD_GOALS} value={m.ad_goals} onChange={(v) => update("marketing", { ad_goals: v })} />
-                  <AreaField id="ob-promo" label="Trips or offers to promote first" optional placeholder="e.g. 7-day Serengeti safari, green-season rates" value={m.promote} onChange={(v) => update("marketing", { promote: v })} />
-                </section>
-              </div>
+            {task.key === "ads" && (
+              <>
+                <div className="max-w-[280px]">
+                  <TextField id="ob-budget" label="Monthly ad budget (USD)" placeholder="e.g. 600" value={m.budget} onChange={(v) => update("marketing", { budget: v.replace(/[^\d.,]/g, "") })} hint="Paid directly to Meta with your card, not to us. Not sure? We'll suggest one." />
+                </div>
+                <Chips legend="What should ads bring you?" options={AD_GOALS} value={m.ad_goals} onChange={(v) => update("marketing", { ad_goals: v })} />
+                <AreaField id="ob-promo" label="Trips or offers to promote first" optional placeholder="e.g. 7-day Serengeti safari, green-season rates" value={m.promote} onChange={(v) => update("marketing", { promote: v })} />
+              </>
             )}
 
-            {step === "website" && (
-              <div className="flex flex-col gap-5">
-                <StepTitle title="Your website" intro="What we need to plan and build your site." />
+            {task.key === "website" && (
+              <>
                 <TextField id="ob-site" label="Current website" optional placeholder="yourcompany.com" value={w.current_site} onChange={(v) => update("website", { current_site: v })} />
-                <Radios legend="Your domain name" name="dom" value={w.domain_choice}
-                  options={[["have", "I have a domain"], ["need", "I need one"], ["unsure", "Not sure"]]} onChange={(v) => update("website", { domain_choice: v })} />
-                {w.domain_choice === "have" && (
-                  <div className="flex flex-col gap-2">
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <TextField id="ob-dom" label="Domain" placeholder="yourcompany.co.tz" value={w.domain} onChange={(v) => update("website", { domain: v })} />
-                      <TextField id="ob-reg" label="Registered with" placeholder="e.g. GoDaddy" value={w.registrar} onChange={(v) => update("website", { registrar: v })} />
+                <div className="flex flex-col gap-2.5">
+                  <Radios legend="Do you have a domain name?" name="dom" value={w.domain_choice}
+                    options={[["have", "Yes, I have one"], ["need", "No, I need one"], ["unsure", "Not sure"]]} onChange={(v) => update("website", { domain_choice: v })} />
+                  {w.domain_choice === "have" && (
+                    <>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <TextField id="ob-dom" label="Domain" placeholder="yourcompany.co.tz" value={w.domain} onChange={(v) => update("website", { domain: v })} />
+                        <TextField id="ob-reg" label="Registered with" placeholder="e.g. GoDaddy" value={w.registrar} onChange={(v) => update("website", { registrar: v })} />
+                      </div>
+                      <span className="text-xs text-slate">No passwords here. We&apos;ll send you simple steps to connect it when the site is ready.</span>
+                    </>
+                  )}
+                  {w.domain_choice === "need" && (
+                    <div className="max-w-[360px]">
+                      <TextField id="ob-want" label="Domain you'd like" placeholder="e.g. yourcompany.com" value={w.wanted_domain} onChange={(v) => update("website", { wanted_domain: v })} hint="We'll check it's available before buying it for you." />
                     </div>
-                    <span className="text-xs text-slate">Don&apos;t type passwords here. We&apos;ll send simple steps to give us access.</span>
-                  </div>
-                )}
-                {w.domain_choice === "need" && (
-                  <TextField id="ob-want" label="Domain you'd like" placeholder="e.g. yourcompany.com" value={w.wanted_domain} onChange={(v) => update("website", { wanted_domain: v })} hint="We'll check it's available before buying." />
-                )}
+                  )}
+                </div>
                 <Chips legend="What should your website do best?" options={WEB_GOALS} value={w.goals} onChange={(v) => update("website", { goals: v })} />
                 <Chips legend="Pages you need" addLabel="Add a page" addPlaceholder="e.g. Gallery" options={PAGES} value={w.pages} onChange={(v) => update("website", { pages: v })} />
                 <AreaField id="ob-likes" label="Websites you like" optional placeholder="Paste links and tell us what you like about them" value={w.likes} onChange={(v) => update("website", { likes: v })} />
-              </div>
+              </>
             )}
 
-            {step === "files" && (
-              <div className="flex flex-col gap-5">
-                <StepTitle title="Photos and brand files" intro="Send what you have now. You can add more anytime." />
-                <div className="flex flex-col gap-2 rounded-card bg-sidebar px-4 py-3.5">
-                  <span className="font-semibold">What we need</span>
-                  <ul className="grid gap-x-4 gap-y-1.5 sm:grid-cols-2">
-                    {[["Logo", "PNG or SVG, best quality you have"], ["Safari photos", "wildlife, vehicles, camps, your team"], ["Videos", "short clips, phone videos are fine"], ["Itineraries", "PDFs or Word files you send guests"], ["Brand files", "brochures, colours, fonts if you have them"]].map(([k, v]) => (
-                      <li key={k} className="flex items-baseline gap-2"><span className="size-1.5 flex-none -translate-y-0.5 rounded-full bg-brand" /><span><span className="font-medium">{k}</span> <span className="text-[13px] text-slate">{v}</span></span></li>
-                    ))}
+            {task.key === "meta" && (
+              <>
+                <Section first title="Step 1 · Which pages are yours?">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <TextField id="ob-fb" label="Facebook page" placeholder="facebook.com/yourpage" value={m.facebook} onChange={(v) => update("marketing", { facebook: v })} />
+                    <TextField id="ob-ig" label="Instagram" placeholder="@yourcompany" value={m.instagram} onChange={(v) => update("marketing", { instagram: v })} />
+                  </div>
+                  <label className="flex min-h-10 cursor-pointer items-center gap-2.5 text-[13px] font-medium">
+                    <input type="checkbox" className="size-4 accent-brand" checked={!!m.no_instagram} onChange={(e) => update("marketing", { no_instagram: e.target.checked })} />
+                    We don&apos;t have Instagram yet. Please set one up for us.
+                  </label>
+                </Section>
+                <Section title="Step 2 · Add Safari Digital as a partner">
+                  <VideoEmbed url={p.metaAccessVideoUrl} title="How to add Safari Digital as a partner" />
+                  <ol className="list-decimal space-y-2 pl-5 text-body">
+                    <li>Open <strong className="font-semibold text-ink">Meta Business Suite</strong> and go to <strong className="font-semibold text-ink">Settings → Partners → Add partner</strong>.</li>
+                    <li>
+                      Paste Safari Digital&apos;s Business ID:{" "}
+                      {p.metaBusinessId
+                        ? <span className="ml-1 inline-flex items-center gap-2 rounded-badge border border-line bg-sidebar py-0.5 pl-2.5 pr-1 font-mono text-ink">{p.metaBusinessId}<CopyButton text={p.metaBusinessId} /></span>
+                        : <strong className="font-semibold text-ink">we&apos;ll send it to you on WhatsApp</strong>}
+                    </li>
+                    <li>Tick your <strong className="font-semibold text-ink">Facebook page, Instagram account and ad account</strong>, and give full control.</li>
+                  </ol>
+                  <div className="flex flex-wrap items-center gap-4">
+                    <a href="https://business.facebook.com/settings/partners" target="_blank" rel="noopener noreferrer" className={buttonClass("secondary", "h-9")}>Open Meta Business Suite ↗</a>
+                    <span className="text-[13px] text-slate">We never ask for your password.</span>
+                  </div>
+                </Section>
+                <Section title="Step 3 · Confirm">
+                  <Check checked={m.invite_sent} onChange={(v) => update("marketing", { invite_sent: v })}>I&apos;ve sent the partner request to Safari Digital</Check>
+                  <span className="text-xs text-slate">
+                    {p.metaConfirmed ? "Confirmed. We can see your pages." : "We'll accept it and confirm here, usually the same day."}
+                  </span>
+                </Section>
+              </>
+            )}
+
+            {task.key === "photos" && (
+              <>
+                <div className="rounded-card bg-sidebar px-4 py-3.5">
+                  <div className="mb-1.5 font-semibold">What to put in the folder</div>
+                  <ul className="grid list-disc gap-x-5 gap-y-1 pl-[18px] text-[13px] text-body sm:grid-cols-2">
+                    <li><strong className="font-medium text-ink">Logo</strong>, the best quality you have</li>
+                    <li><strong className="font-medium text-ink">Safari photos</strong>, wildlife, vehicles, camps, team</li>
+                    <li><strong className="font-medium text-ink">Videos</strong>, straight from your phone is fine</li>
+                    <li><strong className="font-medium text-ink">Itineraries</strong> you already send guests</li>
                   </ul>
                 </div>
-                <section className="flex flex-col gap-3.5">
-                  <h2 className="text-[15px] font-semibold">Share a Google Drive folder</h2>
-                  <VideoEmbed url={p.driveTutorialVideoUrl} title="How to share a Google Drive folder" />
-                  <ol className="list-decimal space-y-1.5 pl-5">
-                    <li>Create a folder in Google Drive, e.g. &ldquo;{p.companyName} – Safari Digital&rdquo;.</li>
-                    <li>Add sub-folders if you like: <span className="font-medium">Logo, Photos, Videos, Itineraries</span>.</li>
-                    <li>Share it {p.driveShareEmail ? <>with <strong className="font-semibold">{p.driveShareEmail}</strong> as Editor, or</> : null} set it to &ldquo;Anyone with the link can view&rdquo;.</li>
-                    <li>Copy the folder link and paste it below.</li>
-                  </ol>
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="ob-drive">Folder link</Label>
-                    <Input id="ob-drive" value={f.drive_link ?? ""} aria-invalid={driveBad} placeholder="https://drive.google.com/drive/folders/…" onChange={(e) => update("files", { drive_link: e.target.value })} />
-                    {driveBad && <span className="text-xs text-danger-text">That doesn&apos;t look like a Google Drive link.</span>}
-                  </div>
-                  <Check checked={f.drive_shared} onChange={(v) => update("files", { drive_shared: v })}>I&apos;ve shared the folder with Safari Digital</Check>
-                </section>
-                <AreaField id="ob-reviews" label="Guest reviews" optional placeholder="Paste a few reviews, or your TripAdvisor link" value={f.reviews} onChange={(v) => update("files", { reviews: v })} />
-              </div>
+                <VideoEmbed url={p.driveTutorialVideoUrl} title="How to share a Google Drive folder" />
+                <ol className="list-decimal space-y-2 pl-5 text-body">
+                  <li>Create a folder in Google Drive called <strong className="font-semibold text-ink">{p.companyName} · Safari Digital</strong>.</li>
+                  <li>Click <strong className="font-semibold text-ink">Share</strong> and {p.driveShareEmail ? <>add <strong className="font-semibold text-ink">{p.driveShareEmail}</strong> as Editor</> : <>set it to &ldquo;Anyone with the link can view&rdquo;</>}.</li>
+                  <li>Copy the folder link and paste it below.</li>
+                </ol>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="ob-drive">Folder link</Label>
+                  <Input id="ob-drive" value={f.drive_link ?? ""} aria-invalid={driveBad} placeholder="https://drive.google.com/drive/folders/…" onChange={(e) => update("files", { drive_link: e.target.value })} />
+                  {driveBad && <span className="text-xs text-danger-text">That doesn&apos;t look like a Google Drive folder link.</span>}
+                  {isDriveLink(f.drive_link) && <span className="text-xs text-brand">Looks good. We&apos;ll check we can open it.</span>}
+                </div>
+                <Check checked={f.drive_shared} onChange={(v) => update("files", { drive_shared: v })}>I&apos;ve shared the folder with Safari Digital</Check>
+                <div className="border-t border-line-soft pt-5">
+                  <AreaField id="ob-reviews" label="Guest reviews" optional placeholder="Your TripAdvisor or Google reviews link, or paste a few reviews" value={f.reviews} onChange={(v) => update("files", { reviews: v })} />
+                </div>
+              </>
             )}
+          </div>
 
-            {step === "review" && (
-              <div className="flex flex-col gap-5">
-                <StepTitle title="Check and submit" intro="A quick look before you send everything to Safari Digital." />
-                <ul className="overflow-hidden rounded-card border border-line">
-                  {steps.filter((s) => s.key !== "review").map((s, i) => {
-                    const warn = missing.filter((x) => x.step === s.key);
-                    const note =
-                      s.key === "business" ? [b.contact_name, b.whatsapp, b.markets?.length ? `${b.markets.length} guest ${b.markets.length === 1 ? "country" : "countries"}` : null].filter(Boolean).join(" · ") || "Not filled in yet"
-                        : s.key === "marketing" ? (m.invite_sent ? "Access invitation sent" : "Access invitation not sent yet")
-                          : s.key === "website" ? (w.domain_choice === "have" ? (w.domain || "Existing domain") : w.domain_choice === "need" ? "New domain needed" : "Domain: not sure yet")
-                            : isDriveLink(f.drive_link) ? (f.drive_shared ? "Google Drive folder shared" : "Drive link added, not marked as shared") : "No Drive link yet";
-                    return (
-                      <li key={s.key} className={"flex items-center gap-3 px-4 py-3.5 " + (i ? "border-t border-line-soft" : "")}>
-                        {warn.length ? <span aria-hidden className="inline-flex size-[22px] flex-none items-center justify-center rounded-full bg-warn-bg text-[13px] font-bold text-warn-text">!</span>
-                          : <span className="inline-flex size-[22px] flex-none items-center justify-center rounded-full bg-[#E3F4EA] text-brand"><CheckIcon /></span>}
-                        <span className="flex min-w-0 flex-1 flex-col"><span className="font-medium">{s.label}</span><span className={"text-[13px] " + (warn.length ? "text-warn-text" : "text-slate")}>{note}</span></span>
-                        <button type="button" onClick={() => go(s.key)} className="h-8 rounded-badge px-2.5 font-medium text-brand hover:bg-[#F4F5F2]">Edit</button>
-                      </li>
-                    );
-                  })}
-                </ul>
-                <span className="text-[13px] text-slate">Anything marked ! can be finished later. It won&apos;t stop you submitting.</span>
-                {submitError && <Alert>{submitError}</Alert>}
-              </div>
-            )}
-
-            <div className="flex items-center justify-between gap-3 border-t border-line-soft pt-2">
-              <Button variant="ghost" onClick={back}>Back</Button>
-              {step === "review"
-                ? <Button onClick={submit} disabled={submitting}>{submitting ? "Submitting…" : "Submit to Safari Digital"}</Button>
-                : <Button onClick={next}>Continue</Button>}
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+            <Button variant="secondary" onClick={() => go("hub")}>Back to checklist</Button>
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              {nudge && (
+                <span role="alert" className="text-[13px] text-[#8A5A12]">
+                  {task.key === "meta" ? "Tick the box once you've sent the request in Meta." : "Add your Drive folder link and tick that you've shared it."}
+                </span>
+              )}
+              <Button onClick={saveTask}>{after && after !== task.key ? "Save and continue" : "Save"}</Button>
             </div>
           </div>
         </main>
+        {toastEl}
       </div>
+    );
+  }
+
+  // ── Checklist ──
+  return (
+    <div className="flex min-h-screen flex-col bg-sidebar">
+      {header}
+      <main ref={mainRef} className="mx-auto grid w-full max-w-[1080px] flex-1 items-start gap-8 px-4 pb-16 pt-10 sm:px-6 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="flex min-w-0 flex-col gap-5">
+          <div>
+            <span className="text-[13px] font-medium text-brand">Account setup</span>
+            <h1 tabIndex={-1} className="mb-1.5 mt-1 text-[26px] font-semibold leading-tight tracking-[-0.01em] outline-none">
+              Welcome{firstName ? `, ${firstName}` : ""}. Let&apos;s get {p.companyName} ready.
+            </h1>
+            <p className="max-w-[600px] text-body">Finish these tasks so we can start your {serviceWords}. Do them in any order. Everything saves as you go, so you can stop and come back anytime.</p>
+          </div>
+
+          <div className="flex flex-col gap-2 rounded-card border border-line bg-white px-[18px] py-4">
+            <div className="flex justify-between gap-3 text-[13px]">
+              <span className="font-semibold">{doneCount} of {tasks.length} tasks done</span>
+              <span className="text-slate">{allDone ? "All done" : `About ${minutesLeft} min left`}</span>
+            </div>
+            <div role="progressbar" aria-label="Setup progress" aria-valuenow={doneCount} aria-valuemin={0} aria-valuemax={tasks.length} className="h-1.5 overflow-hidden rounded-full bg-line">
+              <div className="h-full rounded-full bg-brand transition-[width]" style={{ width: `${Math.round((doneCount / tasks.length) * 100)}%` }} />
+            </div>
+          </div>
+
+          {p.note && (
+            <div role="note" className="flex items-start gap-3 rounded-card border border-[#F2DDB0] bg-[#FFF7E8] px-4 py-3.5">
+              <span aria-hidden className="inline-flex size-[22px] flex-none items-center justify-center rounded-full bg-[#8A5A12] text-[13px] font-semibold text-white">!</span>
+              <div className="flex-1">
+                <div className="font-semibold">Safari Digital needs a little more from you</div>
+                <p className="whitespace-pre-wrap text-[13px] text-body">{p.note}</p>
+                <p className="mt-1 text-[13px] text-slate">Update the tasks below, then send again.</p>
+              </div>
+            </div>
+          )}
+
+          {group("g-ask", "1. Tell us about your business", "Short questions. Rough answers are fine, we'll ask if anything is unclear.", tasks.filter((t) => t.group === "ask"))}
+          {group("g-access", "2. Give us access", "Done in Meta and Google Drive. Each task has a short video. We never ask for your passwords.", tasks.filter((t) => t.group === "access"))}
+
+          <div className="flex flex-col gap-3 rounded-card border border-line bg-white p-[18px] sm:flex-row sm:items-center sm:gap-4">
+            <div className="flex-1">
+              {allDone ? (
+                <>
+                  <div className="font-semibold">{submitted ? "Everything's up to date" : "Everything's ready"}</div>
+                  <div className="text-[13px] text-slate">{submitted ? "Send it again if you changed anything important." : "Send it to Safari Digital and we'll start checking."}</div>
+                </>
+              ) : (
+                <>
+                  <div className="font-semibold">{left.length} {left.length === 1 ? "task" : "tasks"} left before you send</div>
+                  <div className="text-[13px] text-slate">
+                    Can&apos;t finish an access task today?{" "}
+                    <button type="button" onClick={submit} disabled={submitting} className="font-medium text-brand hover:underline">Send what you have</button> and finish it later.
+                  </div>
+                </>
+              )}
+              {error && <div className="mt-2"><Alert>{error}</Alert></div>}
+            </div>
+            <Button onClick={submit} disabled={!allDone || submitting} className="flex-none">
+              {submitting ? "Sending…" : submitted ? "Send update" : "Send to Safari Digital"}
+            </Button>
+          </div>
+        </div>
+
+        <aside className="flex flex-col gap-4 lg:sticky lg:top-6">
+          <section aria-labelledby="hw" className="rounded-card border border-line bg-white p-[18px]">
+            <h2 id="hw" className="mb-3 text-sm font-semibold">What happens next</h2>
+            <Timeline stage={submitted ? 1 : 0} steps={timeline} />
+          </section>
+          {wa && (
+            <section aria-labelledby="hp" className="flex flex-col gap-2.5 rounded-card border border-line bg-white p-[18px]">
+              <h2 id="hp" className="text-sm font-semibold">Stuck on something?</h2>
+              <p className="text-[13px] text-slate">Message us and we&apos;ll walk you through it.</p>
+              <a href={`https://wa.me/${wa}`} target="_blank" rel="noopener noreferrer" className={buttonClass("secondary", "h-9")}>WhatsApp Safari Digital</a>
+            </section>
+          )}
+        </aside>
+      </main>
+      {toastEl}
     </div>
   );
 }

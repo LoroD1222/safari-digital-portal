@@ -87,7 +87,7 @@ export default async function PortalOverview() {
   else if (company.onboarding_status === "not_started" || company.onboarding_status === "in_progress") attention.push({ key: "ob", title: "Finish your onboarding", detail: "Your answers so far are saved", href: "/onboarding", action: "Continue" });
   if (awaiting.length) attention.push({ key: "content", title: `Approve ${awaiting.length} new ${awaiting.length === 1 ? (awaiting[0].kind === "reel" ? "Reel" : "post") : awaiting.every((i) => i.kind === "reel") ? "Reels" : "posts"}`, detail: "Marketing · Content", href: awaiting.length === 1 ? `/portal/marketing/${awaiting[0].id}` : "/portal/marketing?show=approval", action: "Review" });
   if (company.design_review === "pending") attention.push({ key: "design", title: "Review your website design", detail: "Website", href: "/portal/website", action: "Review" });
-  if (newCount) attention.push({ key: "inq", title: `${newCount} new ${newCount === 1 ? "inquiry" : "inquiries"} to contact`, detail: "Inquiries", href: "/portal/inquiries?status=new", action: "View" });
+  if (newCount) attention.push({ key: "inq", title: `${newCount} new ${newCount === 1 ? "inquiry" : "inquiries"} to contact`, detail: "Inquiries", href: "/portal/inquiries", action: "View" });
   for (const r of requests.filter((r) => r.status === "waiting_for_client" || r.last_message_role === "admin").slice(0, 3)) {
     attention.push({ key: r.id, title: r.subject, detail: r.status === "waiting_for_client" ? "Safari Digital needs your reply" : "New reply from Safari Digital", href: `/portal/requests/${r.id}`, action: "Reply" });
   }

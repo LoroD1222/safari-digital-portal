@@ -105,7 +105,7 @@ export type Inquiry = {
   source: InquirySource; campaign: string | null; channel: string; status: InquiryStatus; received_at: string; origin: string;
 };
 export const SOURCE_LABEL: Record<InquirySource, string> = {
-  meta_ads: "Facebook & Instagram ads", meta_organic: "Facebook & Instagram", website: "Website", direct: "Direct", unknown: "Unknown",
+  meta_ads: "Facebook & Instagram Ads", meta_organic: "Facebook & Instagram Organic", website: "Website", direct: "WhatsApp / Direct", unknown: "Other / Unknown",
 };
 export const INQUIRY_LABEL: Record<InquiryStatus, string> = { new: "New", contacted: "Contacted", booked: "Booked", closed: "Closed" };
 export const CHANNEL_LABEL: Record<string, string> = {

@@ -53,7 +53,7 @@ export default async function ContentPage(props: PageProps<"/portal/marketing">)
           <div className="flex flex-wrap gap-6" aria-label="Monthly plan not set yet">
             {["Reels", "Social posts"].map((l) => (
               <div key={l} className="flex w-[170px] flex-col gap-1.5">
-                <div className="flex justify-between text-[13px]"><span className="font-medium">{l}</span><span className="text-slate">plan coming soon</span></div>
+                <div className="flex justify-between whitespace-nowrap text-[13px]"><span className="font-medium">{l}</span><span className="tabular-nums text-slate" title="Your monthly plan will show here once Safari Digital sets it">— of —</span></div>
                 <div className="h-1.5 rounded-full bg-line-soft" />
               </div>
             ))}
@@ -63,7 +63,7 @@ export default async function ContentPage(props: PageProps<"/portal/marketing">)
           <div className="flex flex-wrap gap-6">
             {plan.map((p) => (
               <div key={p.label} className="flex w-[170px] flex-col gap-1.5">
-                <div className="flex justify-between text-[13px]"><span className="font-medium">{p.label}</span><span className="tabular-nums text-slate">{p.done} of {p.total}</span></div>
+                <div className="flex justify-between whitespace-nowrap text-[13px]"><span className="font-medium">{p.label}</span><span className="tabular-nums text-slate">{p.done} of {p.total}</span></div>
                 <div role="progressbar" aria-label={`${p.label} published this month`} aria-valuenow={p.done} aria-valuemin={0} aria-valuemax={p.total} className="h-1.5 overflow-hidden rounded-full bg-line-soft">
                   <div className="h-full bg-brand" style={{ width: `${Math.min(100, Math.round((p.done / p.total) * 100))}%` }} />
                 </div>

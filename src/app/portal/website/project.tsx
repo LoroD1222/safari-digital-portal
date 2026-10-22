@@ -29,7 +29,7 @@ export function WebsiteCard({ company, live }: { company: Client; live: boolean 
         {live && company.website_url && (
           <a href={href(company.website_url)} target="_blank" rel="noreferrer" className={buttonClass("secondary", "h-9 px-3.5")}>Visit website<Icon name="external" size={14} /></a>
         )}
-        {live && company.cms_url && (
+        {company.cms_url && (
           <a href={company.cms_url} target="_blank" rel="noreferrer" className={buttonClass("primary", "h-9 px-3.5")}><Icon name="edit" size={15} />Edit content</a>
         )}
       </div>

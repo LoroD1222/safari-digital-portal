@@ -2,7 +2,9 @@ import { Badge } from "@/components/ui";
 import { listProjects, monthRange, vercelConfigured, websiteStats } from "@/lib/vercel";
 import type { Client } from "@/lib/types";
 import { VercelProjectPicker } from "./data-connections";
-import { MetaForm } from "./manage-forms";
+import { MetaEventsForm, MetaForm } from "./manage-forms";
+import { createClient } from "@/lib/supabase/server";
+import { fmtDateTime } from "@/lib/dates";
 import { createInquiryKey } from "./manage-actions";
 import { CopyButton } from "@/components/copy-button";
 import { siteOrigin } from "@/lib/origin";
@@ -58,6 +60,8 @@ export async function DataSection({ client }: { client: Client }) {
         <MetaForm client={client} accounts={meta?.ok ? meta.data : null} accountsError={meta && !meta.ok ? meta.error : null} />
         {!meta && <p className="text-[13px] text-slate">Add META_SYSTEM_USER_TOKEN in Vercel to sync ad results automatically. Until then, enter them monthly in the Reporting tab.</p>}
       </Card>
+
+      <MetaEventsCard client={client} />
     </section>
   );
 }
@@ -78,14 +82,21 @@ async function InquiryFormCard({ client }: { client: Client }) {
   <input name="_gotcha" tabindex="-1" autocomplete="off" style="display:none">
   <button>Send inquiry</button>
 </form>`;
-  const js = `// Next.js / React: send the form plus the ad tracking (utm_*) from the URL
+  const js = `// Next.js / React. On every page load, keep the ad tracking from the URL:
+//   const p = new URLSearchParams(location.search);
+//   const keep = ["utm_source", "utm_medium", "utm_campaign", "fbclid"];
+//   const found = Object.fromEntries(keep.filter((k) => p.get(k)).map((k) => [k, p.get(k)]));
+//   if (Object.keys(found).length) sessionStorage.setItem("utm", JSON.stringify(found));
+// Then send the form with it, plus Meta's cookies:
+const cookie = (n) => document.cookie.match(new RegExp("(?:^|; )" + n + "=([^;]*)"))?.[1];
 await fetch("${endpoint}", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({
     key: "${key}",
-    name, email, phone, interested_in, travel_dates, travellers, message,
-    ...JSON.parse(sessionStorage.getItem("utm") ?? "{}"), // saved on landing
+    name, email, phone, country, interested_in, travel_dates, travellers, message,
+    ...JSON.parse(sessionStorage.getItem("utm") ?? "{}"),
+    fbc: cookie("_fbc"), fbp: cookie("_fbp"),
   }),
 });`;
   return (
@@ -111,7 +122,7 @@ await fetch("${endpoint}", {
           <details className="rounded-control border border-line-soft px-3 py-2">
             <summary className="cursor-pointer font-medium">How to connect the form</summary>
             <div className="mt-2 flex flex-col gap-3 text-body">
-              <p>Fields: <code>name</code> and <code>email</code> or <code>phone</code> are required; <code>interested_in</code>, <code>travel_dates</code>, <code>travellers</code>, <code>country</code>, <code>message</code> are optional. Pass <code>utm_source</code>, <code>utm_medium</code> and <code>utm_campaign</code> to record which ad it came from: <code>utm_source=facebook</code> or <code>instagram</code> with <code>utm_medium=paid</code> counts as <em>Facebook &amp; Instagram ads</em>.</p>
+              <p>Fields: <code>name</code> and <code>email</code> or <code>phone</code> are required; <code>interested_in</code>, <code>travel_dates</code>, <code>travellers</code>, <code>country</code>, <code>message</code> are optional. Pass <code>utm_source</code>, <code>utm_medium</code> and <code>utm_campaign</code> to record which ad it came from: <code>utm_source=facebook</code> or <code>instagram</code> with <code>utm_medium=paid</code> counts as <em>Facebook &amp; Instagram ads</em>. Also pass <code>fbclid</code> from the URL and the <code>_fbc</code> / <code>_fbp</code> cookies (as <code>fbc</code>, <code>fbp</code>) so Meta can match the inquiry to the ad click.</p>
               <div className="flex items-center justify-between"><span className="font-medium">Plain HTML form</span><CopyButton text={html} /></div>
               <pre className="overflow-x-auto rounded bg-sidebar p-3 text-xs">{html}</pre>
               <div className="flex items-center justify-between"><span className="font-medium">From code (fetch)</span><CopyButton text={js} /></div>
@@ -122,6 +133,44 @@ await fetch("${endpoint}", {
             <button className="text-[13px] font-medium text-slate hover:text-ink">Replace key (the old one stops working)</button>
           </form>
         </div>
+      )}
+    </Card>
+  );
+}
+
+const EVENT_TONE = { sent: "green", failed: "red", pending: "amber", skipped: "neutral" } as const;
+const EVENT_LABEL = { sent: "Sent", failed: "Failed", pending: "Sending", skipped: "Skipped" } as const;
+
+type EventRow = { id: string; event_name: string; status: keyof typeof EVENT_TONE; error: string | null; created_at: string; inquiries: { customer_name: string } | null };
+
+async function MetaEventsCard({ client }: { client: Client }) {
+  const dataset = client.meta_dataset_id ?? null;
+  const supabase = await createClient();
+  const { data, error } = dataset
+    ? await supabase.from("meta_events").select("id, event_name, status, error, created_at, inquiries(customer_name)").eq("client_id", client.id).order("created_at", { ascending: false }).limit(8)
+    : { data: null, error: null };
+  const events = (data ?? []) as unknown as EventRow[];
+  const failing = events.length > 0 && events[0].status === "failed";
+  return (
+    <Card title="Lead events to Meta" what="New inquiries and status changes (Lead → Contacted → Booked) go to the client's Meta dataset, so ads learn what brings bookings"
+      status={!dataset ? <Badge>Off</Badge> : failing ? <Badge tone="red">Check connection</Badge> : <Badge tone="green">On</Badge>}>
+      {!metaConfigured() && <p className="text-[13px] text-danger-text">Add META_SYSTEM_USER_TOKEN in Vercel first. The same system user token sends events.</p>}
+      <MetaEventsForm clientId={client.id} datasetId={dataset} />
+      {error && <p className="text-[13px] text-danger-text">Run 0008_meta_events.sql in Supabase to see sent events.</p>}
+      {dataset && !error && (
+        events.length === 0 ? <p className="text-[13px] text-slate">No events yet. They appear here when an inquiry comes in or its status changes.</p> : (
+          <ul className="flex flex-col text-[13px]">
+            {events.map((e, i) => (
+              <li key={e.id} className={"flex flex-wrap items-center gap-x-3 gap-y-0.5 py-2 " + (i ? "border-t border-line-soft" : "")}>
+                <span className="w-20 font-medium">{e.event_name}</span>
+                <span className="min-w-0 flex-1 truncate">{e.inquiries?.customer_name ?? "Deleted inquiry"}</span>
+                <span className="text-slate">{fmtDateTime(e.created_at)}</span>
+                <Badge tone={EVENT_TONE[e.status]}>{EVENT_LABEL[e.status]}</Badge>
+                {e.error && e.status !== "sent" && <span className="basis-full text-xs text-slate">{e.error}</span>}
+              </li>
+            ))}
+          </ul>
+        )
       )}
     </Card>
   );

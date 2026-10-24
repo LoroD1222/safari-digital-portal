@@ -7,6 +7,7 @@ import { logActivity } from "@/lib/activity";
 import { notifyClient } from "@/lib/email";
 import type { Campaign, OnboardingStatus, WebsiteStage } from "@/lib/types";
 import { syncClient } from "@/lib/meta";
+import { sendTestEvent } from "@/lib/meta-events";
 
 export type FormState = { error?: string; saved?: boolean; message?: string };
 
@@ -166,4 +167,26 @@ export async function syncMetaNow(clientId: string): Promise<FormState> {
   if (!r.ok) return { error: r.message };
   done();
   return { saved: true, message: "Synced. The client's Advertising page now shows this month's results from Meta." };
+}
+
+export async function saveMetaDataset(clientId: string, _: FormState, form: FormData): Promise<FormState> {
+  await requireAdmin();
+  const id = str(form, "meta_dataset_id");
+  if (id && !/^\d{10,20}$/.test(id)) return { error: "The dataset ID is a number, like 1995031924787890." };
+  const supabase = await createClient();
+  const { error } = await supabase.from("clients").update({ meta_dataset_id: id || null }).eq("id", clientId);
+  if (error) return { error: /meta_dataset_id/.test(error.message) ? "Run 0008_meta_events.sql in Supabase first." : error.message };
+  done();
+  return { saved: true, message: id ? "Saved. New inquiries and status changes now go to Meta." : "Saved. Events to Meta are off for this client." };
+}
+
+export async function sendMetaTestEvent(clientId: string, testCode: string): Promise<FormState> {
+  await requireAdmin();
+  const code = testCode.trim();
+  if (!/^[A-Za-z0-9]{3,20}$/.test(code)) return { error: "Paste the test code from Events Manager → Test events (looks like TEST12345)." };
+  const supabase = await createClient();
+  const { data } = await supabase.from("clients").select("meta_dataset_id").eq("id", clientId).single();
+  if (!data?.meta_dataset_id) return { error: "Save the dataset ID first." };
+  const res = await sendTestEvent(data.meta_dataset_id, code);
+  return res.ok ? { saved: true, message: "Test event sent. It should appear in Events Manager → Test events within a minute." } : { error: res.error };
 }

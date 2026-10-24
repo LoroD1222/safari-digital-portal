@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { after } from "next/server";
 import { logActivity } from "@/lib/activity";
+import { sendInquiryEvent } from "@/lib/meta-events";
 
 // Website inquiry forms post here. Each client has their own form key
 // (Admin → client → Connections). Accepts JSON or a normal HTML form post.
@@ -29,6 +31,8 @@ const ALIASES: Record<string, string[]> = {
   utm_medium: ["utm_medium"],
   utm_campaign: ["utm_campaign"],
   fbclid: ["fbclid"],
+  fbc: ["fbc", "_fbc"],
+  fbp: ["fbp", "_fbp"],
   key: ["key", "form_key", "portal_key"],
   redirect: ["redirect", "_redirect", "_next"],
   honeypot: ["_gotcha", "website_url_confirm"],
@@ -92,8 +96,14 @@ async function handle(req: NextRequest, data: Record<string, unknown>) {
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return reply(req, null, 422, { ok: false, error: "That email doesn't look right." });
 
   const utmSource = pick(data, "utm_source", 100);
+  const fbclid = pick(data, "fbclid", 500);
+  // Meta's click ID: the _fbc cookie if the site sends it, otherwise built from fbclid.
+  const fbcRaw = pick(data, "fbc", 600);
+  const fbc = fbcRaw && /^fb\.\d\.\d+\..+/.test(fbcRaw) ? fbcRaw : fbclid ? `fb.1.${Date.now()}.${fbclid}` : null;
+  const fbpRaw = pick(data, "fbp", 200);
+  const fbp = fbpRaw && /^fb\.\d\.\d+\.\d+/.test(fbpRaw) ? fbpRaw : null;
   const utmMedium = pick(data, "utm_medium", 100);
-  const { error } = await admin.from("inquiries").insert({
+  const base = {
     client_id: client.id,
     customer_name: name,
     email,
@@ -103,13 +113,18 @@ async function handle(req: NextRequest, data: Record<string, unknown>) {
     travel_dates: pick(data, "travel_dates", 200),
     travellers: pick(data, "travellers", 100),
     message: pick(data, "message", 5000),
-    source: sourceOf(utmSource, utmMedium, pick(data, "fbclid")),
+    source: sourceOf(utmSource, utmMedium, fbclid ?? (fbc ? "fbc" : null)),
     campaign: pick(data, "utm_campaign", 200),
     channel: "website_form",
     origin: "website_form",
-  });
-  if (error) return reply(req, null, 500, { ok: false, error: "Couldn't save the inquiry. Please try again." });
+  };
+  let { data: row, error } = await admin.from("inquiries").insert({ ...base, fbc, fbp }).select("id").single();
+  // Before 0008_meta_events.sql is run there are no fbc/fbp columns: save without them.
+  if (error && /fbc|fbp/.test(error.message)) ({ data: row, error } = await admin.from("inquiries").insert(base).select("id").single());
+  if (error || !row) return reply(req, null, 500, { ok: false, error: "Couldn't save the inquiry. Please try again." });
 
+  const inquiryId = row.id;
+  after(() => sendInquiryEvent(inquiryId, "Lead"));
   await logActivity({
     clientId: client.id, actor: "client", message: `New website inquiry from ${name}`,
     clientLink: "/portal/inquiries", adminLink: `/admin/inquiries?client=${client.id}`,

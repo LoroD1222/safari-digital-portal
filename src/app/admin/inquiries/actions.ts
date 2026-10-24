@@ -3,7 +3,9 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { after } from "next/server";
 import { logActivity } from "@/lib/activity";
+import { STATUS_EVENT, sendInquiryEvent } from "@/lib/meta-events";
 
 export type InquiryFormState = { error?: string; fieldErrors?: Record<string, string>; values?: Record<string, string>; saved?: boolean };
 
@@ -55,13 +57,18 @@ export async function saveInquiry(id: string | null, _: InquiryFormState, form: 
 
   const supabase = await createClient();
   if (id) {
+    const { data: before } = await supabase.from("inquiries").select("status").eq("id", id).single();
     const { error } = await supabase.from("inquiries").update(row).eq("id", id);
     if (error) return { error: "Couldn't save. " + error.message, values: echo(form) };
+    const event = before?.status !== row.status ? STATUS_EVENT[row.status] : undefined;
+    if (event) after(() => sendInquiryEvent(id, event));
     revalidatePath("/", "layout");
     return { saved: true };
   }
   const { data, error } = await supabase.from("inquiries").insert({ ...row, client_id: clientId, origin: "manual", created_by: viewer.id }).select("id").single();
   if (error || !data) return { error: "Couldn't add the inquiry. " + (error?.message ?? ""), values: echo(form) };
+  const stage = STATUS_EVENT[row.status];
+  after(async () => { await sendInquiryEvent(data.id, "Lead"); if (stage) await sendInquiryEvent(data.id, stage); });
   await logActivity({ clientId: clientId!, actor: "admin", message: `Inquiry from ${name} added`, clientLink: `/portal/inquiries/${data.id}`, adminLink: `/admin/inquiries/${data.id}` });
   revalidatePath("/", "layout");
   redirect(`/admin/inquiries/${data.id}?created=1`);

@@ -4,7 +4,7 @@ import { Alert, Button, Field, Input, Select, Textarea } from "@/components/ui";
 import { SubmitButton } from "@/components/submit-button";
 import { WEBSITE_STAGES, type AdReport, type Campaign, type Client } from "@/lib/types";
 import {
-  requestDesignReview, requestMissingInfo, saveAdReport, saveMeta, savePlan, saveWebsiteProject, syncMetaNow, type FormState,
+  requestDesignReview, requestMissingInfo, saveAdReport, saveMeta, saveMetaDataset, savePlan, sendMetaTestEvent, saveWebsiteProject, syncMetaNow, type FormState,
 } from "./manage-actions";
 
 function Feedback({ state }: { state: FormState }) {
@@ -182,5 +182,35 @@ export function AdReportForm({ clientId, month, report, trackedInquiries }: { cl
       <Feedback state={state} />
       <div className="flex justify-end border-t border-line-soft pt-4"><SubmitButton>Save report</SubmitButton></div>
     </form>
+  );
+}
+
+export function MetaEventsForm({ clientId, datasetId }: { clientId: string; datasetId: string | null }) {
+  const [state, action] = useActionState<FormState, FormData>(saveMetaDataset.bind(null, clientId), {});
+  const [test, setTest] = useState<FormState>({});
+  const [code, setCode] = useState("");
+  const [pending, start] = useTransition();
+  return (
+    <div className="flex flex-col gap-3">
+      <form action={action} className="flex flex-wrap items-end gap-3">
+        <div className="min-w-[220px] flex-1">
+          <Field label="Dataset ID" htmlFor="meta_dataset_id" hint="Events Manager → the client's dataset (pixel) → Settings. Leave empty to turn events off.">
+            <Input id="meta_dataset_id" name="meta_dataset_id" inputMode="numeric" defaultValue={datasetId ?? ""} placeholder="e.g. 1995031924787890" />
+          </Field>
+        </div>
+        <SubmitButton variant="secondary" className="mb-[22px]">Save</SubmitButton>
+      </form>
+      <Feedback state={state} />
+      {datasetId && (
+        <div className="flex flex-wrap items-center gap-3 rounded-control bg-sidebar px-3.5 py-3">
+          <span className="min-w-[200px] flex-1 text-[13px] text-body">Check the connection: copy the test code from Events Manager → Test events, then send a test lead.</span>
+          <Input aria-label="Test event code" value={code} onChange={(e) => setCode(e.target.value)} placeholder="TEST12345" className="h-9 w-32" />
+          <Button type="button" variant="secondary" className="h-9" disabled={pending || !code.trim()} onClick={() => start(async () => setTest(await sendMetaTestEvent(clientId, code)))}>
+            {pending ? "Sending…" : "Send test event"}
+          </Button>
+        </div>
+      )}
+      <Feedback state={test} />
+    </div>
   );
 }

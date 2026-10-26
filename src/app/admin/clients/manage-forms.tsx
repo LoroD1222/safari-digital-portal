@@ -185,20 +185,28 @@ export function AdReportForm({ clientId, month, report, trackedInquiries }: { cl
   );
 }
 
-export function MetaEventsForm({ clientId, datasetId }: { clientId: string; datasetId: string | null }) {
+export function MetaEventsForm({ clientId, datasetId, hasToken }: { clientId: string; datasetId: string | null; hasToken: boolean }) {
   const [state, action] = useActionState<FormState, FormData>(saveMetaDataset.bind(null, clientId), {});
   const [test, setTest] = useState<FormState>({});
   const [code, setCode] = useState("");
   const [pending, start] = useTransition();
   return (
     <div className="flex flex-col gap-3">
-      <form action={action} className="flex flex-wrap items-end gap-3">
-        <div className="min-w-[220px] flex-1">
-          <Field label="Dataset ID" htmlFor="meta_dataset_id" hint="Events Manager → the client's dataset (pixel) → Settings. Leave empty to turn events off.">
-            <Input id="meta_dataset_id" name="meta_dataset_id" inputMode="numeric" defaultValue={datasetId ?? ""} placeholder="e.g. 1995031924787890" />
-          </Field>
-        </div>
-        <SubmitButton variant="secondary" className="mb-[22px]">Save</SubmitButton>
+      <form action={action} className="flex flex-col gap-3">
+        <Field label="Dataset ID" htmlFor="meta_dataset_id" hint="Events Manager → the client's dataset (pixel) → Settings. Leave empty to turn events off.">
+          <Input id="meta_dataset_id" name="meta_dataset_id" inputMode="numeric" defaultValue={datasetId ?? ""} placeholder="e.g. 1995031924787890" />
+        </Field>
+        <Field label="Dataset access token" htmlFor="meta_capi_token" optional
+          hint={hasToken ? "A token is saved (hidden). Paste a new one to replace it." : "Only if the dataset can't be shared with Safari Digital yet: Events Manager → dataset → Settings → Conversions API → Generate access token."}>
+          <Input id="meta_capi_token" name="meta_capi_token" type="password" autoComplete="off" placeholder={hasToken ? "••••••••  saved" : "Paste token"} />
+        </Field>
+        {hasToken && (
+          <label className="flex items-center gap-2 text-[13px]">
+            <input type="checkbox" name="clear_capi_token" className="size-4 accent-[#1A6647]" />
+            Remove the saved token and use the Safari Portal system user instead
+          </label>
+        )}
+        <div className="flex justify-end"><SubmitButton variant="secondary">Save</SubmitButton></div>
       </form>
       <Feedback state={state} />
       {datasetId && (

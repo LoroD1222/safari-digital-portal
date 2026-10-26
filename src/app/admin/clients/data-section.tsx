@@ -150,12 +150,14 @@ async function MetaEventsCard({ client }: { client: Client }) {
     ? await supabase.from("meta_events").select("id, event_name, status, error, created_at, inquiries(customer_name)").eq("client_id", client.id).order("created_at", { ascending: false }).limit(8)
     : { data: null, error: null };
   const events = (data ?? []) as unknown as EventRow[];
+  const { data: priv } = await supabase.from("client_private").select("meta_capi_token").eq("client_id", client.id).maybeSingle();
+  const hasToken = !!(priv as { meta_capi_token?: string | null } | null)?.meta_capi_token;
   const failing = events.length > 0 && events[0].status === "failed";
   return (
     <Card title="Lead events to Meta" what="New inquiries and status changes (Lead → Contacted → Booked) go to the client's Meta dataset, so ads learn what brings bookings"
       status={!dataset ? <Badge>Off</Badge> : failing ? <Badge tone="red">Check connection</Badge> : <Badge tone="green">On</Badge>}>
-      {!metaConfigured() && <p className="text-[13px] text-danger-text">Add META_SYSTEM_USER_TOKEN in Vercel first. The same system user token sends events.</p>}
-      <MetaEventsForm clientId={client.id} datasetId={dataset} />
+      {!metaConfigured() && !hasToken && <p className="text-[13px] text-danger-text">Add META_SYSTEM_USER_TOKEN in Vercel, or save a dataset access token below.</p>}
+      <MetaEventsForm clientId={client.id} datasetId={dataset} hasToken={hasToken} />
       {error && <p className="text-[13px] text-danger-text">Run 0008_meta_events.sql in Supabase to see sent events.</p>}
       {dataset && !error && (
         events.length === 0 ? <p className="text-[13px] text-slate">No events yet. They appear here when an inquiry comes in or its status changes.</p> : (

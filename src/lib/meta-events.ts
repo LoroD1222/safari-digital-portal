@@ -59,9 +59,14 @@ const matchable = (u: Record<string, unknown>) => !!(u.lead_id || u.fbc || u.em 
 
 type Sent = { ok: true } | { ok: false; error: string };
 
-async function post(datasetId: string, event: Record<string, unknown>, testCode?: string): Promise<Sent> {
-  const token = process.env.META_SYSTEM_USER_TOKEN;
-  if (!token) return { ok: false, error: "META_SYSTEM_USER_TOKEN isn't set in Vercel." };
+// The client's own dataset token if one is saved, otherwise the system user token.
+async function tokenFor(clientId: string) {
+  const { data, error } = await createAdminClient().from("client_private").select("meta_capi_token").eq("client_id", clientId).maybeSingle();
+  return (!error && data?.meta_capi_token) || process.env.META_SYSTEM_USER_TOKEN || null;
+}
+
+async function post(token: string | null, datasetId: string, event: Record<string, unknown>, testCode?: string): Promise<Sent> {
+  if (!token) return { ok: false, error: "No token: add META_SYSTEM_USER_TOKEN in Vercel, or a dataset access token for this client." };
   try {
     const res = await fetch(`https://graph.facebook.com/${VERSION}/${datasetId}/events?access_token=${encodeURIComponent(token)}`, {
       method: "POST",
@@ -74,7 +79,7 @@ async function post(datasetId: string, event: Record<string, unknown>, testCode?
     const e = json.error;
     if (e?.code === 190) return { ok: false, error: "Meta rejected the token. Generate a new system user token and update META_SYSTEM_USER_TOKEN." };
     if (e?.code === 10 || e?.code === 200 || /permission/i.test(e?.message ?? "")) {
-      return { ok: false, error: "No permission for this dataset. Assign it to the Safari Portal system user (full control) and make sure the token has ads_management." };
+      return { ok: false, error: "No permission for this dataset. Assign it to the Safari Portal system user (full control), or save a dataset access token from Events Manager for this client." };
     }
     if (e?.code === 100 && /does not exist|cannot be loaded/i.test(e.message ?? "")) return { ok: false, error: "Meta can't find this dataset ID, or the system user can't see it." };
     return { ok: false, error: e?.error_user_msg || e?.message || `Meta returned an error (${res.status}).` };
@@ -112,7 +117,7 @@ async function deliver(rowId: string) {
   const u = userData(inq as InquiryRow);
   if (!matchable(u)) return finish({ status: "skipped", error: "No email, phone or ad click to match on." });
 
-  const res = await post(dataset, buildEvent(ev.event_name as MetaEventName, at, u, ev.event_key));
+  const res = await post(await tokenFor(ev.client_id), dataset, buildEvent(ev.event_name as MetaEventName, at, u, ev.event_key));
   const attempts = (ev.attempts ?? 0) + 1;
   if (res.ok) return finish({ status: "sent", attempts, error: null, sent_at: new Date().toISOString() });
   return finish({ status: "failed", attempts, error: res.error });
@@ -153,7 +158,7 @@ export async function retryMetaEvents() {
 }
 
 // A test event with a made-up contact. Shows under Test events in Events Manager.
-export async function sendTestEvent(datasetId: string, testCode: string): Promise<Sent> {
+export async function sendTestEvent(clientId: string, datasetId: string, testCode: string): Promise<Sent> {
   const u = userData({ customer_name: "Test Lead", email: "test@safaridigital.co.tz", phone: "+255700000000", country: "Tanzania", origin: "manual", external_id: null, fbc: null, fbp: null });
-  return post(datasetId, buildEvent("Lead", new Date(), u, `test-${Date.now()}`), testCode);
+  return post(await tokenFor(clientId), datasetId, buildEvent("Lead", new Date(), u, `test-${Date.now()}`), testCode);
 }

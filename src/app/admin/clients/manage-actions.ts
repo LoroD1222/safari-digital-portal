@@ -176,6 +176,13 @@ export async function saveMetaDataset(clientId: string, _: FormState, form: Form
   const supabase = await createClient();
   const { error } = await supabase.from("clients").update({ meta_dataset_id: id || null }).eq("id", clientId);
   if (error) return { error: /meta_dataset_id/.test(error.message) ? "Run 0008_meta_events.sql in Supabase first." : error.message };
+  const token = str(form, "meta_capi_token");
+  const clear = form.get("clear_capi_token") === "on";
+  if (token || clear) {
+    if (token && !/^[A-Za-z0-9_-]{40,}$/.test(token)) return { error: "That doesn't look like a Meta access token. Copy it again from Events Manager → Settings → Conversions API." };
+    const { error: e2 } = await supabase.from("client_private").upsert({ client_id: clientId, meta_capi_token: clear ? null : token });
+    if (e2) return { error: /meta_capi_token/.test(e2.message) ? "Run 0009_dataset_token.sql in Supabase first." : e2.message };
+  }
   done();
   return { saved: true, message: id ? "Saved. New inquiries and status changes now go to Meta." : "Saved. Events to Meta are off for this client." };
 }
@@ -187,6 +194,6 @@ export async function sendMetaTestEvent(clientId: string, testCode: string): Pro
   const supabase = await createClient();
   const { data } = await supabase.from("clients").select("meta_dataset_id").eq("id", clientId).single();
   if (!data?.meta_dataset_id) return { error: "Save the dataset ID first." };
-  const res = await sendTestEvent(data.meta_dataset_id, code);
+  const res = await sendTestEvent(clientId, data.meta_dataset_id, code);
   return res.ok ? { saved: true, message: "Test event sent. It should appear in Events Manager → Test events within a minute." } : { error: res.error };
 }

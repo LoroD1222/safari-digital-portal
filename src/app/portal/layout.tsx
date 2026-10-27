@@ -17,7 +17,7 @@ export default async function PortalLayout({ children }: LayoutProps<"/portal">)
       supabase.from("requests").select("id", { count: "exact", head: true }).eq("client_id", company.id).neq("status", "completed").eq("last_message_role", "admin"),
       getSettings(),
     ]);
-    if (company.marketing_package) nav.push({ href: "/portal/marketing", label: "Marketing", icon: "megaphone" });
+    if (company.marketing_package) nav.push({ href: "/portal/marketing/advertising", base: "/portal/marketing", label: "Marketing", icon: "megaphone" });
     if (company.website_package || company.vercel_project_id) nav.push({ href: "/portal/website", label: "Website", icon: "globe" });
     nav.push({ href: "/portal/inquiries", label: "Inquiries", icon: "inbox", badge: newInquiries ?? 0 });
     help = <HelpButton whatsapp={settings.support_whatsapp} email={settings.support_email} openRequests={replies ?? 0} />;

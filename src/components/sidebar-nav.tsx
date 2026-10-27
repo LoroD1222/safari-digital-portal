@@ -3,14 +3,16 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Icon, type IconName } from "./icons";
 
-export type NavItem = { href: string; label: string; icon: IconName; exact?: boolean; badge?: number };
+// `base` marks the section as active for every page under it (when href points to a sub-page).
+export type NavItem = { href: string; label: string; icon: IconName; exact?: boolean; badge?: number; base?: string };
 
 export function SidebarNav({ items, label }: { items: NavItem[]; label: string }) {
   const path = usePathname();
   return (
     <ul aria-label={label} className="flex flex-col gap-0.5">
       {items.map((item) => {
-        const active = item.exact ? path === item.href : path === item.href || path.startsWith(item.href + "/");
+        const base = item.base ?? item.href;
+        const active = item.exact ? path === item.href : path === base || path.startsWith(base + "/");
         return (
           <li key={item.href}>
             <Link

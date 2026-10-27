@@ -1,8 +1,8 @@
 export type Role = "admin" | "client";
 export type OnboardingStatus = "not_started" | "in_progress" | "submitted" | "being_reviewed" | "setup_complete";
 export type AccountStatus = "invited" | "active" | "paused";
-export type MarketingPackage = "starter" | "core" | "elite";
-export type WebsitePackage = "full_build";
+export type MarketingPackage = "growth" | "scale" | "partner";
+export type WebsitePackage = "landing_page" | "tour_operator" | "advanced";
 
 export type Client = {
   id: string;
@@ -50,13 +50,31 @@ export const ACCOUNT_LABEL: Record<AccountStatus, string> = {
 };
 
 export const MARKETING_LABEL: Record<MarketingPackage, string> = {
-  starter: "Starter",
-  core: "Core",
-  elite: "Elite",
+  growth: "Growth",
+  scale: "Scale",
+  partner: "Marketing Partner",
 };
 
 export const WEBSITE_LABEL: Record<WebsitePackage, string> = {
-  full_build: "Full Build",
+  landing_page: "Landing Page",
+  tour_operator: "Tour Operator Website",
+  advanced: "Advanced Website",
+};
+
+// List price, used as the suggested monthly price / one-time fee (USD). null = custom.
+export const MARKETING_PRICE: Record<MarketingPackage, number | null> = { growth: 450, scale: 750, partner: null };
+export const WEBSITE_PRICE: Record<WebsitePackage, number | null> = { landing_page: 120, tour_operator: 800, advanced: null };
+
+// What's included, shown on the client's Account page.
+export const MARKETING_FEATURES: Record<MarketingPackage, string[]> = {
+  growth: ["Facebook & Instagram ads, managed for you", "International targeting strategy", "4 ad creatives a month, with copywriting", "Meta Pixel and conversion tracking", "Monthly report"],
+  scale: ["Everything in Growth", "TikTok Ads management", "8 ad creatives a month", "Advanced testing across platforms", "Monthly strategy call and detailed reports"],
+  partner: ["Everything in Scale, tailored to you", "Multi-channel advertising and funnels", "CRM, WhatsApp and email automations", "Custom landing pages and advanced analytics", "Dedicated strategy and support"],
+};
+export const WEBSITE_FEATURES: Record<WebsitePackage, string[]> = {
+  landing_page: ["Single-page responsive website", "Tour or offer presentation", "WhatsApp and inquiry form", "Basic SEO", "One revision"],
+  tour_operator: ["Up to 6 pages and 5 safari itineraries", "Easy-to-use CMS", "Galleries, reviews and inquiry forms", "SEO, speed, Meta Pixel and analytics", "Two revisions and website training"],
+  advanced: ["Custom website design", "Advanced tour management", "Search, filters and multiple languages", "Booking and CRM integrations", "Custom features and automations"],
 };
 
 export function packageSummary(c: Pick<Client, "marketing_package" | "website_package">) {
@@ -142,7 +160,19 @@ export type AdReport = {
 
 // ───────────── Billing (admin only) ─────────────
 export type Currency = "USD" | "TZS";
-export type ClientPrivate = { client_id: string; monthly_fee: number | null; currency: Currency; billing_start: string | null; notes: string | null };
+export type DiscountType = "percent" | "amount";
+export type ClientPrivate = {
+  client_id: string; monthly_fee: number | null; currency: Currency; billing_start: string | null; notes: string | null;
+  discount_type?: DiscountType; discount_value?: number | null;
+  website_fee?: number | null; website_discount_type?: DiscountType; website_discount_value?: number | null;
+};
+
+// List price minus a discount (percent or fixed amount), never below zero.
+export function discounted(list: number, type: DiscountType, value: number) {
+  const v = Math.max(0, Number(value) || 0);
+  const off = type === "percent" ? (list * Math.min(v, 100)) / 100 : v;
+  return Math.max(0, Math.round((list - off) * 100) / 100);
+}
 
 export function formatMoney(amount: number, currency: Currency) {
   if (currency === "TZS") {

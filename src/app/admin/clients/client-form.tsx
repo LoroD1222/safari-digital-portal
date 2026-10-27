@@ -1,8 +1,8 @@
 "use client";
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import type { Client, ClientPrivate } from "@/lib/types";
-import { ACCOUNT_LABEL, MARKETING_LABEL, ONBOARDING_LABEL } from "@/lib/types";
+import { ACCOUNT_LABEL, MARKETING_LABEL, MARKETING_PRICE, ONBOARDING_LABEL, WEBSITE_LABEL, WEBSITE_PRICE, discounted, formatMoney, type DiscountType, type MarketingPackage, type WebsitePackage } from "@/lib/types";
 import { Alert, Field, Input, Select, Textarea, buttonClass } from "@/components/ui";
 import { SubmitButton } from "@/components/submit-button";
 import type { ClientFormState } from "./actions";
@@ -47,44 +47,7 @@ export function ClientForm({ action, client, billing, submitLabel, cancelHref }:
         </div>
       </section>
 
-      <section className="flex flex-col gap-4 border-t border-line-soft pt-6">
-        <h2 className="text-[15px] font-semibold">Package</h2>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Marketing" htmlFor="marketing_package">
-            <Select id="marketing_package" name="marketing_package" defaultValue={val("marketing_package", client?.marketing_package)}>
-              <option value="">None</option>
-              {Object.entries(MARKETING_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </Select>
-          </Field>
-          <Field label="Website" htmlFor="website_package">
-            <Select id="website_package" name="website_package" defaultValue={val("website_package", client?.website_package)}>
-              <option value="">None</option>
-              <option value="full_build">Full Build</option>
-            </Select>
-          </Field>
-        </div>
-      </section>
-
-      <section className="flex flex-col gap-4 border-t border-line-soft pt-6">
-        <div className="flex flex-col gap-0.5">
-          <h2 className="text-[15px] font-semibold">Price</h2>
-          <p className="text-[13px] text-slate">What this client pays per month. Only Safari Digital sees this; it adds up to MRR on your Overview.</p>
-        </div>
-        <div className="grid gap-4 sm:grid-cols-3">
-          <Field label="Monthly price" htmlFor="monthly_fee" optional error={fe.monthly_fee}>
-            <Input id="monthly_fee" name="monthly_fee" inputMode="decimal" placeholder="450" defaultValue={val("monthly_fee", billing?.monthly_fee != null ? String(billing.monthly_fee) : "")} aria-invalid={!!fe.monthly_fee} />
-          </Field>
-          <Field label="Currency" htmlFor="currency">
-            <Select id="currency" name="currency" defaultValue={val("currency", billing?.currency ?? "USD")}>
-              <option value="USD">USD ($)</option>
-              <option value="TZS">TZS</option>
-            </Select>
-          </Field>
-          <Field label="Paying since" htmlFor="billing_start" optional>
-            <Input id="billing_start" name="billing_start" type="date" defaultValue={val("billing_start", billing?.billing_start ?? "")} />
-          </Field>
-        </div>
-      </section>
+      <PackagePricing client={client} billing={billing} val={val} fe={fe} />
 
       {client && (
         <section className="flex flex-col gap-4 border-t border-line-soft pt-6">
@@ -115,5 +78,108 @@ export function ClientForm({ action, client, billing, submitLabel, cancelHref }:
         <SubmitButton>{submitLabel}</SubmitButton>
       </div>
     </form>
+  );
+}
+
+type Val = (key: string, fallback: string | null | undefined) => string;
+
+function DiscountInputs({ prefix, type, value, setType, setValue }: {
+  prefix: string; type: DiscountType; value: string; setType: (t: DiscountType) => void; setValue: (v: string) => void;
+}) {
+  return (
+    <Field label="Discount" htmlFor={`${prefix}discount_value`} optional>
+      <div className="grid grid-cols-[minmax(0,1fr)_88px] gap-2">
+        <Input id={`${prefix}discount_value`} name={`${prefix}discount_value`} inputMode="decimal" value={value} onChange={(e) => setValue(e.target.value)} placeholder="0" />
+        <Select aria-label="Discount type" name={`${prefix}discount_type`} value={type} onChange={(e) => setType(e.target.value as DiscountType)}>
+          <option value="percent">%</option>
+          <option value="amount">$</option>
+        </Select>
+      </div>
+    </Field>
+  );
+}
+
+function Summary({ list, final, per, type, value }: { list: number; final: number; per: string; type: DiscountType; value: number }) {
+  const off = list - final;
+  return (
+    <p className="rounded-control bg-sidebar px-3 py-2 text-[13px] text-body">
+      {off > 0
+        ? <>List {formatMoney(list, "USD")} − {type === "percent" ? `${value}%` : formatMoney(value, "USD")} = <strong className="font-semibold text-ink">{formatMoney(final, "USD")}{per}</strong></>
+        : <>Price: <strong className="font-semibold text-ink">{formatMoney(list, "USD")}{per}</strong> (list price)</>}
+    </p>
+  );
+}
+
+// Package choice sets the price; a discount (percent or $) can be applied.
+// Custom packages show a price field instead.
+function PackagePricing({ client, billing, val, fe }: { client?: Client; billing?: ClientPrivate | null; val: Val; fe: Record<string, string> }) {
+  const [mk, setMk] = useState(val("marketing_package", client?.marketing_package));
+  const [web, setWeb] = useState(val("website_package", client?.website_package));
+  const [dType, setDType] = useState<DiscountType>((val("discount_type", billing?.discount_type) || "percent") as DiscountType);
+  const [dVal, setDVal] = useState(val("discount_value", billing?.discount_value ? String(billing.discount_value) : ""));
+  const [wType, setWType] = useState<DiscountType>((val("website_discount_type", billing?.website_discount_type) || "percent") as DiscountType);
+  const [wVal, setWVal] = useState(val("website_discount_value", billing?.website_discount_value ? String(billing.website_discount_value) : ""));
+
+  const mkList = mk ? MARKETING_PRICE[mk as MarketingPackage] : null;
+  const webList = web ? WEBSITE_PRICE[web as WebsitePackage] : null;
+  const num = (v: string) => Number(v.replace(/[, %$]/g, "")) || 0;
+
+  return (
+    <>
+      <section className="flex flex-col gap-4 border-t border-line-soft pt-6">
+        <div className="flex flex-col gap-0.5">
+          <h2 className="text-[15px] font-semibold">Package and price</h2>
+          <p className="text-[13px] text-slate">The price follows the package. Add a discount if this client gets one. Only Safari Digital sees prices; the monthly price adds up to MRR.</p>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Marketing" htmlFor="marketing_package">
+            <Select id="marketing_package" name="marketing_package" value={mk} onChange={(e) => setMk(e.target.value)}>
+              <option value="">None</option>
+              {Object.entries(MARKETING_LABEL).map(([v, l]) => { const p = MARKETING_PRICE[v as MarketingPackage]; return <option key={v} value={v}>{l} · {p ? `$${p}/month` : "custom"}</option>; })}
+            </Select>
+          </Field>
+          {mk && (mkList !== null
+            ? <DiscountInputs prefix="" type={dType} value={dVal} setType={setDType} setValue={setDVal} />
+            : (
+              <div className="grid grid-cols-[1fr_96px] gap-2">
+                <Field label="Monthly price" htmlFor="monthly_fee" error={fe.monthly_fee}>
+                  <Input id="monthly_fee" name="monthly_fee" inputMode="decimal" placeholder="e.g. 1200" defaultValue={val("monthly_fee", billing?.monthly_fee != null ? String(billing.monthly_fee) : "")} aria-invalid={!!fe.monthly_fee} />
+                </Field>
+                <Field label="Currency" htmlFor="currency">
+                  <Select id="currency" name="currency" defaultValue={val("currency", billing?.currency ?? "USD")}>
+                    <option value="USD">USD</option>
+                    <option value="TZS">TZS</option>
+                  </Select>
+                </Field>
+              </div>
+            ))}
+        </div>
+        {mk && mkList !== null && <Summary list={mkList} final={discounted(mkList, dType, num(dVal))} per=" / month" type={dType} value={num(dVal)} />}
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Website" htmlFor="website_package">
+            <Select id="website_package" name="website_package" value={web} onChange={(e) => setWeb(e.target.value)}>
+              <option value="">None</option>
+              {Object.entries(WEBSITE_LABEL).map(([v, l]) => { const p = WEBSITE_PRICE[v as WebsitePackage]; return <option key={v} value={v}>{l} · {p ? `$${p} one-time` : "custom"}</option>; })}
+            </Select>
+          </Field>
+          {web && (webList !== null
+            ? <DiscountInputs prefix="website_" type={wType} value={wVal} setType={setWType} setValue={setWVal} />
+            : (
+              <Field label="Website price (one-time, USD)" htmlFor="website_fee">
+                <Input id="website_fee" name="website_fee" inputMode="decimal" placeholder="e.g. 2500" defaultValue={val("website_fee", billing?.website_fee != null ? String(billing.website_fee) : "")} />
+              </Field>
+            ))}
+        </div>
+        {web && webList !== null && <Summary list={webList} final={discounted(webList, wType, num(wVal))} per=" one-time" type={wType} value={num(wVal)} />}
+
+        <div className="max-w-[240px]">
+          <Field label="Paying since" htmlFor="billing_start" optional hint="When the monthly price started. Used for the MRR chart.">
+            <Input id="billing_start" name="billing_start" type="date" defaultValue={val("billing_start", billing?.billing_start ?? "")} />
+          </Field>
+        </div>
+      </section>
+    </>
   );
 }

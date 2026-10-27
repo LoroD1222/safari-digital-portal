@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { getPortalContext } from "@/lib/portal";
 import { createClient } from "@/lib/supabase/server";
-import { MARKETING_LABEL, STAGE_LABEL, WEBSITE_LABEL } from "@/lib/types";
+import { MARKETING_FEATURES, MARKETING_LABEL, STAGE_LABEL, WEBSITE_FEATURES, WEBSITE_LABEL } from "@/lib/types";
 import type { Answers } from "@/lib/onboarding";
 import { signOut } from "@/app/actions";
 import { ProfileForm, PasswordForm } from "./forms";
@@ -26,10 +26,9 @@ export default async function AccountPage() {
     packages.push({
       service: "Marketing", name: MARKETING_LABEL[company.marketing_package], since: `Since ${since(company.created_at)}`,
       items: [
-        ...(company.plan_reels ? [`${company.plan_reels} Reels a month`] : []),
-        ...(company.plan_posts ? [`${company.plan_posts} social posts a month`] : []),
-        "Facebook & Instagram ads, managed for you",
-        "Monthly results report",
+        ...(MARKETING_FEATURES[company.marketing_package] ?? []),
+        ...(company.plan_reels ? [`This month's plan: ${company.plan_reels} Reels`] : []),
+        ...(company.plan_posts ? [`This month's plan: ${company.plan_posts} posts`] : []),
       ],
     });
   }
@@ -37,7 +36,7 @@ export default async function AccountPage() {
     const stage = company.website_stage ?? "info_received";
     packages.push({
       service: "Website", name: WEBSITE_LABEL[company.website_package], since: stage === "live" ? "Live" : STAGE_LABEL[stage],
-      items: ["Custom design and build", "Visitor tracking", "Training videos", "Website changes on request"],
+      items: WEBSITE_FEATURES[company.website_package] ?? [],
     });
   }
 

@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { getPortalContext } from "@/lib/portal";
 import { createClient } from "@/lib/supabase/server";
 import { fmtDate, money, monthBounds } from "@/lib/dates";
-import type { AdReport, Campaign } from "@/lib/types";
+import { adChats, type AdReport, type Campaign } from "@/lib/types";
 import { Badge, EmptyState, Stat } from "@/components/ui";
 import { Row, RowList, Section } from "@/components/blocks";
 import { MarketingTabs } from "../tabs";
@@ -50,6 +50,8 @@ export default async function AdvertisingPage(props: PageProps<"/portal/marketin
   const spend = Number(report.meta_spend);
   const cpi = report.meta_inquiries > 0 ? spend / report.meta_inquiries : null;
   const campaigns = (report.campaigns ?? []) as Campaign[];
+  const chats = adChats(campaigns);
+  const forms = chats === null ? null : report.meta_inquiries - chats;
 
   return (
     <>
@@ -70,7 +72,8 @@ export default async function AdvertisingPage(props: PageProps<"/portal/marketin
       </div>
       <section aria-label="Results" className="grid grid-cols-[repeat(auto-fit,minmax(190px,1fr))] gap-3">
         <Stat label="Ad spend" value={money(spend)} note="Facebook & Instagram" />
-        <Stat label="Inquiries from ads" value={report.meta_inquiries} note="As reported by Meta" />
+        <Stat label="Inquiries from ads" value={report.meta_inquiries} note={chats === null ? "As reported by Meta" : `${forms} form ${forms === 1 ? "lead" : "leads"} + ${chats} ${chats === 1 ? "chat" : "chats"}`} />
+        {chats !== null && <Stat label="Chats from ads" value={chats} note="Instagram, Messenger & WhatsApp messages started from your ads" />}
         <Stat label="Cost per inquiry" value={cpi === null ? "—" : money(Math.round(cpi * 100) / 100)} note="Ad spend ÷ inquiries from ads" />
       </section>
       <p className="-mt-3 text-[13px] text-slate">
@@ -91,12 +94,13 @@ export default async function AdvertisingPage(props: PageProps<"/portal/marketin
                 <Badge tone={CAMPAIGN_TONE[c.status]}>{CAMPAIGN_LABEL[c.status]}</Badge>
                 <span className="w-24 text-right tabular-nums">{money(Number(c.spend))}</span>
                 <span className="w-28 text-right tabular-nums text-body">{c.inquiries} inquiries</span>
+                {typeof c.chats === "number" && <span className="w-20 text-right tabular-nums text-[13px] text-slate">{c.chats} {c.chats === 1 ? "chat" : "chats"}</span>}
               </Row>
             ))}
           </RowList>
         )}
       </Section>
-      <p className="text-xs text-slate">Safari Digital manages your campaigns. Meta may count inquiries slightly differently from the ones in your Inquiries list.</p>
+      <p className="text-xs text-slate">Safari Digital manages your campaigns. Meta may count inquiries slightly differently from the ones in your Inquiries list.{chats ? " Chats happen in your Instagram, Messenger and WhatsApp apps, so they only appear in Inquiries when you add them there." : ""}</p>
     </>
   );
 }

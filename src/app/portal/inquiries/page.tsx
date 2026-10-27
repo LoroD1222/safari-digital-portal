@@ -5,8 +5,11 @@ import { createClient } from "@/lib/supabase/server";
 import { monthBounds, money } from "@/lib/dates";
 import type { Inquiry } from "@/lib/types";
 import { Stat } from "@/components/ui";
+import { Icon } from "@/components/icons";
 import { InquiryTable } from "./inquiry-table";
 import { DailyChart, perDay } from "@/components/daily-chart";
+import { AddInquiry } from "./add-inquiry";
+import { adChats, type Campaign } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Inquiries" };
 
@@ -23,7 +26,7 @@ export default async function InquiriesPage(props: PageProps<"/portal/inquiries"
   const [{ data }, { data: rep }] = await Promise.all([
     supabase.from("inquiries").select("*").eq("client_id", company.id).gte("received_at", month.start).lt("received_at", month.next).order("received_at", { ascending: false }),
     company.marketing_package
-      ? supabase.from("ad_reports").select("meta_spend, meta_inquiries").eq("client_id", company.id).eq("month", month.start).maybeSingle()
+      ? supabase.from("ad_reports").select("meta_spend, meta_inquiries, campaigns").eq("client_id", company.id).eq("month", month.start).maybeSingle()
       : Promise.resolve({ data: null }),
   ]);
   const rows = (data ?? []) as Inquiry[];
@@ -31,6 +34,8 @@ export default async function InquiriesPage(props: PageProps<"/portal/inquiries"
   const spend = rep ? Number(rep.meta_spend) : 0;
   const metaN = rep?.meta_inquiries ?? 0;
   const monthName = month.label.split(" ")[0];
+  const chats = rep ? adChats(rep.campaigns as Campaign[]) : null;
+  const logged = rows.filter((r) => r.source === "meta_ads" && r.channel !== "website_form").length;
 
   return (
     <>
@@ -39,6 +44,8 @@ export default async function InquiriesPage(props: PageProps<"/portal/inquiries"
           <h1 className="text-2xl font-semibold tracking-[-0.02em]">Inquiries</h1>
           <p className="text-slate">Every inquiry in one list, from ads, social media, your website and WhatsApp.</p>
         </div>
+        <div className="flex flex-wrap items-center gap-2">
+        <AddInquiry />
         <form className="flex items-center gap-2">
           <label htmlFor="m" className="sr-only">Month</label>
           <select id="m" name="m" defaultValue={String(offset)} className="h-[34px] rounded-control border border-field bg-white px-2 text-sm">
@@ -46,6 +53,7 @@ export default async function InquiriesPage(props: PageProps<"/portal/inquiries"
           </select>
           <button className="h-[34px] rounded-control border border-field px-3 text-[13px] font-medium hover:bg-[#F4F5F2]">Show</button>
         </form>
+        </div>
       </header>
 
       <section aria-label="Summary" className="grid grid-cols-[repeat(auto-fit,minmax(190px,1fr))] gap-3.5">
@@ -61,7 +69,18 @@ export default async function InquiriesPage(props: PageProps<"/portal/inquiries"
       <DailyChart title={`Inquiries per day · ${label}`} days={perDay(month.start, rows.map((r) => r.received_at))}
         note={`${rows.length} ${rows.length === 1 ? "inquiry" : "inquiries"} from all sources`} />
 
-      <InquiryTable key={month.start} items={rows} company={company.name} openId={typeof sp.open === "string" ? sp.open : null} />
+      {chats !== null && chats > 0 && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-card border border-line px-4 py-3">
+          <span className="flex size-9 flex-none items-center justify-center rounded-full bg-[#E3F4EA] text-brand"><Icon name="chat" size={18} /></span>
+          <span className="min-w-[220px] flex-1 text-[13px] text-body">
+            <span className="font-semibold text-ink">{chats} {chats === 1 ? "chat" : "chats"} started from your ads</span> in {monthName}, on Instagram, Messenger and WhatsApp.
+            {" "}{logged ? `${logged} of them ${logged === 1 ? "is" : "are"} in your list.` : "Add the serious ones here so you can track bookings."}
+          </span>
+          <AddInquiry />
+        </div>
+      )}
+
+      <InquiryTable key={`${month.start}-${rows.length}`} items={rows} company={company.name} openId={typeof sp.open === "string" ? sp.open : null} />
 
       <div className="flex items-start gap-3 rounded-card bg-sidebar px-4 py-3.5">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#565A7C" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="mt-0.5 flex-none"><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8h.01" /></svg>

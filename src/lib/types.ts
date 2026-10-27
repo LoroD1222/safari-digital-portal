@@ -152,7 +152,15 @@ export const CATEGORY_LABEL: Record<RequestCategory, string> = {
 };
 
 // ───────────── Ads ─────────────
-export type Campaign = { name: string; status: "active" | "paused" | "ended"; spend: number; inquiries: number };
+// leads/chats are filled by the Meta sync; manual reports only have inquiries.
+export type Campaign = { name: string; status: "active" | "paused" | "ended"; spend: number; inquiries: number; leads?: number; chats?: number };
+
+// Chats started from ads (Instagram DM, Messenger, WhatsApp) for a report, or null if unknown.
+export function adChats(campaigns: Campaign[] | null | undefined) {
+  const list = campaigns ?? [];
+  if (!list.some((c) => typeof c.chats === "number")) return null;
+  return list.reduce((n, c) => n + (c.chats ?? 0), 0);
+}
 export type AdReport = {
   id: string; client_id: string; month: string; meta_spend: number; meta_inquiries: number; campaigns: Campaign[];
   note: string | null; source: "manual" | "synced"; updated_at: string;

@@ -47,12 +47,12 @@ export async function listAdAccounts(): Promise<Result<AdAccount[]>> {
 type Action = { action_type: string; value: string };
 type InsightRow = { campaign_id?: string; campaign_name?: string; spend?: string; actions?: Action[] };
 
-// An "inquiry" from ads = leads (forms, website pixel) + WhatsApp/Messenger conversations started.
-function inquiriesFrom(actions: Action[] | undefined) {
+// An "inquiry" from ads = leads (forms, website pixel) + chats started (Instagram, Messenger, WhatsApp).
+function resultsFrom(actions: Action[] | undefined) {
   const v = (t: string) => Number(actions?.find((a) => a.action_type === t)?.value ?? 0);
-  const leads = v("lead") || v("onsite_conversion.lead_grouped") || v("offsite_conversion.fb_pixel_lead");
-  const chats = v("onsite_conversion.messaging_conversation_started_7d");
-  return Math.round(leads + chats);
+  const leads = Math.round(v("lead") || v("onsite_conversion.lead_grouped") || v("offsite_conversion.fb_pixel_lead"));
+  const chats = Math.round(v("onsite_conversion.messaging_conversation_started_7d"));
+  return { leads, chats, inquiries: leads + chats };
 }
 
 export async function monthResults(accountId: string, offset = 0): Promise<Result<{ month: string; spend: number; inquiries: number; campaigns: Campaign[] }>> {
@@ -75,7 +75,7 @@ export async function monthResults(accountId: string, offset = 0): Promise<Resul
       name: r.campaign_name ?? "Campaign",
       status: (s === "ACTIVE" ? "active" : s === "PAUSED" || s === "CAMPAIGN_PAUSED" ? "paused" : "ended") as Campaign["status"],
       spend: Math.round(Number(r.spend ?? 0) * 100) / 100,
-      inquiries: inquiriesFrom(r.actions),
+      ...resultsFrom(r.actions),
     };
   }).filter((c) => c.spend > 0 || c.inquiries > 0).sort((a, b) => b.spend - a.spend);
   return {

@@ -6,6 +6,7 @@ import { monthBounds, money } from "@/lib/dates";
 import type { Inquiry } from "@/lib/types";
 import { Stat } from "@/components/ui";
 import { InquiryTable } from "./inquiry-table";
+import { DailyChart, perDay } from "@/components/daily-chart";
 
 export const metadata: Metadata = { title: "Inquiries" };
 
@@ -56,6 +57,9 @@ export default async function InquiriesPage(props: PageProps<"/portal/inquiries"
             note={spend && metaN ? `${money(spend)} ad spend ÷ ${metaN} Meta Ads inquiries` : `Shown once ${monthName} ad spend is reported`} />
         )}
       </section>
+
+      <DailyChart title={`Inquiries per day · ${label}`} days={perDay(month.start, rows.map((r) => r.received_at))}
+        note={`${rows.length} ${rows.length === 1 ? "inquiry" : "inquiries"} from all sources`} />
 
       <InquiryTable key={month.start} items={rows} company={company.name} openId={typeof sp.open === "string" ? sp.open : null} />
 

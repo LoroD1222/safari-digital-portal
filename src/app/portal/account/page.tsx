@@ -68,7 +68,7 @@ export default async function AccountPage() {
         <section aria-labelledby="pk-h" className="flex flex-col gap-3.5">
           <div className="flex flex-wrap items-baseline justify-between gap-3">
             <h2 id="pk-h" className="text-[15px] font-semibold">Your package</h2>
-            <Link href="/portal/help" className="text-[13px] font-medium text-brand no-underline">Change package</Link>
+            <Link href="/portal/requests" className="text-[13px] font-medium text-brand no-underline">Change package</Link>
           </div>
           <div className="grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-3">
             {packages.map((p) => (

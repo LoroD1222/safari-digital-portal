@@ -80,10 +80,17 @@ async function staffEmails() {
 }
 
 // Both run after the response is sent, so a slow email never slows the page.
+// Where a client's "Reply" in their email app should go: the support email, else the staff email.
+async function replyAddress() {
+  const { data } = await createAdminClient().from("app_settings").select("key, value").in("key", ["support_email", "staff_email"]);
+  const pick = (k: string) => (data?.find((r) => r.key === k)?.value as string | null)?.split(/[,;\s]+/).find((e) => e.includes("@"));
+  return pick("support_email") ?? pick("staff_email") ?? process.env.SUPPORT_EMAIL ?? null;
+}
+
 export async function notifyClient(clientId: string, m: Message) {
   if (!emailConfigured()) return;
   const origin = await siteOrigin();
-  after(async () => send(await clientEmails(clientId), m, origin));
+  after(async () => send(await clientEmails(clientId), { ...m, replyTo: m.replyTo ?? (await replyAddress()) }, origin));
 }
 
 export async function staffAddresses() {

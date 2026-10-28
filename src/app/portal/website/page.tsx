@@ -54,7 +54,7 @@ async function TrainingTab() {
           <span className="font-medium">Need a change on your website?</span>
           <span className="text-[13px] text-slate">Message Safari Digital and we&apos;ll take care of it.</span>
         </span>
-        <Link href="/portal/help" className={buttonClass("secondary", "h-9")}>Contact us</Link>
+        <Link href="/portal/requests" className={buttonClass("secondary", "h-9")}>Contact us</Link>
       </div>
     </div>
   );

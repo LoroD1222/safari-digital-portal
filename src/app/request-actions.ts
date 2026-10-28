@@ -49,14 +49,18 @@ export async function replyToRequest(id: string, body: string, attachmentPath?: 
   const text = body.trim().slice(0, 5000);
   if (!text) return { error: "Write a message first." };
   const supabase = await createClient();
-  const { data: req } = await supabase.from("requests").select("client_id, subject, clients(name)").eq("id", id).maybeSingle();
-  if (!req) return { error: "Request not found." };
+  const { data: req, error: readErr } = await supabase.from("requests").select("client_id, subject").eq("id", id).maybeSingle();
+  if (!req) return { error: readErr ? `Couldn't open this request (${readErr.message}).` : "Request not found. Sign in again and retry." };
+  const { data: co } = await supabase.from("clients").select("name").eq("id", req.client_id).maybeSingle();
   const att = cleanAttachment(viewer.role === "admin" ? req.client_id : viewer.clientId, attachmentPath ?? null, attachmentName ?? null);
   if (!att) return { error: "Attach the file again." };
   const { error } = await supabase.rpc("reply_request", { req_id: id, body: text, attachment_path: att.path, attachment_name: att.name });
-  if (error) return { error: "Couldn't send. Please try again." };
+  if (error) {
+    console.error("reply_request failed", error);
+    return { error: `Couldn't send your reply (${error.message}). Please try again, or message us on WhatsApp.` };
+  }
 
-  const company = (req.clients as unknown as { name: string } | null)?.name ?? "A client";
+  const company = co?.name ?? "A client";
   if (viewer.role === "admin") {
     await logActivity({ clientId: req.client_id, actor: "admin", message: `Safari Digital replied: ${req.subject}`, clientLink: `/portal/requests/${id}`, adminLink: `/admin/requests/${id}` });
     await notifyClient(req.client_id, { subject: `Reply to your request: ${req.subject}`, intro: "Safari Digital replied to your request:", detail: text, path: `/portal/requests/${id}`, button: "View and reply" });

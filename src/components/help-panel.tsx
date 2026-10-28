@@ -60,7 +60,7 @@ export function HelpButton({ whatsapp, email, openRequests }: { whatsapp: string
               <div className="flex flex-col gap-2.5">
                 {wa && <Option external href={`https://wa.me/${wa}`} icon="chat" tone="bg-[#E3F4EA] text-brand" title="Chat on WhatsApp" sub="Fastest way to reach us · Mon–Sat" />}
                 {email && <Option external href={`mailto:${email}`} icon="mail" tone="bg-[#F1F2F4] text-body" title="Send an email" sub="We reply within one working day" />}
-                <Option href="/portal/help" onClick={() => setOpen(false)} icon="message" tone="bg-[#F1F2F4] text-body" title="Send a request"
+                <Option href="/portal/requests" onClick={() => setOpen(false)} icon="message" tone="bg-[#F1F2F4] text-body" title="Send a request"
                   sub={openRequests > 0 ? `${openRequests} request${openRequests > 1 ? "s" : ""} with a new reply` : "Ask for help and follow the replies here"} />
               </div>
               <section aria-labelledby="faq-h" className="flex flex-col">

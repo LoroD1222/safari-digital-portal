@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
+import { Badge } from "@/components/ui";
+import { fmtDate } from "@/lib/dates";
 import Link from "next/link";
 import { getPortalContext } from "@/lib/portal";
 import { createClient } from "@/lib/supabase/server";
-import { MARKETING_FEATURES, MARKETING_LABEL, STAGE_LABEL, WEBSITE_FEATURES, WEBSITE_LABEL } from "@/lib/types";
+import { INVOICE_LABEL, INVOICE_TONE, formatMoney, invoiceState, type Invoice, MARKETING_FEATURES, MARKETING_LABEL, STAGE_LABEL, WEBSITE_FEATURES, WEBSITE_LABEL } from "@/lib/types";
 import type { Answers } from "@/lib/onboarding";
 import { signOut } from "@/app/actions";
 import { ProfileForm, PasswordForm } from "./forms";
@@ -20,6 +22,10 @@ export default async function AccountPage() {
     ? await supabase.from("onboarding_responses").select("data").eq("client_id", company.id).maybeSingle()
     : { data: null };
   const a = (ob?.data ?? {}) as Answers;
+  const { data: invData } = company
+    ? await supabase.from("invoices").select("*").eq("client_id", company.id).in("status", ["sent", "paid"]).order("issue_date", { ascending: false }).limit(24)
+    : { data: null };
+  const invoices = ((invData ?? []) as Invoice[]).map((i) => ({ ...i, state: invoiceState(i) }));
 
   const packages: { service: string; name: string; since: string; items: string[] }[] = [];
   if (company?.marketing_package) {
@@ -84,6 +90,29 @@ export default async function AccountPage() {
             ))}
           </div>
           {company?.marketing_package && <span className="text-xs text-slate">Your Meta ad budget is paid directly to Meta and isn&apos;t part of the package.</span>}
+        </section>
+      )}
+
+      {invoices.length > 0 && (
+        <section id="billing" aria-labelledby="bill-h" className="flex scroll-mt-6 flex-col gap-3.5">
+          <div className="flex flex-col gap-0.5">
+            <h2 id="bill-h" className="text-[15px] font-semibold">Billing</h2>
+            <p className="text-[13px] text-slate">Your invoices from Safari Digital. Pay by M-Pesa using the invoice number as the reference.</p>
+          </div>
+          <ul className="overflow-hidden rounded-card border border-line">
+            {invoices.map((i, n) => (
+              <li key={i.id} className={"flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 " + (n ? "border-t border-line-soft" : "")}>
+                <span className="flex min-w-[160px] flex-1 flex-col">
+                  <span className="font-medium">{i.number}</span>
+                  <span className="text-xs text-slate">{i.items[0]?.description}</span>
+                </span>
+                <span className="w-28 text-[13px] text-slate">{i.state === "paid" ? `Paid ${fmtDate(i.paid_at)}` : `Due ${fmtDate(i.due_date)}`}</span>
+                <span className="w-20 text-right font-medium tabular-nums">{formatMoney(Number(i.total), i.currency)}</span>
+                <span className="w-20"><Badge tone={INVOICE_TONE[i.state]}>{INVOICE_LABEL[i.state]}</Badge></span>
+                <a href={`/api/invoices/${i.id}/pdf`} target="_blank" rel="noopener" className="text-[13px] font-medium text-brand no-underline hover:underline">PDF</a>
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 

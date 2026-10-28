@@ -238,3 +238,24 @@ export function mrrHistory(
   }
   return out;
 }
+
+// ───────────── Invoices ─────────────
+export type InvoiceStatus = "draft" | "sent" | "paid" | "cancelled";
+export type InvoiceItem = { description: string; details?: string | null; amount: number };
+export type Invoice = {
+  id: string; client_id: string; number: string; kind: "monthly" | "one_off"; period_month: string | null;
+  status: InvoiceStatus; currency: Currency; issue_date: string; due_date: string; items: InvoiceItem[]; total: number;
+  notes: string | null; sent_at: string | null; paid_at: string | null; payment_method: string | null; payment_ref: string | null;
+  reminder_sent_at: string | null; overdue_sent_at: string | null; created_at: string;
+};
+export const INVOICE_LABEL: Record<InvoiceStatus | "overdue", string> = { draft: "Draft", sent: "Unpaid", paid: "Paid", cancelled: "Cancelled", overdue: "Overdue" };
+export const INVOICE_TONE = { draft: "neutral", sent: "blue", paid: "green", cancelled: "neutral", overdue: "red" } as const;
+
+// "Overdue" isn't stored: it's a sent invoice past its due date (Tanzania time).
+export function invoiceState(i: Pick<Invoice, "status" | "due_date">, now = new Date()): InvoiceStatus | "overdue" {
+  const today = new Date(now.getTime() + 3 * 3600e3).toISOString().slice(0, 10);
+  return i.status === "sent" && i.due_date < today ? "overdue" : i.status;
+}
+export function invoiceTotal(items: InvoiceItem[]) {
+  return Math.round(items.reduce((n, i) => n + (Number(i.amount) || 0), 0) * 100) / 100;
+}

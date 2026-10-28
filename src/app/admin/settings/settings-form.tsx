@@ -1,7 +1,7 @@
 "use client";
 import { useActionState, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Alert, Field, Input } from "@/components/ui";
+import { Alert, Field, Input, Textarea } from "@/components/ui";
 import { SubmitButton } from "@/components/submit-button";
 import { VideoEmbed, toEmbed } from "@/components/video-embed";
 import { saveSettings, type SettingsState } from "./actions";
@@ -84,6 +84,25 @@ export function SettingsForm({ initial }: { initial: Settings }) {
             <Input id="staff_email" name="staff_email" defaultValue={v("staff_email")} placeholder="hello@safaridigital.co.tz" />
           </Field>
         </div>
+      </section>
+      <section className="flex flex-col gap-4 border-t border-line-soft pt-6">
+        <div className="flex flex-col gap-0.5">
+          <h2 className="text-[15px] font-semibold">Invoices</h2>
+          <p className="text-[13px] text-slate">Printed on every invoice PDF and in invoice emails.</p>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="M-Pesa number" htmlFor="mpesa_number"><Input id="mpesa_number" name="mpesa_number" defaultValue={v("mpesa_number")} /></Field>
+          <Field label="M-Pesa name" htmlFor="mpesa_name" hint="As it appears when the client pays."><Input id="mpesa_name" name="mpesa_name" defaultValue={v("mpesa_name")} /></Field>
+          <Field label="Billed from" htmlFor="invoice_from" hint="Company name, address, website and phone, one per line.">
+            <Textarea id="invoice_from" name="invoice_from" rows={5} defaultValue={v("invoice_from")} />
+          </Field>
+          <div className="flex flex-col gap-4">
+            <Field label="TIN" htmlFor="invoice_tin" optional hint="Tax ID, if you invoice as a registered company."><Input id="invoice_tin" name="invoice_tin" defaultValue={v("invoice_tin")} /></Field>
+          </div>
+        </div>
+        <Field label="Payment terms" htmlFor="invoice_terms" hint="Shown in the M-Pesa box on unpaid invoices.">
+          <Textarea id="invoice_terms" name="invoice_terms" rows={3} defaultValue={v("invoice_terms")} />
+        </Field>
       </section>
       {state.error && <Alert>{state.error}</Alert>}
       {state.saved && <Alert tone="success">Saved. Clients see the changes straight away.</Alert>}

@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { monthRange, vercelConfigured, websiteStats } from "@/lib/vercel";
 import { fmtDate, money, monthBounds } from "@/lib/dates";
 import { planProgress } from "@/lib/content";
-import { MARKETING_LABEL, STAGE_LABEL, WEBSITE_STAGES, type AdReport, type ContentItem, type SupportRequest } from "@/lib/types";
+import { formatMoney, invoiceState, type Invoice, MARKETING_LABEL, STAGE_LABEL, WEBSITE_STAGES, type AdReport, type ContentItem, type SupportRequest } from "@/lib/types";
 import { EmptyState, Stat } from "@/components/ui";
 import { ActivityList, AttentionList, Progress, type AttentionItem } from "@/components/blocks";
 
@@ -85,6 +85,11 @@ export default async function PortalOverview() {
   const attention: AttentionItem[] = [];
   if (company.onboarding_note) attention.push({ key: "note", title: "Add the details we asked for", detail: "Requested by Safari Digital", href: "/onboarding", action: "Add" });
   else if (company.onboarding_status === "not_started" || company.onboarding_status === "in_progress") attention.push({ key: "ob", title: "Finish your onboarding", detail: "Your answers so far are saved", href: "/onboarding", action: "Continue" });
+  const { data: dueInv } = await supabase.from("invoices").select("id, number, total, currency, due_date, status").eq("client_id", company.id).eq("status", "sent");
+  for (const i of (dueInv ?? []) as Pick<Invoice, "id" | "number" | "total" | "currency" | "due_date" | "status">[]) {
+    const late = invoiceState(i) === "overdue";
+    attention.push({ key: `inv-${i.id}`, title: `${late ? "Overdue invoice" : "Invoice to pay"}: ${formatMoney(Number(i.total), i.currency)}`, detail: `${i.number} · ${late ? "was due" : "due"} ${fmtDate(i.due_date)} · M-Pesa`, href: "/portal/account#billing", action: "View" });
+  }
   if (awaiting.length) attention.push({ key: "content", title: `Approve ${awaiting.length} new ${awaiting.length === 1 ? (awaiting[0].kind === "reel" ? "Reel" : "post") : awaiting.every((i) => i.kind === "reel") ? "Reels" : "posts"}`, detail: "Marketing · Content", href: awaiting.length === 1 ? `/portal/marketing/${awaiting[0].id}` : "/portal/marketing?show=approval", action: "Review" });
   if (company.design_review === "pending") attention.push({ key: "design", title: "Review your website design", detail: "Website", href: "/portal/website", action: "Review" });
   if (newCount) attention.push({ key: "inq", title: `${newCount} new ${newCount === 1 ? "inquiry" : "inquiries"} to contact`, detail: "Inquiries", href: "/portal/inquiries", action: "View" });

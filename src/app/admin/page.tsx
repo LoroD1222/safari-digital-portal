@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { requireAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { formatMoney, mrr, mrrHistory, type Client, type ClientPrivate, type ContentItem, type Currency, type SupportRequest } from "@/lib/types";
+import { formatMoney, invoiceState, type Invoice, mrr, mrrHistory, type Client, type ClientPrivate, type ContentItem, type Currency, type SupportRequest } from "@/lib/types";
 import { ButtonLink, EmptyState, PageHeader, Stat } from "@/components/ui";
 import { ActivityList, AttentionList, Section, type AttentionItem } from "@/components/blocks";
 import { Icon } from "@/components/icons";
@@ -46,6 +46,13 @@ export default async function AdminOverview() {
   for (const r of requests.filter((r) => r.last_message_role === "client" && r.status !== "waiting_for_client")) attention.push({ key: `rq-${r.id}`, title: `${name[r.client_id] ?? "Client"} — ${r.status === "submitted" ? "new request" : "replied"}`, detail: r.subject, href: `/admin/requests/${r.id}` });
   for (const c of live.filter((c) => c.marketing_package && !c.meta_access_confirmed && ["submitted", "being_reviewed", "setup_complete"].includes(c.onboarding_status))) attention.push({ key: `meta-${c.id}`, title: `${c.name} — Meta access not confirmed`, detail: "Check Business Suite, then confirm in Connections", href: `/admin/clients/${c.id}?tab=connections`, tone: "blue" });
   for (const i of items.filter((i) => i.status === "approved")) attention.push({ key: `ap-${i.id}`, title: `${name[i.client_id] ?? "Client"} — approved, ready to schedule`, detail: i.title, href: `/admin/content/${i.id}`, tone: "blue" });
+
+  const { data: invs } = await supabase.from("invoices").select("id, client_id, number, total, due_date, status").in("status", ["draft", "sent"]);
+  const drafts = (invs ?? []).filter((i) => i.status === "draft");
+  if (drafts.length) attention.push({ key: "inv-drafts", title: `${drafts.length} invoice ${drafts.length === 1 ? "draft" : "drafts"} to send`, detail: "Check the lines, then send", href: "/admin/invoices?status=draft", tone: "blue" });
+  for (const i of (invs ?? []).filter((i) => i.status === "sent" && invoiceState(i as Pick<Invoice, "status" | "due_date">) === "overdue")) {
+    attention.push({ key: `inv-${i.id}`, title: `${name[i.client_id] ?? "Client"} — invoice overdue`, detail: `${i.number} · ${formatMoney(Number(i.total), "USD")}`, href: `/admin/invoices/${i.id}`, tone: "red" });
+  }
 
   const first = (viewer.fullName ?? "").split(" ")[0];
   return (

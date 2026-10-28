@@ -1,7 +1,8 @@
 import "server-only";
 import { createClient } from "./supabase/server";
 
-export const SETTING_KEYS = ["meta_video_url", "drive_video_url", "meta_business_id", "drive_share_email", "support_whatsapp", "staff_email", "support_email"] as const;
+export const SETTING_KEYS = ["meta_video_url", "drive_video_url", "meta_business_id", "drive_share_email", "support_whatsapp", "staff_email", "support_email",
+  "invoice_from", "invoice_tin", "mpesa_number", "mpesa_name", "invoice_terms"] as const;
 export type SettingKey = (typeof SETTING_KEYS)[number];
 export type Settings = Record<SettingKey, string | null>;
 
@@ -13,6 +14,12 @@ const ENV_FALLBACK: Record<SettingKey, string | undefined> = {
   support_whatsapp: process.env.SUPPORT_WHATSAPP,
   staff_email: process.env.STAFF_EMAIL,
   support_email: process.env.SUPPORT_EMAIL,
+  // Invoice defaults (from Safari Digital's current invoice); change them in Admin → Settings.
+  invoice_from: "Safari Digital\nA sub-company of Tpromosoft Limited\nTupendane, Manzese, 09 Maula St\nDar es Salaam, Tanzania\nwww.safaridigital.co.tz · +255 746 401 433",
+  invoice_tin: undefined,
+  mpesa_number: "+255 746 401 433",
+  mpesa_name: "LOVRO KRIZAN",
+  invoice_terms: "Payment is due by the due date shown above.\nAdvertising budgets are paid directly to Meta or TikTok and are not included.\nAll prices are in US dollars (USD). Please send the M-Pesa reference after paying.",
 };
 
 export async function getSettings(): Promise<Settings> {

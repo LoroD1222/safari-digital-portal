@@ -18,6 +18,7 @@ export type Message = {
   actions?: { label: string; url: string }[];   // extra buttons with full URLs (WhatsApp, mailto…)
   replyTo?: string | null;             // "Reply" in the email app goes here
   footer?: string;
+  attachments?: { filename: string; content: string }[]; // content = base64
 };
 
 function esc(s: string) {
@@ -51,7 +52,7 @@ export async function send(to: string[], m: Message, origin: string): Promise<bo
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from: process.env.EMAIL_FROM, to, subject: m.subject, html, text, ...(m.replyTo ? { reply_to: m.replyTo } : {}) }),
+      body: JSON.stringify({ from: process.env.EMAIL_FROM, to, subject: m.subject, html, text, ...(m.replyTo ? { reply_to: m.replyTo } : {}), ...(m.attachments?.length ? { attachments: m.attachments } : {}) }),
     });
     if (!res.ok) { console.error("Email not sent", res.status, await res.text()); return false; }
     return true;
@@ -82,6 +83,10 @@ export async function notifyClient(clientId: string, m: Message) {
   if (!emailConfigured()) return;
   const origin = await siteOrigin();
   after(async () => send(await clientEmails(clientId), m, origin));
+}
+
+export async function staffAddresses() {
+  return staffEmails();
 }
 
 export async function notifyStaff(m: Message) {

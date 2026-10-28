@@ -7,6 +7,14 @@ import { emailConfigured, send } from "@/lib/email";
 
 export type AccessState = { error?: string; linked?: string; inviteLink?: string; invited?: string; emailed?: boolean; emailError?: string };
 
+// Our own link to /auth/confirm with a hashed token. Unlike Supabase's one-time link, opening
+// it doesn't use it up: the token is only spent when the person clicks "Set up my account".
+// So email scanners and WhatsApp link previews can't expire it.
+function safeLink(origin: string, tokenHash: string, type: "invite" | "recovery") {
+  const base = process.env.PORTAL_URL?.replace(/\/$/, "") || origin;
+  return `${base}/auth/confirm?${new URLSearchParams({ token_hash: tokenHash, type })}`;
+}
+
 // The invite email: a branded message with a one-time "Set your password" button.
 async function emailInvite(email: string, link: string, clientId: string, kind: "invite" | "new_link" | "added") {
   if (!emailConfigured()) return { ok: false, why: "Email isn't set up (Resend), so copy the link below and send it yourself." };
@@ -55,7 +63,7 @@ export async function inviteToPortal(clientId: string, email: string, sendEmail:
   if (error || !data?.user) return { error: "Couldn't create the invite. " + (error?.message ?? "") };
   const { error: linkErr } = await admin.from("profiles").update({ client_id: clientId }).eq("id", data.user.id);
   if (linkErr) return { error: "The account was created but couldn't be linked. " + linkErr.message };
-  const link = data.properties.action_link;
+  const link = safeLink(origin, data.properties.hashed_token, "invite");
   const mail = sendEmail ? await emailInvite(email, link, clientId, "invite") : null;
   return { invited: email, inviteLink: link, emailed: !!mail?.ok, emailError: mail && !mail.ok ? mail.why : undefined };
 }
@@ -83,7 +91,7 @@ export async function newInviteLink(clientId: string, email: string): Promise<Ac
   // Works for people who haven't set a password yet; otherwise send a reset link.
   const res = await admin.auth.admin.generateLink({ type: "recovery", email, options: { redirectTo: `${origin}/auth/confirm` } });
   if (res.error) return { error: "Couldn't create a link. " + res.error.message };
-  const link = res.data.properties.action_link;
+  const link = safeLink(origin, res.data.properties.hashed_token, "recovery");
   const mail = await emailInvite(email, link, clientId, "new_link");
   revalidatePath(`/admin/clients/${clientId}`);
   return { invited: email, inviteLink: link, emailed: mail.ok, emailError: mail.ok ? undefined : mail.why };

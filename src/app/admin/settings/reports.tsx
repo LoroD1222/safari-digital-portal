@@ -10,9 +10,11 @@ export function MonthlyReports({ clients, month }: { clients: { id: string; name
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
-        <Select aria-label="Client" value={client} onChange={(e) => setClient(e.target.value)} className="h-9 w-56">
-          {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </Select>
+        <div className="w-60 max-w-full">
+          <Select aria-label="Client" value={client} onChange={(e) => setClient(e.target.value)} className="h-9">
+            {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </Select>
+        </div>
         <Button variant="secondary" className="h-9" disabled={pending || !client} onClick={() => start(async () => setState(await previewReport(client)))}>Send me a preview</Button>
         <Button variant="secondary" className="h-9" disabled={pending}
           onClick={() => { if (confirm(`Send the ${month} report to every client who hasn't received it yet?`)) start(async () => setState(await sendReportsNow())); }}>

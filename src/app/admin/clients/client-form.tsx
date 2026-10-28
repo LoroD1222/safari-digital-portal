@@ -37,6 +37,12 @@ export function ClientForm({ action, client, billing, submitLabel, cancelHref }:
           </Field>
           <Field label="Contact email" htmlFor="contact_email" optional error={fe.contact_email}>
             <Input id="contact_email" name="contact_email" type="email" defaultValue={val("contact_email", client?.contact_email)} aria-invalid={!!fe.contact_email} />
+            {!client && (
+              <label className="mt-1.5 flex items-center gap-2 text-[13px] text-body">
+                <input type="checkbox" name="invite_now" defaultChecked className="size-4 accent-[#1A6647]" />
+                Email this person an invite to the portal when I save
+              </label>
+            )}
           </Field>
           <Field label="WhatsApp" htmlFor="whatsapp" optional>
             <Input id="whatsapp" name="whatsapp" type="tel" placeholder="+255" defaultValue={val("whatsapp", client?.whatsapp)} />

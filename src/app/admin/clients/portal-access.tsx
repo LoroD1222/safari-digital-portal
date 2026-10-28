@@ -6,13 +6,14 @@ import { addPortalUser, newInviteLink, removePortalUser, type AccessState } from
 
 type Member = { id: string; email: string; confirmed: boolean };
 
-function CopyLink({ link, email }: { link: string; email: string }) {
+function CopyLink({ link, email, emailed }: { link: string; email: string; emailed?: boolean }) {
   const [copied, setCopied] = useState(false);
   return (
     <div className="flex flex-col gap-2 rounded-control border border-[#BFE3CF] bg-[#F1FAF6] px-3.5 py-3 text-[13px]">
       <span className="text-forest">
-        <strong className="font-semibold">Invite link for {email}.</strong> Send it to them by WhatsApp or email. It works once,
-        and they&apos;ll choose a password when they open it.
+        {emailed
+          ? <><strong className="font-semibold">Invite emailed to {email}.</strong> You can also send them this link on WhatsApp. It works once, for 24 hours, and they&apos;ll choose a password when they open it.</>
+          : <><strong className="font-semibold">Invite link for {email}.</strong> Send it to them by WhatsApp or email. It works once, for 24 hours, and they&apos;ll choose a password when they open it.</>}
       </span>
       <div className="flex gap-2">
         <Input readOnly value={link} aria-label="Invite link" onFocus={(e) => e.currentTarget.select()} className="h-9 text-xs" />
@@ -49,7 +50,7 @@ export function PortalAccess({ clientId, members }: { clientId: string; members:
               {!m.confirmed && (
                 <Button type="button" variant="secondary" className="h-8 text-[13px]" disabled={pending}
                   onClick={() => start(async () => setResent(await newInviteLink(clientId, m.email)))}>
-                  New invite link
+                  Send a new invite
                 </Button>
               )}
               <Button type="button" variant="ghost" className="h-8 text-[13px]" disabled={pending}
@@ -64,15 +65,20 @@ export function PortalAccess({ clientId, members }: { clientId: string; members:
       )}
 
       {shown.error && <Alert>{shown.error}</Alert>}
-      {shown.linked && <Alert tone="success">{shown.linked} already had an account and can now see this portal.</Alert>}
-      {shown.inviteLink && shown.invited && <CopyLink link={shown.inviteLink} email={shown.invited} />}
+      {shown.linked && <Alert tone="success">{shown.linked} already had an account and can now see this portal.{shown.emailed ? " We emailed them to let them know." : ""}</Alert>}
+      {shown.emailError && <Alert tone="info">{shown.emailError}</Alert>}
+      {shown.inviteLink && shown.invited && <CopyLink link={shown.inviteLink} email={shown.invited} emailed={shown.emailed} />}
 
       <form action={(fd) => { setResent(null); return action(fd); }} className="flex flex-wrap items-end gap-2">
         <div className="flex min-w-[220px] flex-1 flex-col gap-1.5">
           <label htmlFor="pa-email" className="font-medium">Add someone by email</label>
           <Input id="pa-email" name="email" type="email" placeholder="name@company.com" required />
         </div>
-        <SubmitButton variant="secondary" pendingText="Adding…">Give access</SubmitButton>
+        <SubmitButton variant="secondary" pendingText="Inviting…">Invite</SubmitButton>
+        <label className="flex basis-full items-center gap-2 text-[13px] text-body">
+          <input type="checkbox" name="send_email" defaultChecked className="size-4 accent-[#1A6647]" />
+          Email them the invite (from Safari Digital, with a “Set your password” button)
+        </label>
       </form>
     </section>
   );

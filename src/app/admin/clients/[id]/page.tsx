@@ -54,7 +54,9 @@ export default async function ClientPage(props: PageProps<"/admin/clients/[id]">
           </>
         }
       />
-      {sp.created && <Alert tone="success">{client.name} was added.</Alert>}
+      {sp.created && <Alert tone="success">{client.name} was added.{typeof sp.invited === "string" ? ` An invite to the portal was emailed to ${sp.invited}.` : ""}</Alert>}
+      {sp.invite_link && <Alert tone="info">The login was created, but the invite couldn&apos;t be emailed. Use &ldquo;Send a new invite&rdquo; under Portal access, or copy the link from there.</Alert>}
+      {typeof sp.invite_error === "string" && <Alert>Couldn&apos;t invite them: {sp.invite_error}</Alert>}
       <Tabs label="Client sections" items={[
         { href: base, label: "Overview", active: tab === "overview" },
         { href: `${base}?tab=onboarding`, label: "Onboarding", active: tab === "onboarding", count: client.onboarding_status === "submitted" ? 1 : 0 },

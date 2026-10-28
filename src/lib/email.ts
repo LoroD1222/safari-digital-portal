@@ -13,6 +13,7 @@ export function emailConfigured() {
 
 export type Message = {
   subject: string; intro: string; detail?: string | null; path: string; button: string;
+  url?: string;                        // full URL for the main button (overrides path)
   heading?: string;                    // big line above the intro
   rows?: [string, string | null | undefined][]; // label/value table (empty values are skipped)
   actions?: { label: string; url: string }[];   // extra buttons with full URLs (WhatsApp, mailto…)
@@ -46,7 +47,7 @@ ${heading}<p style="margin:0 0 16px">${esc(m.intro)}</p>${table}${detail}
 
 export async function send(to: string[], m: Message, origin: string): Promise<boolean> {
   if (!emailConfigured() || to.length === 0) return false;
-  const url = (process.env.PORTAL_URL?.replace(/\/$/, "") || origin) + m.path;
+  const url = m.url ?? (process.env.PORTAL_URL?.replace(/\/$/, "") || origin) + m.path;
   const { html, text } = render(m, url);
   try {
     const res = await fetch("https://api.resend.com/emails", {

@@ -116,8 +116,14 @@ export async function createClientRecord(_: ClientFormState, form: FormData): Pr
   const { data, error } = await supabase.from("clients").insert(values).select("id").single();
   if (error || !data) return { error: "Couldn't add the client. " + (error?.message ?? ""), values: echo(form) };
   await savePrivate(supabase, data.id, priv.values);
+  let invite = "";
+  if (form.get("invite_now") === "on" && values.contact_email) {
+    const { inviteToPortal } = await import("./access-actions");
+    const r = await inviteToPortal(data.id, values.contact_email.toLowerCase(), true);
+    invite = r.error ? `&invite_error=${encodeURIComponent(r.error)}` : r.emailed ? `&invited=${encodeURIComponent(values.contact_email)}` : `&invite_link=1`;
+  }
   revalidatePath("/admin", "layout");
-  redirect(`/admin/clients/${data.id}?created=1`);
+  redirect(`/admin/clients/${data.id}?created=1${invite}`);
 }
 
 export async function updateClientRecord(id: string, _: ClientFormState, form: FormData): Promise<ClientFormState> {

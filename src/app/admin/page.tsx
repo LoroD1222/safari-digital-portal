@@ -49,7 +49,7 @@ export default async function AdminOverview() {
 
   const { data: invs } = await supabase.from("invoices").select("id, client_id, number, total, due_date, status").in("status", ["draft", "sent"]);
   const drafts = (invs ?? []).filter((i) => i.status === "draft");
-  if (drafts.length) attention.push({ key: "inv-drafts", title: `${drafts.length} invoice ${drafts.length === 1 ? "draft" : "drafts"} to send`, detail: "Check the lines, then send", href: "/admin/invoices?status=draft", tone: "blue" });
+  if (drafts.length) attention.push({ key: "inv-drafts", title: `${drafts.length} ${drafts.length === 1 ? "invoice needs" : "invoices need"} your approval`, detail: "Check, then approve and send", href: "/admin/invoices?status=draft", tone: "blue" });
   for (const i of (invs ?? []).filter((i) => i.status === "sent" && invoiceState(i as Pick<Invoice, "status" | "due_date">) === "overdue")) {
     attention.push({ key: `inv-${i.id}`, title: `${name[i.client_id] ?? "Client"} — invoice overdue`, detail: `${i.number} · ${formatMoney(Number(i.total), "USD")}`, href: `/admin/invoices/${i.id}`, tone: "red" });
   }

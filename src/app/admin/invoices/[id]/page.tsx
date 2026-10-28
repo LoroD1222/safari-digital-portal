@@ -7,6 +7,8 @@ import { INVOICE_LABEL, INVOICE_TONE, invoiceState, type Invoice } from "@/lib/t
 import { fmtDate, fmtDateTime } from "@/lib/dates";
 import { Alert, Badge } from "@/components/ui";
 import { InvoiceEditor, InvoiceActions } from "./invoice-forms";
+import { billingEmails } from "@/lib/invoices";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export const metadata: Metadata = { title: "Invoice" };
 
@@ -21,6 +23,7 @@ export default async function InvoicePage(props: PageProps<"/admin/invoices/[id]
   const { data: c } = await supabase.from("clients").select("id, name, contact_email").eq("id", inv.client_id).single();
   const { count: logins } = await supabase.from("profiles").select("id", { count: "exact", head: true }).eq("client_id", inv.client_id).eq("role", "client");
   const state = invoiceState(inv);
+  const recipients = await billingEmails(createAdminClient(), inv.client_id);
   return (
     <div className="flex max-w-[860px] flex-col gap-6">
       <Link href="/admin/invoices" className="text-[13px] font-medium text-brand no-underline">← Invoices</Link>
@@ -39,8 +42,8 @@ export default async function InvoicePage(props: PageProps<"/admin/invoices/[id]
       </div>
       {sp.exists && <Alert tone="info">There&apos;s already a monthly invoice for this client this month, so here it is.</Alert>}
       {!logins && !c?.contact_email && state !== "paid" && <Alert>This client has no login and no contact email, so the invoice can&apos;t be emailed. Add a contact email on the client page.</Alert>}
-      {inv.status === "draft"
-        ? <InvoiceEditor invoice={inv} />
+      {inv.status === "draft" || inv.status === "sent"
+        ? <InvoiceEditor key={inv.status} invoice={inv} recipients={recipients} />
         : <InvoiceView invoice={inv} />}
       <InvoiceActions invoice={inv} state={state} />
     </div>

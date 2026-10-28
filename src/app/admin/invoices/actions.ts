@@ -69,6 +69,8 @@ function readItems(form: FormData): InvoiceItem[] | string {
   return items;
 }
 
+// Save a draft or an unpaid (sent) invoice. intent=send: save, then approve and send (drafts).
+// For an invoice already sent, "resend" emails the updated PDF to the client.
 export async function saveInvoice(id: string, _: InvoiceFormState, form: FormData): Promise<InvoiceFormState> {
   await requireAdmin();
   const items = readItems(form);
@@ -77,12 +79,32 @@ export async function saveInvoice(id: string, _: InvoiceFormState, form: FormDat
   if (!/^\d{4}-\d{2}-\d{2}$/.test(issue) || !/^\d{4}-\d{2}-\d{2}$/.test(due)) return { error: "Choose the invoice date and due date." };
   if (due < issue) return { error: "The due date can't be before the invoice date." };
   const supabase = await createClient();
-  const { data: cur } = await supabase.from("invoices").select("status").eq("id", id).single();
-  if (cur?.status !== "draft") return { error: "Only drafts can be edited. Cancel this invoice and create a new one if something is wrong." };
-  const { error } = await supabase.from("invoices").update({ items, total: invoiceTotal(items), issue_date: issue, due_date: due, notes: str(form, "notes") || null }).eq("id", id);
+  const { data: cur } = await supabase.from("invoices").select("status, due_date, client_id, number").eq("id", id).single();
+  if (!cur || (cur.status !== "draft" && cur.status !== "sent")) return { error: "Paid and cancelled invoices can't be edited. Mark it unpaid or restore it first." };
+  const total = invoiceTotal(items);
+  const intent = str(form, "intent");
+  if (intent === "send" && (!items.length || total <= 0)) return { error: "Add at least one line with an amount before sending." };
+  const patch: Record<string, unknown> = { items, total, issue_date: issue, due_date: due, notes: str(form, "notes") || null };
+  // A new due date gets fresh reminders.
+  if (cur.status === "sent" && due !== cur.due_date) { patch.reminder_sent_at = null; patch.overdue_sent_at = null; }
+  const { error } = await supabase.from("invoices").update(patch).eq("id", id);
   if (error) return { error: error.message };
+
+  if (intent === "send" && cur.status === "draft") {
+    const r = await sendInvoiceNow(id);
+    done();
+    return r.ok ? { saved: true, message: `Approved and sent to ${r.to?.join(", ")}.` } : { error: `Saved, but not sent: ${r.error}` };
+  }
+  if (cur.status === "sent") {
+    await logActivity({ clientId: cur.client_id, actor: "admin", message: `Invoice ${cur.number} was updated`, clientLink: "/portal/account#billing", adminLink: `/admin/invoices/${id}`, visibleToClient: form.get("resend") === "on" });
+    if (form.get("resend") === "on") {
+      const r = await sendInvoiceNow(id, true);
+      done();
+      return r.ok ? { saved: true, message: `Saved and the updated invoice was emailed to ${r.to?.join(", ")}.` } : { error: `Saved, but the email failed: ${r.error}` };
+    }
+  }
   done();
-  return { saved: true, message: "Saved." };
+  return { saved: true, message: cur.status === "sent" ? "Saved. The client sees the updated invoice in their portal." : "Draft saved." };
 }
 
 export async function sendInvoice(id: string): Promise<InvoiceFormState> {
@@ -98,7 +120,13 @@ export async function markPaid(id: string, _: InvoiceFormState, form: FormData):
   if (!/^\d{4}-\d{2}-\d{2}$/.test(paid)) return { error: "Choose the date it was paid." };
   const supabase = await createClient();
   const { data: inv } = await supabase.from("invoices").select("client_id, number, status").eq("id", id).single();
-  if (!inv || inv.status === "cancelled") return { error: "This invoice can't be marked paid." };
+  if (!inv || inv.status === "cancelled" || inv.status === "draft") return { error: "Send the invoice before marking it paid." };
+  if (inv.status === "paid") {
+    // Correcting the payment details of an invoice already marked paid.
+    const { error } = await supabase.from("invoices").update({ paid_at: paid, payment_method: str(form, "payment_method") || "M-Pesa", payment_ref: str(form, "payment_ref") || null }).eq("id", id);
+    done();
+    return error ? { error: error.message } : { saved: true, message: "Payment details updated." };
+  }
   const { error } = await supabase.from("invoices").update({
     status: "paid", paid_at: paid, payment_method: str(form, "payment_method") || "M-Pesa", payment_ref: str(form, "payment_ref") || null,
   }).eq("id", id);
@@ -124,4 +152,24 @@ export async function deleteDraft(id: string) {
   await supabase.from("invoices").delete().eq("id", id).eq("status", "draft");
   done();
   redirect("/admin/invoices");
+}
+
+// Undo "Mark as paid" (e.g. recorded by mistake): back to unpaid.
+export async function markUnpaid(id: string): Promise<InvoiceFormState> {
+  await requireAdmin();
+  const supabase = await createClient();
+  const { error } = await supabase.from("invoices").update({ status: "sent", paid_at: null, payment_method: null, payment_ref: null }).eq("id", id).eq("status", "paid");
+  if (error) return { error: error.message };
+  done();
+  return { saved: true, message: "Back to unpaid. You can edit it again." };
+}
+
+// Bring a cancelled invoice back as a draft to fix and send again.
+export async function restoreInvoice(id: string): Promise<InvoiceFormState> {
+  await requireAdmin();
+  const supabase = await createClient();
+  const { error } = await supabase.from("invoices").update({ status: "draft", sent_at: null, reminder_sent_at: null, overdue_sent_at: null }).eq("id", id).eq("status", "cancelled");
+  if (error) return { error: /invoices_monthly_once/.test(error.message) ? "There's already an active monthly invoice for this client and month." : error.message };
+  done();
+  return { saved: true, message: "Restored as a draft." };
 }

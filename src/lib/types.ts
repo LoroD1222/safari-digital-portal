@@ -248,7 +248,7 @@ export type Invoice = {
   notes: string | null; sent_at: string | null; paid_at: string | null; payment_method: string | null; payment_ref: string | null;
   reminder_sent_at: string | null; overdue_sent_at: string | null; created_at: string;
 };
-export const INVOICE_LABEL: Record<InvoiceStatus | "overdue", string> = { draft: "Draft", sent: "Unpaid", paid: "Paid", cancelled: "Cancelled", overdue: "Overdue" };
+export const INVOICE_LABEL: Record<InvoiceStatus | "overdue", string> = { draft: "Needs approval", sent: "Unpaid", paid: "Paid", cancelled: "Cancelled", overdue: "Overdue" };
 export const INVOICE_TONE = { draft: "neutral", sent: "blue", paid: "green", cancelled: "neutral", overdue: "red" } as const;
 
 // "Overdue" isn't stored: it's a sent invoice past its due date (Tanzania time).

@@ -78,10 +78,10 @@ export async function createMonthlyDrafts(now = new Date()) {
   }
   if (made.length && emailConfigured()) {
     await send(await staffAddresses(), {
-      subject: `${made.length} invoice ${made.length === 1 ? "draft" : "drafts"} ready to send`,
+      subject: `${made.length} ${made.length === 1 ? "invoice needs" : "invoices need"} your approval`,
       heading: `${monthBounds(0, now).label} invoices are ready`,
-      intro: `Drafts were prepared for ${made.join(", ")}. Check them and click Send.`,
-      path: "/admin/invoices?status=draft", button: "Review drafts",
+      intro: `Invoices were prepared for ${made.join(", ")}. Check each one, edit if needed, then click Approve and send. Nothing is sent to clients until you do.`,
+      path: "/admin/invoices?status=draft", button: "Review and approve",
     }, await siteOrigin());
   }
   return { made };
@@ -106,7 +106,7 @@ export async function pdfData(db: Admin, invoice: Invoice): Promise<InvoicePdfDa
 }
 
 // Who receives invoices: everyone who logs in, else the contact email.
-async function billingEmails(db: Admin, clientId: string) {
+export async function billingEmails(db: Admin, clientId: string) {
   const logins = await clientEmails(clientId);
   if (logins.length) return logins;
   const { data } = await db.from("clients").select("contact_email").eq("id", clientId).single();
@@ -115,7 +115,7 @@ async function billingEmails(db: Admin, clientId: string) {
 
 const fmtDay = (iso: string) => new Date(iso + "T00:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
 
-async function emailInvoice(db: Admin, inv: Invoice, kind: "new" | "reminder" | "overdue" | "receipt") {
+async function emailInvoice(db: Admin, inv: Invoice, kind: "new" | "updated" | "reminder" | "overdue" | "receipt") {
   const to = await billingEmails(db, inv.client_id);
   if (!to.length) return { ok: false, error: "This client has no email address. Add a contact email or give them a login." };
   const data = await pdfData(db, inv);
@@ -123,6 +123,7 @@ async function emailInvoice(db: Admin, inv: Invoice, kind: "new" | "reminder" | 
   const amount = formatMoney(Number(inv.total), inv.currency);
   const copy = {
     new: { subject: `Invoice ${inv.number} from Safari Digital · ${amount}`, heading: `Invoice ${inv.number}`, intro: `Here is your invoice for ${amount}, due on ${fmtDay(inv.due_date)}. The PDF is attached.` },
+    updated: { subject: `Updated invoice ${inv.number} from Safari Digital · ${amount}`, heading: `Invoice ${inv.number} was updated`, intro: `We've updated invoice ${inv.number}. The new total is ${amount}, due on ${fmtDay(inv.due_date)}. The updated PDF is attached and replaces the earlier one.` },
     reminder: { subject: `Reminder: invoice ${inv.number} is due on ${fmtDay(inv.due_date)}`, heading: "A friendly reminder", intro: `Invoice ${inv.number} for ${amount} is due on ${fmtDay(inv.due_date)}. If you've already paid, thank you, and please send us the M-Pesa reference.` },
     overdue: { subject: `Invoice ${inv.number} is overdue`, heading: `Invoice ${inv.number} is overdue`, intro: `We haven't received payment for invoice ${inv.number} (${amount}), which was due on ${fmtDay(inv.due_date)}. Please pay by M-Pesa, or let us know if anything is unclear.` },
     receipt: { subject: `Payment received · invoice ${inv.number}`, heading: "Thank you, payment received", intro: `We've received your payment of ${amount} for invoice ${inv.number}. Your updated invoice marked Paid is attached.` },
@@ -140,7 +141,7 @@ async function emailInvoice(db: Admin, inv: Invoice, kind: "new" | "reminder" | 
 }
 
 // Admin "Send": emails the PDF and marks the invoice sent.
-export async function sendInvoiceNow(id: string) {
+export async function sendInvoiceNow(id: string, updated = false) {
   if (!emailConfigured()) return { ok: false, error: "Email isn't set up yet (RESEND_API_KEY and EMAIL_FROM in Vercel)." };
   const db = createAdminClient();
   const { data } = await db.from("invoices").select("*").eq("id", id).single();
@@ -148,7 +149,7 @@ export async function sendInvoiceNow(id: string) {
   if (!inv) return { ok: false, error: "Invoice not found." };
   if (inv.status === "cancelled") return { ok: false, error: "This invoice is cancelled." };
   if (!inv.items.length || Number(inv.total) <= 0) return { ok: false, error: "Add at least one line with an amount first." };
-  const res = await emailInvoice(db, inv, inv.status === "paid" ? "receipt" : "new");
+  const res = await emailInvoice(db, inv, inv.status === "paid" ? "receipt" : updated && inv.status === "sent" ? "updated" : "new");
   if (!res.ok) return res;
   if (inv.status === "draft") {
     await db.from("invoices").update({ status: "sent", sent_at: new Date().toISOString() }).eq("id", id);

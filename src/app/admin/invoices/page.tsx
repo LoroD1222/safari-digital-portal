@@ -34,19 +34,19 @@ export default async function InvoicesPage(props: PageProps<"/admin/invoices">) 
 
   return (
     <>
-      <PageHeader title="Invoices" subtitle="Monthly drafts are prepared on the 1st. Check them, then send."
+      <PageHeader title="Invoices" subtitle="Monthly invoices are prepared on the 1st and wait for your approval. Nothing reaches a client until you approve and send it."
         actions={<ButtonLink href={`/admin/invoices/new${client ? `?client=${client}` : ""}`}><Icon name="plus" size={16} />New invoice</ButtonLink>} />
       {error && <p className="text-[13px] text-danger-text">Run 0012_invoices.sql in Supabase to start using invoices.</p>}
       <section aria-label="Summary" className="grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-3">
         <Stat label="Unpaid" value={sum(unpaid)} note={`${unpaid.length} ${unpaid.length === 1 ? "invoice" : "invoices"}`} />
         <Stat label="Overdue" value={sum(overdue)} note={overdue.length ? `${overdue.length} past the due date` : "Nothing overdue"} />
         <Stat label="Paid this month" value={sum(paidMonth)} note={`${paidMonth.length} ${paidMonth.length === 1 ? "payment" : "payments"}`} />
-        <Stat label="Drafts to send" value={all.filter((i) => i.state === "draft").length} note="Check and send" />
+        <Stat label="Needs your approval" value={all.filter((i) => i.state === "draft").length} note="Check, then approve and send" />
       </section>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Filters label="Filter" items={[
           { href: qs("open"), label: "Unpaid", active: filter === "open", count: unpaid.length },
-          { href: qs("draft"), label: "Drafts", active: filter === "draft", count: all.filter((i) => i.state === "draft").length },
+          { href: qs("draft"), label: "Needs approval", active: filter === "draft", count: all.filter((i) => i.state === "draft").length },
           { href: qs("overdue"), label: "Overdue", active: filter === "overdue", count: overdue.length },
           { href: qs("paid"), label: "Paid", active: filter === "paid" },
           { href: qs("all"), label: "All", active: filter === "all" },

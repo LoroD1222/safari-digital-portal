@@ -28,3 +28,28 @@ export async function saveSettings(_: SettingsState, form: FormData): Promise<Se
   revalidatePath("/", "layout");
   return { saved: true };
 }
+
+export type ReportState = { error?: string; message?: string; lines?: string[] };
+
+// Send last month's report for one client to Safari Digital's staff email, without sending it to the client.
+export async function previewReport(clientId: string): Promise<ReportState> {
+  await requireAdmin();
+  const { emailConfigured } = await import("@/lib/email");
+  if (!emailConfigured()) return { error: "Email isn't set up yet (RESEND_API_KEY and EMAIL_FROM in Vercel)." };
+  const supabase = await createClient();
+  const { data } = await supabase.from("app_settings").select("value").eq("key", "staff_email").maybeSingle();
+  const to = ((data?.value as string | null) ?? "").split(/[,;\s]+/).filter((e) => e.includes("@"));
+  if (!to.length) return { error: "Add a staff email above first. The preview goes there." };
+  const { sendReportPreview } = await import("@/lib/client-emails");
+  const ok = await sendReportPreview(clientId, to);
+  return ok ? { message: `Preview sent to ${to.join(", ")}.` } : { error: "Resend refused the email. Check that your domain is verified in Resend." };
+}
+
+// Send last month's reports now to every client who hasn't had it yet.
+export async function sendReportsNow(): Promise<ReportState> {
+  await requireAdmin();
+  const { sendMonthlyReports } = await import("@/lib/client-emails");
+  const res = await sendMonthlyReports(-1);
+  const sent = res.filter((r) => r.status === "sent").length;
+  return { message: `${sent} sent.`, lines: res.map((r) => `${r.client}: ${r.status}${r.note ? ` (${r.note})` : ""}`) };
+}

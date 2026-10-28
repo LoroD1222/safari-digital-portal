@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { after } from "next/server";
 import { logActivity } from "@/lib/activity";
 import { sendInquiryEvent } from "@/lib/meta-events";
+import { emailNewInquiry } from "@/lib/client-emails";
 
 // Website inquiry forms post here. Each client has their own form key
 // (Admin → client → Connections). Accepts JSON or a normal HTML form post.
@@ -125,6 +126,7 @@ async function handle(req: NextRequest, data: Record<string, unknown>) {
 
   const inquiryId = row.id;
   after(() => sendInquiryEvent(inquiryId, "Lead"));
+  after(() => emailNewInquiry(inquiryId));
   await logActivity({
     clientId: client.id, actor: "client", message: `New website inquiry from ${name}`,
     clientLink: "/portal/inquiries", adminLink: `/admin/inquiries?client=${client.id}`,

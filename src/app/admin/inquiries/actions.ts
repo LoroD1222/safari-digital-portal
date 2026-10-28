@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { after } from "next/server";
 import { logActivity } from "@/lib/activity";
 import { STATUS_EVENT, sendInquiryEvent } from "@/lib/meta-events";
+import { emailNewInquiry } from "@/lib/client-emails";
 
 export type InquiryFormState = { error?: string; fieldErrors?: Record<string, string>; values?: Record<string, string>; saved?: boolean };
 
@@ -69,6 +70,7 @@ export async function saveInquiry(id: string | null, _: InquiryFormState, form: 
   if (error || !data) return { error: "Couldn't add the inquiry. " + (error?.message ?? ""), values: echo(form) };
   const stage = STATUS_EVENT[row.status];
   after(async () => { await sendInquiryEvent(data.id, "Lead"); if (stage) await sendInquiryEvent(data.id, stage); });
+  if (row.status === "new") after(() => emailNewInquiry(data.id));
   await logActivity({ clientId: clientId!, actor: "admin", message: `Inquiry from ${name} added`, clientLink: `/portal/inquiries/${data.id}`, adminLink: `/admin/inquiries/${data.id}` });
   revalidatePath("/", "layout");
   redirect(`/admin/inquiries/${data.id}?created=1`);

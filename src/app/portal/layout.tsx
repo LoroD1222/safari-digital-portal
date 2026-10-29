@@ -13,12 +13,13 @@ export default async function PortalLayout({ children }: LayoutProps<"/portal">)
   let help = null;
   if (company) {
     const supabase = await createClient();
-    const [{ count: newInquiries }, { count: replies }, settings] = await Promise.all([
+    const [{ count: newInquiries }, { count: replies }, settings, { count: toApprove }] = await Promise.all([
       supabase.from("inquiries").select("id", { count: "exact", head: true }).eq("client_id", company.id).eq("status", "new"),
       supabase.from("requests").select("id", { count: "exact", head: true }).eq("client_id", company.id).neq("status", "completed").eq("last_message_role", "admin"),
       getSettings(),
+      supabase.from("content_items").select("id", { count: "exact", head: true }).eq("client_id", company.id).eq("status", "awaiting_approval"),
     ]);
-    if (company.marketing_package) nav.push({ href: "/portal/marketing/advertising", base: "/portal/marketing", label: "Marketing", icon: "megaphone" });
+    if (company.marketing_package) nav.push({ href: toApprove ? "/portal/marketing" : "/portal/marketing/advertising", base: "/portal/marketing", label: "Marketing", icon: "megaphone", badge: toApprove ?? 0 });
     if (company.website_package || company.vercel_project_id || company.tracking_since) nav.push({ href: "/portal/website", label: "Website", icon: "globe" });
     nav.push({ href: "/portal/inquiries", label: "Inquiries", icon: "inbox", badge: newInquiries ?? 0 });
     nav.push({ href: "/portal/requests", label: "Requests", icon: "message", badge: replies ?? 0 });

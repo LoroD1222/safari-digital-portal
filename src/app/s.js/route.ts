@@ -4,9 +4,14 @@
 // 2. Sends a copy of every inquiry form submitted on the site → /api/inquiries
 // 3. Remembers utm_* / fbclid from the landing page so inquiries show which ad they came from.
 const SCRIPT = String.raw`(function () {
-  var me = document.currentScript; if (!me) return;
+  // Cache/minify plugins (WP Rocket, LiteSpeed…) may copy this file to the client's own
+  // server or delay it, so the portal address is baked in and the tag is found by its key.
+  if (window.__sdLoaded) return; window.__sdLoaded = true;
+  var me = document.currentScript;
+  if (!me || !me.getAttribute("data-key")) me = document.querySelector("script[data-key^='sdf_']");
+  if (!me) return;
   var key = me.getAttribute("data-key"); if (!key) return;
-  var base = new URL(me.src).origin;
+  var base = "__PORTAL__";
   var store = window.sessionStorage;
 
   // Ad tracking from the landing URL, kept for the whole visit.
@@ -79,11 +84,12 @@ const SCRIPT = String.raw`(function () {
   }, true);
 })();`;
 
-export function GET() {
-  return new Response(SCRIPT, {
+export function GET(req: Request) {
+  const portal = process.env.PORTAL_URL?.replace(/\/$/, "") || new URL(req.url).origin;
+  return new Response(SCRIPT.replace("__PORTAL__", portal), {
     headers: {
       "Content-Type": "application/javascript; charset=utf-8",
-      "Cache-Control": "public, max-age=3600",
+      "Cache-Control": "public, max-age=600",
       "Access-Control-Allow-Origin": "*",
     },
   });

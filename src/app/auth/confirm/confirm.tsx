@@ -3,6 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { Alert, Button } from "@/components/ui";
 
 // Invite and new-link emails point here with ?token_hash=…&type=invite|recovery.
 // Nothing is used up until the person clicks the button, so email scanners and
@@ -37,34 +38,38 @@ export function Confirm({ token, signedInAs }: { token: { hash: string; type: "i
     else window.location.replace("/reset-password?welcome=1");
   }
 
+  const invite = token?.type !== "recovery";
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-sidebar px-4 text-center">
-      <Image src="/safari-digital-logo.svg" alt="Safari Digital" width={178} height={28} className="h-7 w-auto" />
-      {phase === "failed" ? (
-        <div className="flex max-w-sm flex-col gap-2">
-          <h1 className="text-xl font-semibold">This link has expired</h1>
-          <p className="text-slate">Links work once and expire after 24 hours. Ask Safari Digital to send a new invite, or reset your password if you already have an account.</p>
-          <Link href="/forgot-password" className="font-medium text-brand no-underline">Reset password</Link>
-        </div>
-      ) : phase === "ready" ? (
-        <div className="flex max-w-sm flex-col items-center gap-3">
-          <h1 className="text-xl font-semibold">{token?.type === "recovery" ? "Set a new password" : "Welcome to your Safari Digital portal"}</h1>
-          <p className="text-slate">Click below to continue. You&apos;ll choose your password on the next screen.</p>
-          {signedInAs && (
-            <div role="note" className="rounded-card border border-warn-text/20 bg-warn-bg px-4 py-3 text-left text-[14px] text-warn-text">
-              You&apos;re signed in on this browser as <strong className="break-all">{signedInAs}</strong>. Continuing will sign you out of that account.
-              To keep it, open this link in a private window instead.
+    <div className="flex min-h-screen flex-col items-center justify-center gap-7 bg-sidebar px-4 py-12">
+      <Image src="/safari-digital-logo.svg" alt="Safari Digital" width={178} height={28} priority className="h-7 w-auto" />
+      <div className="w-full max-w-[380px] rounded-card border border-line bg-white px-7 py-8 shadow-[0_1px_2px_rgba(0,3,33,0.04)]">
+        {phase === "failed" ? (
+          <div className="flex flex-col gap-3">
+            <h1 className="text-xl font-semibold tracking-[-0.01em]">This link has expired</h1>
+            <p className="text-slate">Links work once and expire after 24 hours. Ask Safari Digital to send a new invite, or reset your password if you already have an account.</p>
+            <Link href="/forgot-password" className="font-medium text-brand no-underline">Reset password</Link>
+          </div>
+        ) : phase === "ready" ? (
+          <div className="flex flex-col gap-[18px]">
+            <div className="flex flex-col gap-1">
+              <h1 className="text-xl font-semibold tracking-[-0.01em]">{invite ? "Welcome to your portal" : "Set a new password"}</h1>
+              <p className="text-slate">Continue to choose your password on the next screen.</p>
             </div>
-          )}
-          <button type="button" onClick={continueSetup}
-            className="mt-1 inline-flex h-11 items-center rounded-control bg-brand px-6 font-semibold text-white hover:bg-brand-hover">
-            {signedInAs ? "Sign out and continue" : token?.type === "recovery" ? "Continue" : "Set up my account"}
-          </button>
-          {signedInAs && <Link href="/" className="text-[14px] font-medium text-brand no-underline">Go back to {signedInAs}</Link>}
-        </div>
-      ) : (
-        <p role="status" className="text-slate">Setting up your account…</p>
-      )}
+            {signedInAs && (
+              <Alert tone="info">
+                You&apos;re signed in on this browser as <strong className="break-all font-semibold">{signedInAs}</strong>. Continuing signs you out of that account. To keep it, open this link in a private window instead.
+              </Alert>
+            )}
+            <Button type="button" onClick={continueSetup}>
+              {signedInAs ? "Sign out and continue" : invite ? "Set up my account" : "Continue"}
+            </Button>
+            {signedInAs && <Link href="/" className="text-center text-[13px] font-medium text-brand no-underline hover:text-forest">Go back to {signedInAs}</Link>}
+          </div>
+        ) : (
+          <p role="status" className="text-slate">Setting up your account…</p>
+        )}
+      </div>
+      <p className="text-center text-[13px] text-slate">Questions? Reply to the email Safari Digital sent you.</p>
     </div>
   );
 }

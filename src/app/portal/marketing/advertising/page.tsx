@@ -4,7 +4,8 @@ import { redirect } from "next/navigation";
 import { getPortalContext } from "@/lib/portal";
 import { createClient } from "@/lib/supabase/server";
 import { fmtDate, money, monthBounds } from "@/lib/dates";
-import { adChats, type AdReport, type Campaign } from "@/lib/types";
+import { adChats, CONTENT_LABEL, KIND_LABEL, type AdReport, type Campaign, type ContentItem } from "@/lib/types";
+import { CONTENT_TONE } from "@/lib/status-tone";
 import { Badge, EmptyState, Stat } from "@/components/ui";
 import { Row, RowList, Section } from "@/components/blocks";
 import { MarketingTabs } from "../tabs";
@@ -20,10 +21,25 @@ export default async function AdvertisingPage(props: PageProps<"/portal/marketin
   const { month: wanted } = await props.searchParams;
 
   const supabase = await createClient();
-  const [{ data }, { count: awaiting }] = await Promise.all([
+  const [{ data }, { count: awaiting }, { data: adItems }] = await Promise.all([
     supabase.from("ad_reports").select("*").eq("client_id", company.id).order("month", { ascending: false }).limit(24),
     supabase.from("content_items").select("id", { count: "exact", head: true }).eq("client_id", company.id).eq("status", "awaiting_approval"),
+    supabase.from("content_items").select("*").eq("client_id", company.id).eq("as_ad", true).order("updated_at", { ascending: false }).limit(12),
   ]);
+  const adContent = (adItems ?? []) as ContentItem[];
+  const creatives = adContent.length > 0 && (
+    <Section title="Ads from your content">
+      <RowList>
+        {adContent.map((c) => (
+          <Row key={c.id}>
+            <Link href={`/portal/marketing/${c.id}`} className="min-w-[180px] flex-1 font-medium text-ink no-underline hover:text-brand">{c.title}</Link>
+            <span className="text-[13px] text-slate">{KIND_LABEL[c.kind]}</span>
+            <Badge tone={CONTENT_TONE[c.status]}>{c.status === "awaiting_approval" ? "Needs your approval" : CONTENT_LABEL[c.status]}</Badge>
+          </Row>
+        ))}
+      </RowList>
+    </Section>
+  );
   const reports = (data ?? []) as AdReport[];
   const report = reports.find((r) => r.month === wanted) ?? reports[0] ?? null;
 
@@ -39,6 +55,7 @@ export default async function AdvertisingPage(props: PageProps<"/portal/marketin
     return (
       <>
         {header}
+        {creatives}
         <EmptyState title="No advertising results yet" body="Once your Facebook & Instagram ads are running, Safari Digital adds your results here every month." />
       </>
     );
@@ -85,6 +102,7 @@ export default async function AdvertisingPage(props: PageProps<"/portal/marketin
           <p className="whitespace-pre-wrap">{report.note}</p>
         </div>
       )}
+      {creatives}
       <Section title="Campaigns">
         {campaigns.length === 0 ? <p className="text-[13px] text-slate">No campaign breakdown for this month.</p> : (
           <RowList>

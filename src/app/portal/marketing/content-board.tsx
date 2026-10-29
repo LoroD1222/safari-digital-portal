@@ -121,7 +121,7 @@ export function ContentBoard({ items, urls, comments, openId }: { items: Content
               <button key={c.id} type="button" onClick={() => show(c.id)} className="flex items-center gap-3 rounded-card border border-line bg-white p-2.5 text-left hover:border-[#C9CDD6]">
                 <span className="relative flex-none">
                   <Thumb item={c} url={urls[c.id]} className="h-20 w-16 rounded-control" />
-                  <span className="absolute bottom-1 left-1 rounded bg-[rgba(0,3,33,0.55)] px-[5px] py-px text-[10px] font-semibold text-white">{KIND_LABEL[c.kind]}</span>
+                  <span className="absolute bottom-1 left-1 rounded bg-[rgba(0,3,33,0.55)] px-[5px] py-px text-[10px] font-semibold text-white">{KIND_LABEL[c.kind]}{c.as_ad ? " · Ad" : ""}</span>
                 </span>
                 <span className="flex min-w-0 flex-1 flex-col gap-0.5"><span className="truncate font-medium">{c.title}</span><span className="text-xs text-slate">{PLATFORM_LABEL[c.platform]} · {itemDate(c)}</span></span>
                 <span className="inline-flex h-8 items-center rounded-control bg-brand px-3 text-[13px] font-semibold text-white">Review</span>
@@ -151,6 +151,7 @@ export function ContentBoard({ items, urls, comments, openId }: { items: Content
                   <span className="relative block">
                     <Thumb item={c} url={urls[c.id]} className="aspect-[4/3] w-full" />
                     <span className="absolute left-2 top-2 rounded-badge bg-white/90 px-[7px] py-0.5 text-[11px] font-semibold text-forest">{KIND_LABEL[c.kind]}</span>
+                    {c.as_ad && <span className="absolute right-2 top-2 rounded-badge bg-forest px-[7px] py-0.5 text-[11px] font-semibold text-white">Ad</span>}
                   </span>
                   <span className="flex flex-col gap-1.5 px-3 pb-3 pt-2.5">
                     <span className="truncate font-medium">{c.title}</span>
@@ -185,6 +186,11 @@ export function ContentBoard({ items, urls, comments, openId }: { items: Content
                 <button ref={closeRef} type="button" aria-label="Close" onClick={() => setOpen(null)} className="inline-flex size-8 flex-none items-center justify-center rounded-control text-slate hover:bg-[#F4F5F2]"><Icon name="close" size={18} /></button>
               </div>
               <Badge s={cur.status} />
+              {cur.as_ad && (
+                <p className="rounded-control bg-[#F1FAF6] px-3 py-2 text-[13px] text-forest">
+                  <span className="font-semibold">Also runs as an ad.</span> Approving it lets Safari Digital use it in your Facebook &amp; Instagram ads.
+                </p>
+              )}
               <div className="flex flex-col gap-1.5">
                 <span className="text-xs font-semibold uppercase tracking-[0.05em] text-slate">Caption</span>
                 <p className="whitespace-pre-line">{cur.caption || "No caption yet."}</p>

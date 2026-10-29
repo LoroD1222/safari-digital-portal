@@ -104,6 +104,7 @@ export type ContentItem = {
   id: string; client_id: string; title: string; caption: string | null; kind: ContentKind; platform: Platform;
   status: ContentStatus; scheduled_for: string | null; published_at: string | null; media_path: string | null;
   media_type: string | null; version: number; created_at: string; updated_at: string;
+  as_ad?: boolean;
 };
 export type ContentComment = {
   id: string; content_id: string; author_role: Role; kind: "comment" | "changes_requested" | "approved" | "revision" | "sent";

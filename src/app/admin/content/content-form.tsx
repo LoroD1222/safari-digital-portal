@@ -30,6 +30,13 @@ function Details({ item }: { item?: ContentItem }) {
           <Input id="scheduled_for" name="scheduled_for" type="date" defaultValue={item?.scheduled_for ?? ""} />
         </Field>
       </div>
+      <label className="flex cursor-pointer items-start gap-3 rounded-control border border-line bg-sidebar px-3.5 py-3">
+        <input type="checkbox" name="as_ad" defaultChecked={item?.as_ad ?? false} className="mt-0.5 size-4 accent-[#1A6647]" />
+        <span className="flex flex-col gap-0.5">
+          <span className="font-medium">Also run as an ad</span>
+          <span className="text-[13px] text-slate">The client approves it as a Facebook &amp; Instagram ad, and it shows on their Advertising tab.</span>
+        </span>
+      </label>
     </>
   );
 }

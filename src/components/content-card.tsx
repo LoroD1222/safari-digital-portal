@@ -16,11 +16,12 @@ export function ContentGrid({ items, urls, hrefBase, clientNames, statusLabel }:
             <div className="relative aspect-[4/5] overflow-hidden bg-sidebar">
               <Media url={urls[it.id] ?? null} type={it.media_type} alt={it.title} />
               <span className="absolute left-2 top-2"><Badge tone={CONTENT_TONE[it.status]}>{statusLabel?.[it.status] ?? CONTENT_LABEL[it.status]}</Badge></span>
+              {it.as_ad && <span className="absolute right-2 top-2 rounded-badge bg-forest px-[7px] py-0.5 text-[11px] font-semibold text-white">Ad</span>}
             </div>
             <div className="flex flex-col gap-0.5 px-3 py-2.5">
               <span className="truncate font-medium group-hover:text-brand">{it.title}</span>
               <span className="truncate text-xs text-slate">
-                {[clientNames?.[it.client_id], KIND_LABEL[it.kind], PLATFORM_LABEL[it.platform], it.scheduled_for ? fmtDate(it.scheduled_for) : null].filter(Boolean).join(" · ")}
+                {[clientNames?.[it.client_id], KIND_LABEL[it.kind] + (it.as_ad ? " ad" : ""), PLATFORM_LABEL[it.platform], it.scheduled_for ? fmtDate(it.scheduled_for) : null].filter(Boolean).join(" · ")}
               </span>
             </div>
           </Link>

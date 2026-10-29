@@ -9,7 +9,7 @@ import type { ContentStatus } from "@/lib/types";
 
 export type ContentFormState = { error?: string; saved?: boolean };
 
-const KINDS = ["reel", "post", "story"];
+const KINDS = ["reel", "post", "story", "ad"];
 const PLATFORMS = ["instagram", "facebook", "both"];
 const UUID = /^[0-9a-f-]{36}$/i;
 const s = (f: FormData, k: string) => { const v = f.get(k); return typeof v === "string" ? v.trim() : ""; };
@@ -23,17 +23,18 @@ function fields(form: FormData) {
     kind: KINDS.includes(s(form, "kind")) ? s(form, "kind") : "reel",
     platform: PLATFORMS.includes(s(form, "platform")) ? s(form, "platform") : "both",
     scheduled_for: /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null,
-    as_ad: form.get("as_ad") === "on",
+    as_ad: form.get("as_ad") === "on" || s(form, "kind") === "ad",
   };
 }
 
 function saveError(message: string) {
   if (message.includes("as_ad")) return "Run 0015_content_ads.sql in Supabase first.";
+  if (message.includes("kind_check")) return "Run 0016_content_kind_ad.sql in Supabase first.";
   return message.includes("content_items") ? "Run 0005_portal.sql in Supabase first." : "Couldn't save. " + message;
 }
 
 async function announce(clientId: string, id: string, title: string, kind: string, ad?: boolean) {
-  const what = (kind === "reel" ? "Reel" : kind === "story" ? "story" : "post") + (ad ? " ad" : "");
+  const what = kind === "ad" ? "ad" : (kind === "reel" ? "Reel" : kind === "story" ? "story" : "post") + (ad ? " ad" : "");
   await logActivity({ clientId, actor: "admin", message: `New ${what} ready for your approval: ${title}`, clientLink: `/portal/marketing/${id}`, adminLink: `/admin/content/${id}` });
   await notifyClient(clientId, {
     subject: `Please approve: ${title}`,
@@ -108,7 +109,7 @@ export async function setContentStatus(id: string, status: ContentStatus) {
     await announce(item.client_id, id, item.title, item.kind, item.as_ad);
   }
   if (status === "published" && item.status !== "published") {
-    await logActivity({ clientId: item.client_id, actor: "admin", message: `${item.kind === "reel" ? "Reel" : "Post"} published: ${item.title}`, clientLink: `/portal/marketing/${id}` });
+    await logActivity({ clientId: item.client_id, actor: "admin", message: `${item.kind === "reel" ? "Reel" : item.kind === "ad" ? "Ad" : "Post"} published: ${item.title}`, clientLink: `/portal/marketing/${id}` });
   }
   revalidatePath("/", "layout");
 }

@@ -98,7 +98,7 @@ export const STAGE_LABEL = Object.fromEntries(WEBSITE_STAGES.map((s) => [s.key, 
 
 // ───────────── Content ─────────────
 export type ContentStatus = "draft" | "awaiting_approval" | "changes_requested" | "approved" | "scheduled" | "published";
-export type ContentKind = "reel" | "post" | "story";
+export type ContentKind = "reel" | "post" | "story" | "ad";
 export type Platform = "instagram" | "facebook" | "both";
 export type ContentItem = {
   id: string; client_id: string; title: string; caption: string | null; kind: ContentKind; platform: Platform;
@@ -114,7 +114,7 @@ export const CONTENT_LABEL: Record<ContentStatus, string> = {
   draft: "Draft", awaiting_approval: "Awaiting approval", changes_requested: "Changes requested",
   approved: "Approved", scheduled: "Scheduled", published: "Published",
 };
-export const KIND_LABEL: Record<ContentKind, string> = { reel: "Reel", post: "Post", story: "Story" };
+export const KIND_LABEL: Record<ContentKind, string> = { reel: "Reel", post: "Post", story: "Story", ad: "Ad" };
 export const PLATFORM_LABEL: Record<Platform, string> = { instagram: "Instagram", facebook: "Facebook", both: "Facebook & Instagram" };
 
 // ───────────── Inquiries ─────────────

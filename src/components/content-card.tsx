@@ -21,7 +21,7 @@ export function ContentGrid({ items, urls, hrefBase, clientNames, statusLabel }:
             <div className="flex flex-col gap-0.5 px-3 py-2.5">
               <span className="truncate font-medium group-hover:text-brand">{it.title}</span>
               <span className="truncate text-xs text-slate">
-                {[clientNames?.[it.client_id], KIND_LABEL[it.kind] + (it.as_ad ? " ad" : ""), PLATFORM_LABEL[it.platform], it.scheduled_for ? fmtDate(it.scheduled_for) : null].filter(Boolean).join(" · ")}
+                {[clientNames?.[it.client_id], KIND_LABEL[it.kind] + (it.as_ad && it.kind !== "ad" ? " ad" : ""), PLATFORM_LABEL[it.platform], it.scheduled_for ? fmtDate(it.scheduled_for) : null].filter(Boolean).join(" · ")}
               </span>
             </div>
           </Link>

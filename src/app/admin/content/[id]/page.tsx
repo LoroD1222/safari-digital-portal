@@ -38,7 +38,7 @@ export default async function AdminContentItem(props: PageProps<"/admin/content/
     <div className="flex flex-col gap-6">
       <BackLink href="/admin/content">Content</BackLink>
       <PageHeader title={item.title}
-        subtitle={<><Link href={`/admin/clients/${item.client_id}`} className="font-medium text-brand no-underline">{item.clients?.name}</Link> · {KIND_LABEL[item.kind]}{item.as_ad ? " · runs as an ad" : ""} · version {item.version}</>}
+        subtitle={<><Link href={`/admin/clients/${item.client_id}`} className="font-medium text-brand no-underline">{item.clients?.name}</Link> · {KIND_LABEL[item.kind]}{item.as_ad && item.kind !== "ad" ? " · runs as an ad" : ""} · version {item.version}</>}
         actions={<Badge tone={CONTENT_TONE[s]}>{CONTENT_LABEL[s]}</Badge>} />
       {s === "changes_requested" && lastFeedback?.body && (
         <div className="rounded-card border border-[#F2C9C6] bg-[#FDF4F3] px-4 py-3">

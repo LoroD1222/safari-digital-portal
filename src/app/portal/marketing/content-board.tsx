@@ -121,7 +121,7 @@ export function ContentBoard({ items, urls, comments, openId }: { items: Content
               <button key={c.id} type="button" onClick={() => show(c.id)} className="flex items-center gap-3 rounded-card border border-line bg-white p-2.5 text-left hover:border-[#C9CDD6]">
                 <span className="relative flex-none">
                   <Thumb item={c} url={urls[c.id]} className="h-20 w-16 rounded-control" />
-                  <span className="absolute bottom-1 left-1 rounded bg-[rgba(0,3,33,0.55)] px-[5px] py-px text-[10px] font-semibold text-white">{KIND_LABEL[c.kind]}{c.as_ad ? " · Ad" : ""}</span>
+                  <span className="absolute bottom-1 left-1 rounded bg-[rgba(0,3,33,0.55)] px-[5px] py-px text-[10px] font-semibold text-white">{KIND_LABEL[c.kind]}{c.as_ad && c.kind !== "ad" ? " · Ad" : ""}</span>
                 </span>
                 <span className="flex min-w-0 flex-1 flex-col gap-0.5"><span className="truncate font-medium">{c.title}</span><span className="text-xs text-slate">{PLATFORM_LABEL[c.platform]} · {itemDate(c)}</span></span>
                 <span className="inline-flex h-8 items-center rounded-control bg-brand px-3 text-[13px] font-semibold text-white">Review</span>
@@ -151,7 +151,7 @@ export function ContentBoard({ items, urls, comments, openId }: { items: Content
                   <span className="relative block">
                     <Thumb item={c} url={urls[c.id]} className="aspect-[4/3] w-full" />
                     <span className="absolute left-2 top-2 rounded-badge bg-white/90 px-[7px] py-0.5 text-[11px] font-semibold text-forest">{KIND_LABEL[c.kind]}</span>
-                    {c.as_ad && <span className="absolute right-2 top-2 rounded-badge bg-forest px-[7px] py-0.5 text-[11px] font-semibold text-white">Ad</span>}
+                    {c.as_ad && c.kind !== "ad" && <span className="absolute right-2 top-2 rounded-badge bg-forest px-[7px] py-0.5 text-[11px] font-semibold text-white">Ad</span>}
                   </span>
                   <span className="flex flex-col gap-1.5 px-3 pb-3 pt-2.5">
                     <span className="truncate font-medium">{c.title}</span>
@@ -169,7 +169,7 @@ export function ContentBoard({ items, urls, comments, openId }: { items: Content
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(0,3,33,0.45)] p-6" onClick={(e) => { if (e.target === e.currentTarget) setOpen(null); }}>
           <div role="dialog" aria-modal="true" aria-labelledby="dlg-h" className="flex max-h-full w-full max-w-[820px] flex-wrap overflow-auto rounded-card bg-white shadow-[0_24px_64px_rgba(0,3,33,0.25)]">
             <div className="flex flex-[1_1_260px] items-center justify-center bg-[#0B1A14] p-5">
-              <div className={"relative w-full overflow-hidden rounded-[10px] bg-black " + (cur.kind === "post" ? "aspect-[4/5] max-w-[320px]" : "aspect-[9/16] max-w-[220px]")}>
+              <div className={"relative w-full overflow-hidden rounded-[10px] bg-black " + (cur.kind === "post" || (cur.kind === "ad" && !cur.media_type?.startsWith("video/")) ? "aspect-[4/5] max-w-[320px]" : "aspect-[9/16] max-w-[220px]")}>
                 {urls[cur.id] ? (cur.media_type?.startsWith("video/")
                   ? <video src={urls[cur.id]} controls playsInline preload="metadata" className="absolute inset-0 h-full w-full object-contain" />
                   // eslint-disable-next-line @next/next/no-img-element
@@ -188,7 +188,7 @@ export function ContentBoard({ items, urls, comments, openId }: { items: Content
               <Badge s={cur.status} />
               {cur.as_ad && (
                 <p className="rounded-control bg-[#F1FAF6] px-3 py-2 text-[13px] text-forest">
-                  <span className="font-semibold">Also runs as an ad.</span> Approving it lets Safari Digital use it in your Facebook &amp; Instagram ads.
+                  <span className="font-semibold">{cur.kind === "ad" ? "This is an ad." : "Also runs as an ad."}</span> Approving it lets Safari Digital use it in your Facebook &amp; Instagram ads.
                 </p>
               )}
               <div className="flex flex-col gap-1.5">

@@ -7,6 +7,7 @@ import { createContent, updateContent, type ContentFormState } from "./actions";
 import { uploadMedia } from "./upload";
 
 function Details({ item }: { item?: ContentItem }) {
+  const [kind, setKind] = useState<string>(item?.kind ?? "reel");
   return (
     <>
       <Field label="Title" htmlFor="title" hint="Only for you and the client, not posted.">
@@ -17,7 +18,7 @@ function Details({ item }: { item?: ContentItem }) {
       </Field>
       <div className="grid gap-4 sm:grid-cols-3">
         <Field label="Type" htmlFor="kind">
-          <Select id="kind" name="kind" defaultValue={item?.kind ?? "reel"}>
+          <Select id="kind" name="kind" value={kind} onChange={(e) => setKind(e.target.value)}>
             {Object.entries(KIND_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
           </Select>
         </Field>
@@ -30,6 +31,11 @@ function Details({ item }: { item?: ContentItem }) {
           <Input id="scheduled_for" name="scheduled_for" type="date" defaultValue={item?.scheduled_for ?? ""} />
         </Field>
       </div>
+      {kind === "ad" ? (
+        <p className="rounded-control border border-line bg-sidebar px-3.5 py-3 text-[13px] text-slate">
+          <span className="font-medium text-ink">Ad only.</span> The client approves it as a Facebook &amp; Instagram ad. It isn&apos;t posted on their page, and it shows on their Advertising tab.
+        </p>
+      ) : (
       <label className="flex cursor-pointer items-start gap-3 rounded-control border border-line bg-sidebar px-3.5 py-3">
         <input type="checkbox" name="as_ad" defaultChecked={item?.as_ad ?? false} className="mt-0.5 size-4 accent-[#1A6647]" />
         <span className="flex flex-col gap-0.5">
@@ -37,6 +43,7 @@ function Details({ item }: { item?: ContentItem }) {
           <span className="text-[13px] text-slate">The client approves it as a Facebook &amp; Instagram ad, and it shows on their Advertising tab.</span>
         </span>
       </label>
+      )}
     </>
   );
 }

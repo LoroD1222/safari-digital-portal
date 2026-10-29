@@ -2,6 +2,7 @@ import { AppShell } from "@/components/app-shell";
 import { AccountFooter } from "@/components/account-footer";
 import { HelpButton } from "@/components/help-panel";
 import type { NavItem } from "@/components/sidebar-nav";
+import { LiveInquiries } from "@/components/live-inquiries";
 import { getPortalContext } from "@/lib/portal";
 import { getSettings } from "@/lib/settings";
 import { createClient } from "@/lib/supabase/server";
@@ -27,6 +28,7 @@ export default async function PortalLayout({ children }: LayoutProps<"/portal">)
     <AppShell navLabel="Main" nav={nav} bottom={help}
       footer={<AccountFooter name={company?.name ?? viewer.email} sub={company ? viewer.email : undefined} href="/portal/account" />}>
       {children}
+      {company && <LiveInquiries clientId={company.id} href="/portal/inquiries" />}
     </AppShell>
   );
 }

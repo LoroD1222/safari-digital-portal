@@ -1,5 +1,6 @@
 import { AppShell } from "@/components/app-shell";
 import { AccountFooter } from "@/components/account-footer";
+import { LiveInquiries } from "@/components/live-inquiries";
 import { requireAdmin } from "@/lib/auth";
 
 export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
@@ -20,6 +21,7 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
       footer={<AccountFooter name={viewer.fullName ?? viewer.email} sub="Safari Digital" dark />}
     >
       {children}
+      <LiveInquiries href="/admin/inquiries" />
     </AppShell>
   );
 }

@@ -4,7 +4,8 @@ import { clientEmails, emailConfigured, send } from "./email";
 import { siteOrigin } from "./origin";
 import { monthBounds } from "./dates";
 import { adChats, formatMoney, SOURCE_LABEL, CHANNEL_LABEL, type Campaign, type InquirySource } from "./types";
-import { vercelConfigured, websiteStats, monthRange } from "./vercel";
+import { monthRange } from "./vercel";
+import { clientWebsiteStats } from "./site-stats";
 
 // Emails to clients about their business: a new inquiry, and the monthly report.
 
@@ -76,7 +77,7 @@ async function buildReport(clientId: string, offset: number) {
   const m = monthBounds(offset);
   const monthName = m.label.split(" ")[0];
   const [{ data: c }, { data: rep }, { data: inq }, { count: posts }] = await Promise.all([
-    admin.from("clients").select("id, name, marketing_package, vercel_project_id").eq("id", clientId).single(),
+    admin.from("clients").select("id, name, marketing_package, vercel_project_id, tracking_since").eq("id", clientId).single(),
     admin.from("ad_reports").select("meta_spend, meta_inquiries, campaigns").eq("client_id", clientId).eq("month", m.start).maybeSingle(),
     admin.from("inquiries").select("status, source").eq("client_id", clientId).gte("received_at", m.start).lt("received_at", m.next),
     admin.from("content_items").select("id", { count: "exact", head: true }).eq("client_id", clientId).gte("published_at", m.start).lt("published_at", m.next),
@@ -88,10 +89,8 @@ async function buildReport(clientId: string, offset: number) {
   const adInq = rep?.meta_inquiries ?? null;
   const chats = rep ? adChats(rep.campaigns as Campaign[]) : null;
   let visitors: number | null = null;
-  if (c.vercel_project_id && vercelConfigured()) {
-    const s = await websiteStats(c.vercel_project_id, monthRange(offset));
-    if (s.ok) visitors = s.data.visitors;
-  }
+  const s = await clientWebsiteStats(c, monthRange(offset));
+  if (s?.ok) visitors = s.data.visitors;
   const hasAnything = list.length > 0 || (spend ?? 0) > 0 || (posts ?? 0) > 0 || (visitors ?? 0) > 0;
   const rows: [string, string | null][] = [
     ["Inquiries", `${list.length}`],

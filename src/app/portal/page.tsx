@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { getPortalContext } from "@/lib/portal";
 import { createClient } from "@/lib/supabase/server";
-import { monthRange, vercelConfigured, websiteStats } from "@/lib/vercel";
+import { monthRange } from "@/lib/vercel";
+import { clientWebsiteStats } from "@/lib/site-stats";
 import { fmtDate, money, monthBounds } from "@/lib/dates";
 import { planProgress } from "@/lib/content";
 import { formatMoney, invoiceState, type Invoice, MARKETING_LABEL, STAGE_LABEL, WEBSITE_STAGES, type AdReport, type ContentItem, type SupportRequest } from "@/lib/types";
@@ -41,7 +42,7 @@ export default async function PortalOverview() {
     );
   }
   const marketing = !!company.marketing_package;
-  const website = !!company.website_package || !!company.vercel_project_id;
+  const website = !!company.website_package || !!company.vercel_project_id || !!company.tracking_since;
   const month = monthBounds(0);
   const supabase = await createClient();
   const [inq, rep, content, reqs, act, newInq] = await Promise.all([
@@ -59,7 +60,7 @@ export default async function PortalOverview() {
   const requests = (reqs.data ?? []) as SupportRequest[];
   const stage = company.website_stage ?? "info_received";
   const live = !company.website_package || stage === "live";
-  const web = live && company.vercel_project_id && vercelConfigured() ? await websiteStats(company.vercel_project_id, monthRange(0)) : null;
+  const web = live ? await clientWebsiteStats(company, monthRange(0)) : null;
   const allInq = (inq.data ?? []) as { channel: string }[];
   const newCount = newInq.count ?? 0;
 

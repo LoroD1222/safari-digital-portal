@@ -20,6 +20,7 @@ export type Client = {
   vercel_project_name?: string | null;
   meta_ad_account_id?: string | null;
   meta_dataset_id?: string | null;
+  tracking_since?: string | null;
   meta_page_id?: string | null;
   plan_reels?: number | null;
   plan_posts?: number | null;

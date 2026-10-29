@@ -3,7 +3,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getPortalContext } from "@/lib/portal";
 import { createClient } from "@/lib/supabase/server";
-import { monthRange, vercelConfigured, websiteStats } from "@/lib/vercel";
+import { monthRange } from "@/lib/vercel";
+import { clientWebsiteStats, statsSource } from "@/lib/site-stats";
 import type { Client } from "@/lib/types";
 import { EmptyState, buttonClass } from "@/components/ui";
 import { Tabs } from "@/components/blocks";
@@ -100,7 +101,7 @@ async function Analytics({ company, live, offset }: { company: Client; live: boo
     </div>
   );
 
-  if (!company.vercel_project_id || !vercelConfigured()) {
+  if (!statsSource(company)) {
     return (
       <>
         {picker}
@@ -109,7 +110,8 @@ async function Analytics({ company, live, offset }: { company: Client; live: boo
       </>
     );
   }
-  const [stats, before] = await Promise.all([websiteStats(company.vercel_project_id, range), websiteStats(company.vercel_project_id, prev)]);
+  const [s1, s0] = await Promise.all([clientWebsiteStats(company, range), clientWebsiteStats(company, prev)]);
+  const stats = s1 ?? { ok: false as const, error: "" }, before = s0 ?? { ok: false as const, error: "" };
   return (
     <>
       {picker}

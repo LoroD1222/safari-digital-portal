@@ -9,6 +9,8 @@ import { createInquiryKey } from "./manage-actions";
 import { CopyButton } from "@/components/copy-button";
 import { siteOrigin } from "@/lib/origin";
 import { listAdAccounts, metaConfigured } from "@/lib/meta";
+import { trackerStats } from "@/lib/site-stats";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 function Card({ title, what, status, children }: { title: string; what: string; status: React.ReactNode; children: React.ReactNode }) {
   return (
@@ -37,7 +39,7 @@ export async function DataSection({ client }: { client: Client }) {
         <p className="text-[13px] text-slate">Where this client&apos;s numbers come from.</p>
       </div>
 
-      <Card title="Website analytics" what="Visitors and page views from Vercel Web Analytics"
+      <Card title="Website analytics (Vercel)" what="For websites hosted on Vercel. For WordPress and other sites, use the Safari Digital snippet below."
         status={linked && stats?.ok ? <Badge tone="green">Connected</Badge> : linked ? <Badge tone="amber">Check connection</Badge> : <Badge>Not connected</Badge>}>
         {!configured ? (
           <p className="text-[13px] text-body">Vercel isn&apos;t connected to the portal yet. Add an <code className="rounded bg-sidebar px-1">ANALYTICS_VERCEL_TOKEN</code> in Vercel&apos;s Environment Variables, then redeploy.</p>
@@ -54,6 +56,8 @@ export async function DataSection({ client }: { client: Client }) {
       </Card>
 
       <InquiryFormCard client={client} />
+
+      <SnippetCard client={client} />
 
       <Card title="Facebook & Instagram" what="Access to the client's Meta Business Suite"
         status={client.meta_access_confirmed ? <Badge tone="green">Access confirmed</Badge> : <Badge tone="amber">Not confirmed</Badge>}>
@@ -173,6 +177,52 @@ async function MetaEventsCard({ client }: { client: Client }) {
             ))}
           </ul>
         )
+      )}
+    </Card>
+  );
+}
+
+// One script tag for WordPress, Wix, Squarespace… counts visitors and sends every form to Inquiries.
+async function SnippetCard({ client }: { client: Client }) {
+  const key = client.inquiry_form_key;
+  const base = process.env.PORTAL_URL?.replace(/\/$/, "") || (await siteOrigin());
+  const tag = key ? `<script src="${base}/s.js" data-key="${key}" defer></script>` : "";
+  const since = client.tracking_since;
+  const month = monthRange(0);
+  const stats = since ? await trackerStats(client.id, month) : null;
+  const { data: last } = since
+    ? await createAdminClient().from("page_views").select("at").eq("client_id", client.id).order("at", { ascending: false }).limit(1).maybeSingle()
+    : { data: null };
+  return (
+    <Card title="Website snippet (WordPress & other sites)" what="One line of code on the client's website: counts visitors and sends every contact form into Inquiries"
+      status={since ? <Badge tone="green">Receiving visits</Badge> : key ? <Badge tone="amber">Not installed yet</Badge> : <Badge>Needs a form key</Badge>}>
+      {!key ? (
+        <p className="text-[13px] text-body">Create a form key in the &ldquo;Website inquiry form&rdquo; card above first. The snippet uses the same key.</p>
+      ) : (
+        <div className="flex flex-col gap-3 text-[13px]">
+          <div className="flex flex-wrap items-center gap-2">
+            <code className="min-w-0 flex-1 truncate rounded bg-sidebar px-2 py-1.5">{tag}</code>
+            <CopyButton text={tag} label="Copy snippet" />
+          </div>
+          {since && stats?.ok && (
+            <p className="text-slate">
+              {month.label}: <span className="font-medium text-ink">{stats.data.visitors.toLocaleString("en-US")} visitors</span> · {stats.data.pageviews.toLocaleString("en-US")} page views
+              {last?.at ? <> · last visit {fmtDateTime(last.at)}</> : null}
+            </p>
+          )}
+          <details className="rounded-control border border-line-soft px-3 py-2" open={!since}>
+            <summary className="cursor-pointer font-medium">How to add it to WordPress (5 minutes)</summary>
+            <ol className="mt-2 flex list-decimal flex-col gap-1.5 pl-5 text-body">
+              <li>In WordPress, go to <strong>Plugins → Add New</strong>, search <strong>WPCode</strong> (&ldquo;Insert Headers and Footers&rdquo;), then <strong>Install</strong> and <strong>Activate</strong>.</li>
+              <li>Go to <strong>Code Snippets → Header &amp; Footer</strong>.</li>
+              <li>Paste the snippet into the <strong>Footer</strong> box and click <strong>Save Changes</strong>.</li>
+              <li>If the site uses a cache plugin (WP Rocket, LiteSpeed, W3 Total Cache…), click <strong>Clear cache</strong>.</li>
+              <li>Open the website in a private window. This card turns green within a minute.</li>
+              <li>Test the contact form with your own details. The inquiry appears in the portal right away.</li>
+            </ol>
+            <p className="mt-2 text-slate">Works with Contact Form 7, WPForms, Elementor, Gravity Forms, Fluent Forms and most others. Search boxes and login forms are ignored. Wix / Squarespace: Settings → Custom code → add to all pages, body end.</p>
+          </details>
+        </div>
       )}
     </Card>
   );

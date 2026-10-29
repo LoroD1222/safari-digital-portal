@@ -10,7 +10,7 @@ import { createClient } from "@/lib/supabase/client";
 // Older links arrive with the session in the URL fragment (#access_token=…); that still works.
 type Phase = "ready" | "working" | "failed";
 
-export function Confirm({ token }: { token: { hash: string; type: "invite" | "recovery" } | null }) {
+export function Confirm({ token, signedInAs }: { token: { hash: string; type: "invite" | "recovery" } | null; signedInAs: string | null }) {
   const [phase, setPhase] = useState<Phase>(token ? "ready" : "working");
 
   useEffect(() => {
@@ -30,7 +30,9 @@ export function Confirm({ token }: { token: { hash: string; type: "invite" | "re
   async function continueSetup() {
     if (!token) return;
     setPhase("working");
-    const { error } = await createClient().auth.verifyOtp({ token_hash: token.hash, type: token.type });
+    const supabase = createClient();
+    if (signedInAs) await supabase.auth.signOut({ scope: "local" });
+    const { error } = await supabase.auth.verifyOtp({ token_hash: token.hash, type: token.type });
     if (error) setPhase("failed");
     else window.location.replace("/reset-password?welcome=1");
   }
@@ -48,10 +50,17 @@ export function Confirm({ token }: { token: { hash: string; type: "invite" | "re
         <div className="flex max-w-sm flex-col items-center gap-3">
           <h1 className="text-xl font-semibold">{token?.type === "recovery" ? "Set a new password" : "Welcome to your Safari Digital portal"}</h1>
           <p className="text-slate">Click below to continue. You&apos;ll choose your password on the next screen.</p>
+          {signedInAs && (
+            <div role="note" className="rounded-card border border-warn-text/20 bg-warn-bg px-4 py-3 text-left text-[14px] text-warn-text">
+              You&apos;re signed in on this browser as <strong className="break-all">{signedInAs}</strong>. Continuing will sign you out of that account.
+              To keep it, open this link in a private window instead.
+            </div>
+          )}
           <button type="button" onClick={continueSetup}
             className="mt-1 inline-flex h-11 items-center rounded-control bg-brand px-6 font-semibold text-white hover:bg-brand-hover">
-            {token?.type === "recovery" ? "Continue" : "Set up my account"}
+            {signedInAs ? "Sign out and continue" : token?.type === "recovery" ? "Continue" : "Set up my account"}
           </button>
+          {signedInAs && <Link href="/" className="text-[14px] font-medium text-brand no-underline">Go back to {signedInAs}</Link>}
         </div>
       ) : (
         <p role="status" className="text-slate">Setting up your account…</p>

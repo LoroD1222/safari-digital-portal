@@ -38,5 +38,15 @@ export async function updateSession(request: NextRequest) {
     response.cookies.getAll().forEach((c) => redirect.cookies.set(c));
     return redirect;
   }
+  // Invited but no password yet: finish setup first (they'd otherwise be locked out next time).
+  const meta = data?.claims?.user_metadata as { needs_password?: boolean } | undefined;
+  if (signedIn && meta?.needs_password && !isPublic && path !== "/reset-password" && !path.startsWith("/api/")) {
+    const to = request.nextUrl.clone();
+    to.pathname = "/reset-password";
+    to.search = "?welcome=1";
+    const redirect = NextResponse.redirect(to);
+    response.cookies.getAll().forEach((c) => redirect.cookies.set(c));
+    return redirect;
+  }
   return response;
 }

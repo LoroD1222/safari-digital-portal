@@ -26,7 +26,7 @@ async function emailInvite(email: string, link: string, clientId: string, kind: 
   const ok = await send([email], kind === "added" ? {
     subject: `You now have access to ${company} on the Safari Digital portal`,
     heading: "You've been added",
-    intro: `Safari Digital gave ${email} access to the ${company} portal. Sign in with your existing password.`,
+    intro: `Safari Digital gave ${email} access to the ${company} portal. Sign in with your existing password. Forgot it? Use "Forgot password" on the sign-in page.`,
     path: "/login", url: login, button: "Sign in",
   } : {
     subject: kind === "invite" ? `You're invited to the ${company} portal by Safari Digital` : "Your new link to the Safari Digital portal",
@@ -39,6 +39,13 @@ async function emailInvite(email: string, link: string, clientId: string, kind: 
     footer: "The button works once and expires after 24 hours. If it has expired, ask Safari Digital for a new link.",
   }, origin);
   return ok ? { ok: true } : { ok: false, why: "Resend refused the email. Copy the link below and send it yourself." };
+}
+
+// Until they choose a password, every page sends them to the "Choose a password" screen.
+async function needsPassword(userId: string) {
+  const admin = createAdminClient();
+  const { data } = await admin.auth.admin.getUserById(userId);
+  await admin.auth.admin.updateUserById(userId, { user_metadata: { ...(data?.user?.user_metadata ?? {}), needs_password: true } });
 }
 
 // Give an email access to a client's portal: link an existing account or create an invite.
@@ -55,6 +62,17 @@ export async function inviteToPortal(clientId: string, email: string, sendEmail:
     }
     const { error } = await admin.from("profiles").update({ client_id: clientId }).eq("id", existing.id);
     if (error) return { error: "Couldn't link the account. " + error.message };
+    const { data: au } = await admin.auth.admin.getUserById(existing.id);
+    if (!au?.user?.last_sign_in_at) {
+      // Never signed in, so they have no password yet: send a set-password link, not "sign in".
+      const origin = await siteOrigin();
+      const res = await admin.auth.admin.generateLink({ type: "recovery", email, options: { redirectTo: `${origin}/auth/confirm` } });
+      if (res.error) return { error: "Couldn't create the invite. " + res.error.message };
+      await needsPassword(existing.id);
+      const link = safeLink(origin, res.data.properties.hashed_token, "recovery");
+      const m = sendEmail ? await emailInvite(email, link, clientId, "invite") : null;
+      return { invited: email, inviteLink: link, emailed: !!m?.ok, emailError: m && !m.ok ? m.why : undefined };
+    }
     const mail = sendEmail ? await emailInvite(email, "", clientId, "added") : null;
     return { linked: email, emailed: !!mail?.ok, emailError: mail && !mail.ok ? mail.why : undefined };
   }
@@ -63,6 +81,7 @@ export async function inviteToPortal(clientId: string, email: string, sendEmail:
   if (error || !data?.user) return { error: "Couldn't create the invite. " + (error?.message ?? "") };
   const { error: linkErr } = await admin.from("profiles").update({ client_id: clientId }).eq("id", data.user.id);
   if (linkErr) return { error: "The account was created but couldn't be linked. " + linkErr.message };
+  await needsPassword(data.user.id);
   const link = safeLink(origin, data.properties.hashed_token, "invite");
   const mail = sendEmail ? await emailInvite(email, link, clientId, "invite") : null;
   return { invited: email, inviteLink: link, emailed: !!mail?.ok, emailError: mail && !mail.ok ? mail.why : undefined };
@@ -91,6 +110,7 @@ export async function newInviteLink(clientId: string, email: string): Promise<Ac
   // Works for people who haven't set a password yet; otherwise send a reset link.
   const res = await admin.auth.admin.generateLink({ type: "recovery", email, options: { redirectTo: `${origin}/auth/confirm` } });
   if (res.error) return { error: "Couldn't create a link. " + res.error.message };
+  if (res.data.user) await needsPassword(res.data.user.id);
   const link = safeLink(origin, res.data.properties.hashed_token, "recovery");
   const mail = await emailInvite(email, link, clientId, "new_link");
   revalidatePath(`/admin/clients/${clientId}`);

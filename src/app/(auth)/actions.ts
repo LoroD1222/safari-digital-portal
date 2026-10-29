@@ -41,7 +41,8 @@ export async function updatePassword(_: FormState, form: FormData): Promise<Form
   const supabase = await createClient();
   const { data } = await supabase.auth.getClaims();
   if (!data?.claims) return { error: "This reset link has expired. Ask for a new one." };
-  const { error } = await supabase.auth.updateUser({ password });
+  const { error } = await supabase.auth.updateUser({ password, data: { needs_password: false } });
   if (error) return { error: "We couldn't update your password. " + error.message };
+  await supabase.auth.refreshSession(); // new token without needs_password, so the portal opens
   redirect("/");
 }

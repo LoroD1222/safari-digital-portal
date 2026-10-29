@@ -1,10 +1,9 @@
 import "server-only";
-import { Document, Image, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
+import { Document, Font, Image, Page, Text, View, renderToBuffer } from "@react-pdf/renderer";
 import { INVOICE_LOGO } from "./invoice-logo";
-import { formatMoney, invoiceState, type Invoice } from "./types";
-
-// The invoice PDF: dark header with the logo, billed from/to, line items, total,
-// and an M-Pesa payment box. Built-in Helvetica keeps it light for serverless.
+import { INTER_400, INTER_500, INTER_600, INTER_700 } from "./invoice-fonts";
+import { invoiceState } from "./types";
+import type { Invoice } from "./types";
 
 export type InvoicePdfData = {
   invoice: Invoice;
@@ -12,110 +11,143 @@ export type InvoicePdfData = {
   from: string; tin: string | null; mpesaNumber: string | null; mpesaName: string | null; terms: string | null;
 };
 
-const C = { ink: "#000321", slate: "#565A7C", body: "#3F4458", line: "#E6E8EC", soft: "#F7F8F6", brand: "#1A6647", mint: "#5DC49A", red: "#9C2F2B" };
-const s = StyleSheet.create({
-  page: { paddingBottom: 40, fontFamily: "Helvetica", fontSize: 9.5, color: C.ink, lineHeight: 1.45 },
-  header: { backgroundColor: "#000000", paddingVertical: 22, paddingHorizontal: 40, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  logo: { width: 170, height: 27 },
-  tag: { color: C.mint, fontFamily: "Helvetica-Bold", fontSize: 11, letterSpacing: 2 },
-  wrap: { paddingHorizontal: 40 },
-  meta: { flexDirection: "row", justifyContent: "space-between", marginTop: 22, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: C.line },
-  label: { fontSize: 7.5, color: C.slate, letterSpacing: 1, textTransform: "uppercase", marginBottom: 3, fontFamily: "Helvetica-Bold" },
-  big: { fontSize: 20, fontFamily: "Helvetica-Bold", marginTop: 18 },
-  cols: { flexDirection: "row", gap: 24, marginTop: 16 },
-  col: { flex: 1 },
-  table: { marginTop: 22, borderWidth: 1, borderColor: C.line, borderRadius: 6 },
-  th: { flexDirection: "row", backgroundColor: C.soft, paddingVertical: 7, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: C.line },
-  tr: { flexDirection: "row", paddingVertical: 9, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: C.line },
-  totalRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 12, paddingHorizontal: 12 },
-  pay: { marginTop: 22, borderWidth: 1, borderColor: C.line, borderRadius: 6, padding: 14 },
-  payBoxes: { flexDirection: "row", gap: 10, marginTop: 10 },
-  payBox: { flex: 1, backgroundColor: C.soft, borderRadius: 4, paddingVertical: 9, alignItems: "center" },
-});
+Font.register({ family: "Inter", fonts: [
+  { src: INTER_400, fontWeight: 400 }, { src: INTER_500, fontWeight: 500 },
+  { src: INTER_600, fontWeight: 600 }, { src: INTER_700, fontWeight: 700 },
+] });
+Font.registerHyphenationCallback((w) => [w]);
 
+const C = { ink: "#000321", slate: "#565A7C", body: "#3F4458", line: "#E6E8EC", soft: "#F7F8F6", brand: "#1A6647", forest: "#0D3B2E", mint: "#5DC49A", mintBg: "#F1FAF6", red: "#B42318", redBg: "#FEF3F2" };
+const usd = (n: number) => `${n < 0 ? "-" : ""}$${Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const day = (iso: string) => new Date(iso + "T00:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 
-function InvoiceDoc({ d }: { d: InvoicePdfData }) {
+function parts(d: InvoicePdfData) {
   const i = d.invoice;
   const state = invoiceState(i);
-  const status = state === "paid" ? "PAID" : state === "overdue" ? "OVERDUE" : state === "cancelled" ? "CANCELLED" : "INVOICE";
-  const statusColor = state === "paid" ? C.mint : state === "overdue" || state === "cancelled" ? "#F2A9A4" : C.mint;
+  const items = i.items.map((x) => ({ ...x, amount: Number(x.amount) }));
+  const subtotal = items.filter((x) => x.amount > 0).reduce((n, x) => n + x.amount, 0);
+  const discounts = items.filter((x) => x.amount < 0);
+  const fromLines = d.from.split("\n").filter(Boolean);
+  const to = [d.client.contact_name, d.client.contact_email, d.client.whatsapp, d.client.website_url?.replace(/^https?:\/\//, "")].filter(Boolean) as string[];
+  return { i, state, items, subtotal, discounts, total: Number(i.total), fromLines, to };
+}
+
+function Header({ right }: { right: React.ReactNode }) {
+  return (
+    <View style={{ backgroundColor: "#000000", paddingVertical: 22, paddingHorizontal: 44, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+      {/* eslint-disable-next-line jsx-a11y/alt-text */}
+      <Image src={INVOICE_LOGO} style={{ width: 170, height: 27 }} />
+      {right}
+    </View>
+  );
+}
+
+function Footer({ d }: { d: InvoicePdfData }) {
+  const f = d.from.split("\n").filter(Boolean);
+  const line = [f[0], f.length > 1 ? f[f.length - 1] : null, d.tin ? `TIN ${d.tin}` : null].filter(Boolean).join("  ·  ");
+  return (
+    <>
+      <View fixed style={{ position: "absolute", left: 44, right: 44, bottom: 42, height: 1, backgroundColor: C.line }} />
+      <Text fixed style={{ position: "absolute", left: 44, right: 44, bottom: 26, fontSize: 7, color: C.slate, textAlign: "center" }}>{line}</Text>
+    </>
+  );
+}
+
+// The invoice PDF ("Statement" design): black header with the logo, key facts on a
+// mint band, striped lines table, dark total bar and M-Pesa tiles. Inter is embedded.
+function DesignB({ d }: { d: InvoicePdfData }) {
+  const { i, state, items, subtotal, discounts, total, to, fromLines } = parts(d);
+  const paid = state === "paid", overdue = state === "overdue";
+  const lbl = { fontSize: 7, fontWeight: 600, color: C.slate, letterSpacing: 1.1, textTransform: "uppercase" as const };
+  const status = paid ? "Paid" : overdue ? "Overdue" : state === "cancelled" ? "Cancelled" : "Unpaid";
   return (
     <Document title={`Invoice ${i.number} · ${d.client.name}`} author="Safari Digital">
-      <Page size="A4" style={s.page}>
-        <View style={s.header}>
-          {/* eslint-disable-next-line jsx-a11y/alt-text */}
-          <Image src={INVOICE_LOGO} style={s.logo} />
-          <Text style={[s.tag, { color: statusColor }]}>{status}</Text>
+      <Page size="A4" style={{ fontFamily: "Inter", fontSize: 9, color: C.ink, paddingBottom: 60, lineHeight: 1.45 }}>
+        <Header right={<Text style={{ color: C.mint, fontSize: 10, fontWeight: 700, letterSpacing: 2.5 }}>INVOICE</Text>} />
+        <View style={{ backgroundColor: C.mintBg, paddingVertical: 16, paddingHorizontal: 44, flexDirection: "row", alignItems: "center" }}>
+          {[["Invoice no.", i.number], ["Issued", day(i.issue_date)], ["Due", day(i.due_date)]].map(([k, v]) => (
+            <View key={k} style={{ flex: 1 }}><Text style={lbl}>{k}</Text><Text style={{ fontWeight: 600, marginTop: 3, fontSize: 10 }}>{v}</Text></View>
+          ))}
+          <View style={{ flex: 1.3, alignItems: "flex-end" }}>
+            <Text style={lbl}>{paid ? "Amount paid" : "Amount due"}</Text>
+            <Text style={{ fontWeight: 700, fontSize: 20, lineHeight: 1.2, color: overdue ? C.red : C.forest, marginTop: 2 }}>{usd(total)}</Text>
+          </View>
         </View>
-        <View style={s.wrap}>
-          <View style={s.meta}>
-            <View><Text style={s.label}>Invoice number</Text><Text style={{ fontFamily: "Helvetica-Bold" }}>{i.number}</Text></View>
-            <View><Text style={s.label}>Invoice date</Text><Text>{day(i.issue_date)}</Text></View>
-            <View><Text style={s.label}>Payment due</Text><Text style={{ fontFamily: "Helvetica-Bold", color: state === "overdue" ? C.red : C.ink }}>{day(i.due_date)}</Text></View>
-            <View><Text style={s.label}>Amount due</Text><Text style={{ fontFamily: "Helvetica-Bold" }}>{state === "paid" ? formatMoney(0, i.currency) : formatMoney(Number(i.total), i.currency)}</Text></View>
+
+        <View style={{ paddingHorizontal: 44 }}>
+          <View style={{ flexDirection: "row", marginTop: 26, gap: 28 }}>
+            <View style={{ flex: 1 }}>
+              <Text style={lbl}>Billed to</Text>
+              <Text style={{ fontWeight: 700, fontSize: 13, marginTop: 5, marginBottom: 2, lineHeight: 1.25 }}>{d.client.name}</Text>
+              {to.map((t) => <Text key={t} style={{ color: C.body }}>{t}</Text>)}
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={lbl}>From</Text>
+              <Text style={{ fontWeight: 700, fontSize: 13, marginTop: 5, marginBottom: 2, lineHeight: 1.25 }}>{fromLines[0] ?? "Safari Digital"}</Text>
+              {fromLines.slice(1).map((t) => <Text key={t} style={{ color: C.body }}>{t}</Text>)}
+              {d.tin ? <Text style={{ color: C.body }}>TIN {d.tin}</Text> : null}
+            </View>
+            <View style={{ width: 70, alignItems: "flex-end" }}>
+              <Text style={lbl}>Status</Text>
+              <Text style={{ marginTop: 5, fontWeight: 700, color: paid ? C.brand : overdue ? C.red : C.ink }}>{status}</Text>
+            </View>
           </View>
 
-          <Text style={s.big}>{d.client.name}</Text>
-          <View style={s.cols}>
-            <View style={s.col}>
-              <Text style={s.label}>Billed from</Text>
-              <Text style={{ color: C.body }}>{d.from}</Text>
-              {d.tin ? <Text style={{ color: C.body }}>TIN: {d.tin}</Text> : null}
+          <View style={{ marginTop: 26, borderRadius: 6, overflow: "hidden", borderWidth: 1, borderColor: C.line }}>
+            <View style={{ flexDirection: "row", backgroundColor: C.forest, paddingVertical: 8, paddingHorizontal: 12 }}>
+              <Text style={{ flex: 1, color: "#FFFFFF", fontSize: 7.5, fontWeight: 600, letterSpacing: 1 }}>DESCRIPTION</Text>
+              <Text style={{ width: 90, textAlign: "right", color: "#FFFFFF", fontSize: 7.5, fontWeight: 600, letterSpacing: 1 }}>AMOUNT</Text>
             </View>
-            <View style={s.col}>
-              <Text style={s.label}>Billed to</Text>
-              <Text style={{ color: C.body }}>{[d.client.name, d.client.contact_name, d.client.contact_email, d.client.whatsapp, d.client.website_url].filter(Boolean).join("\n")}</Text>
-            </View>
-          </View>
-
-          <View style={s.table}>
-            <View style={s.th}>
-              <Text style={[s.label, { flex: 1, marginBottom: 0 }]}>Description</Text>
-              <Text style={[s.label, { width: 90, textAlign: "right", marginBottom: 0 }]}>Amount</Text>
-            </View>
-            {i.items.map((it, n) => (
-              <View key={n} style={s.tr} wrap={false}>
-                <View style={{ flex: 1, paddingRight: 12 }}>
-                  <Text style={{ fontFamily: "Helvetica-Bold" }}>{it.description}</Text>
-                  {it.details ? <Text style={{ color: C.slate, fontSize: 8.5, marginTop: 2 }}>{it.details}</Text> : null}
+            {items.map((it, n) => (
+              <View key={n} wrap={false} style={{ flexDirection: "row", paddingVertical: 10, paddingHorizontal: 12, backgroundColor: n % 2 ? C.soft : "#FFFFFF" }}>
+                <View style={{ flex: 1, paddingRight: 16 }}>
+                  <Text style={{ fontWeight: 600, color: it.amount < 0 ? C.brand : C.ink }}>{it.description}</Text>
+                  {it.details ? <Text style={{ color: C.slate, fontSize: 8, marginTop: 2 }}>{it.details}</Text> : null}
                 </View>
-                <Text style={{ width: 90, textAlign: "right", color: Number(it.amount) < 0 ? C.brand : C.ink }}>
-                  {Number(it.amount) < 0 ? `-${formatMoney(Math.abs(Number(it.amount)), i.currency)}` : formatMoney(Number(it.amount), i.currency)}
-                </Text>
+                <Text style={{ width: 90, textAlign: "right", fontWeight: 500, color: it.amount < 0 ? C.brand : C.ink }}>{usd(it.amount)}</Text>
               </View>
             ))}
-            <View style={s.totalRow}>
-              <Text style={{ fontFamily: "Helvetica-Bold", fontSize: 11 }}>Total</Text>
-              <Text style={{ fontFamily: "Helvetica-Bold", fontSize: 16 }}>{formatMoney(Number(i.total), i.currency)}</Text>
+            {discounts.length > 0 && (
+              <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 24, paddingVertical: 8, paddingHorizontal: 12, borderTopWidth: 1, borderTopColor: C.line }}>
+                <Text style={{ color: C.body }}>Subtotal {usd(subtotal)}</Text>
+                <Text style={{ color: C.brand }}>Discount {usd(discounts.reduce((n, x) => n + x.amount, 0))}</Text>
+              </View>
+            )}
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: "#000000", paddingVertical: 12, paddingHorizontal: 12 }}>
+              <Text style={{ color: "#FFFFFF", fontWeight: 600, fontSize: 10.5 }}>{paid ? "Total paid (USD)" : "Total due (USD)"}</Text>
+              <Text style={{ color: C.mint, fontWeight: 700, fontSize: 16 }}>{usd(total)}</Text>
             </View>
           </View>
 
-          {i.notes ? <Text style={{ marginTop: 12, color: C.body }}>{i.notes}</Text> : null}
+          {i.notes ? <Text style={{ marginTop: 16, color: C.body }}>{i.notes}</Text> : null}
 
-          {state === "paid" ? (
-            <View style={[s.pay, { backgroundColor: "#F1FAF6", borderColor: "#BFE3CF" }]}>
-              <Text style={{ fontFamily: "Helvetica-Bold", color: C.brand }}>Paid{i.paid_at ? ` on ${day(i.paid_at)}` : ""}{i.payment_method ? ` · ${i.payment_method}` : ""}{i.payment_ref ? ` · Ref ${i.payment_ref}` : ""}</Text>
-              <Text style={{ color: C.body, marginTop: 2 }}>Thank you for your payment.</Text>
+          {paid ? (
+            <View wrap={false} style={{ marginTop: 24, padding: 14, borderRadius: 6, backgroundColor: C.mintBg, borderWidth: 1, borderColor: "#BFE3CF" }}>
+              <Text style={{ fontWeight: 700, color: C.brand, fontSize: 10.5 }}>Paid, thank you!</Text>
+              <Text style={{ color: C.body, marginTop: 2 }}>{[i.paid_at ? `Received ${day(i.paid_at)}` : null, i.payment_method, i.payment_ref ? `Ref ${i.payment_ref}` : null].filter(Boolean).join("  ·  ")}</Text>
             </View>
           ) : (
-            <View style={s.pay} wrap={false}>
-              <Text style={{ fontFamily: "Helvetica-Bold", fontSize: 11 }}>Pay with M-Pesa</Text>
-              {d.terms ? <Text style={{ color: C.body, marginTop: 4, fontSize: 8.5 }}>{d.terms}</Text> : null}
-              <View style={s.payBoxes}>
-                <View style={s.payBox}><Text style={s.label}>Number</Text><Text style={{ fontFamily: "Helvetica-Bold", fontSize: 12 }}>{d.mpesaNumber ?? "—"}</Text></View>
-                <View style={s.payBox}><Text style={s.label}>Name</Text><Text style={{ fontFamily: "Helvetica-Bold", fontSize: 12 }}>{d.mpesaName ?? "—"}</Text></View>
-                <View style={s.payBox}><Text style={s.label}>Reference</Text><Text style={{ fontFamily: "Helvetica-Bold", fontSize: 12 }}>{i.number}</Text></View>
+            <View wrap={false} style={{ marginTop: 24 }}>
+              <Text style={{ fontWeight: 700, fontSize: 11 }}>Pay with M-Pesa</Text>
+              <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
+                {[["M-Pesa number", d.mpesaNumber ?? "—"], ["Account name", d.mpesaName ?? "—"], ["Reference", i.number]].map(([k, v]) => (
+                  <View key={k} style={{ flex: 1, borderRadius: 6, borderWidth: 1, borderColor: C.line, paddingVertical: 10, paddingHorizontal: 12 }}>
+                    <Text style={lbl}>{k}</Text>
+                    <Text style={{ fontWeight: 700, fontSize: 12, marginTop: 3 }}>{v}</Text>
+                  </View>
+                ))}
               </View>
+              {d.terms ? <Text style={{ color: C.slate, fontSize: 7.5, marginTop: 10, lineHeight: 1.5 }}>{d.terms}</Text> : null}
             </View>
           )}
-          <Text style={{ marginTop: 24, color: C.slate, fontSize: 8, textAlign: "center" }}>Questions about this invoice? Reply on WhatsApp or email Safari Digital.</Text>
+          <Text style={{ marginTop: 22, color: C.slate, fontSize: 8.5 }}>Questions about this invoice? Reply on WhatsApp or by email.</Text>
         </View>
+        <Footer d={d} />
       </Page>
     </Document>
   );
 }
 
 export async function invoicePdf(d: InvoicePdfData): Promise<Buffer> {
-  return renderToBuffer(<InvoiceDoc d={d} />);
+  return renderToBuffer(<DesignB d={d} />);
 }

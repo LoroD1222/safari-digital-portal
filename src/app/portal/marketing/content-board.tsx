@@ -2,7 +2,8 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icons";
-import { CONTENT_LABEL, KIND_LABEL, PLATFORM_LABEL, type ContentItem, type ContentStatus } from "@/lib/types";
+import { CONTENT_LABEL, KIND_LABEL, PLATFORM_LABEL, type ContentItem, type ContentStatus, type SignedSlide } from "@/lib/types";
+import { Slider } from "@/components/slider";
 import { reviewContent } from "./actions";
 
 const TONE: Record<ContentStatus, [string, string, string]> = {
@@ -68,7 +69,7 @@ function Thumb({ item, url, className }: { item: ContentItem; url?: string; clas
   );
 }
 
-export function ContentBoard({ items, urls, comments, openId }: { items: ContentItem[]; urls: Record<string, string>; comments: BoardComment[]; openId?: string | null }) {
+export function ContentBoard({ items, urls, slides = {}, comments, openId }: { items: ContentItem[]; urls: Record<string, string>; slides?: Record<string, SignedSlide[]>; comments: BoardComment[]; openId?: string | null }) {
   const router = useRouter();
   const [filter, setFilter] = useState<(typeof FILTERS)[number][0]>("all");
   const [open, setOpen] = useState<string | null>(openId ?? null);
@@ -169,8 +170,9 @@ export function ContentBoard({ items, urls, comments, openId }: { items: Content
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(0,3,33,0.45)] p-6" onClick={(e) => { if (e.target === e.currentTarget) setOpen(null); }}>
           <div role="dialog" aria-modal="true" aria-labelledby="dlg-h" className="flex max-h-full w-full max-w-[820px] flex-wrap overflow-auto rounded-card bg-white shadow-[0_24px_64px_rgba(0,3,33,0.25)]">
             <div className="flex flex-[1_1_260px] items-center justify-center bg-[#0B1A14] p-5">
-              <div className={"relative w-full overflow-hidden rounded-[10px] bg-black " + (cur.kind === "post" || (cur.kind === "ad" && !cur.media_type?.startsWith("video/")) ? "aspect-[4/5] max-w-[320px]" : "aspect-[9/16] max-w-[220px]")}>
-                {urls[cur.id] ? (cur.media_type?.startsWith("video/")
+              <div className={"relative w-full overflow-hidden rounded-[10px] bg-black " + (cur.kind === "post" || cur.kind === "carousel" || (cur.kind === "ad" && !cur.media_type?.startsWith("video/")) ? "aspect-[4/5] max-w-[320px]" : "aspect-[9/16] max-w-[220px]")}>
+                {(slides[cur.id]?.length ?? 0) > 1 ? <div className="absolute inset-0"><Slider slides={slides[cur.id]} alt={cur.title} controls /></div>
+                  : urls[cur.id] ? (cur.media_type?.startsWith("video/")
                   ? <video src={urls[cur.id]} controls playsInline preload="metadata" className="absolute inset-0 h-full w-full object-contain" />
                   // eslint-disable-next-line @next/next/no-img-element
                   : <img src={urls[cur.id]} alt={cur.title} className="absolute inset-0 h-full w-full object-contain" />)

@@ -3,12 +3,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { signMedia } from "@/lib/content";
+import { signSlides } from "@/lib/content";
 import { CONTENT_LABEL, KIND_LABEL, type ContentComment, type ContentItem, type ContentStatus } from "@/lib/types";
 import { CONTENT_TONE } from "@/lib/status-tone";
 import { Badge, PageHeader, buttonClass } from "@/components/ui";
 import { BackLink, Section } from "@/components/blocks";
-import { Media } from "@/components/media";
+import { Slider } from "@/components/slider";
 import { ContentHistory } from "@/components/content-history";
 import { EditContentForm } from "../content-form";
 import { RevisionUpload } from "../revision";
@@ -30,7 +30,7 @@ export default async function AdminContentItem(props: PageProps<"/admin/content/
   if (!data) notFound();
   const item = data as ContentItem & { clients: { name: string } | null };
   const { data: comments } = await supabase.from("content_comments").select("*").eq("content_id", id).order("created_at", { ascending: false });
-  const urls = await signMedia(supabase, [item]);
+  const slides = (await signSlides(supabase, [item]))[item.id] ?? [];
   const s = item.status;
   const lastFeedback = (comments as ContentComment[] | null)?.find((c) => c.kind === "changes_requested");
 
@@ -49,7 +49,7 @@ export default async function AdminContentItem(props: PageProps<"/admin/content/
       <div className="flex flex-wrap gap-8">
         <div className="flex w-full max-w-[300px] flex-col gap-3">
           <div className="aspect-[4/5] overflow-hidden rounded-card border border-line bg-sidebar">
-            <Media url={urls[item.id] ?? null} type={item.media_type} alt={item.title} controls />
+            <Slider slides={slides.length ? slides : [{ url: null, type: item.media_type }]} alt={item.title} controls />
           </div>
           <div className="flex flex-wrap gap-2">
             {(s === "draft" || s === "changes_requested") && item.media_path && <StatusButton id={id} to="awaiting_approval" label="Send for approval" primary />}
@@ -62,8 +62,8 @@ export default async function AdminContentItem(props: PageProps<"/admin/content/
         <div className="flex min-w-[280px] flex-1 flex-col gap-6">
           <EditContentForm item={item} />
           <Section title="Upload a new version">
-            <p className="-mt-1 text-[13px] text-slate">Replaces the file on this same item and sends it to the client again.</p>
-            <RevisionUpload id={item.id} clientId={item.client_id} version={item.version} />
+            <p className="-mt-1 text-[13px] text-slate">{item.kind === "carousel" ? "Replaces all the slides on this same item and sends it to the client again." : "Replaces the file on this same item and sends it to the client again."}</p>
+            <RevisionUpload id={item.id} clientId={item.client_id} version={item.version} carousel={item.kind === "carousel"} />
           </Section>
           <ContentHistory items={(comments ?? []) as ContentComment[]} clientLabel={item.clients?.name ?? "Client"} />
           <details className="border-t border-line-soft pt-4 text-[13px]">

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getPortalContext } from "@/lib/portal";
 import { createClient } from "@/lib/supabase/server";
-import { planProgress, signMedia } from "@/lib/content";
+import { planProgress, signMedia, signSlides } from "@/lib/content";
 import { monthBounds } from "@/lib/dates";
 import { MARKETING_LABEL, type ContentComment, type ContentItem } from "@/lib/types";
 import { MarketingTabs } from "./tabs";
@@ -21,8 +21,9 @@ export default async function ContentPage(props: PageProps<"/portal/marketing">)
   // "This month": everything not yet published, plus what was published this month.
   const items = ((data ?? []) as ContentItem[]).filter((i) => i.status !== "published" || (i.published_at ?? "") >= month.start);
   const awaiting = items.filter((i) => i.status === "awaiting_approval").length;
-  const [urls, { data: cm }] = await Promise.all([
+  const [urls, slides, { data: cm }] = await Promise.all([
     signMedia(supabase, items),
+    signSlides(supabase, items.filter((i) => i.kind === "carousel")),
     items.length
       ? supabase.from("content_comments").select("*").in("content_id", items.map((i) => i.id)).not("body", "is", null).order("created_at")
       : Promise.resolve({ data: [] }),
@@ -72,7 +73,7 @@ export default async function ContentPage(props: PageProps<"/portal/marketing">)
           </div>
         )}
       </div>
-      <ContentBoard items={items} urls={urls} comments={comments} openId={typeof sp.open === "string" ? sp.open : null} />
+      <ContentBoard items={items} urls={urls} slides={slides} comments={comments} openId={typeof sp.open === "string" ? sp.open : null} />
     </>
   );
 }

@@ -9,7 +9,7 @@ import type { ContentStatus } from "@/lib/types";
 
 export type ContentFormState = { error?: string; saved?: boolean };
 
-const KINDS = ["reel", "post", "story", "ad"];
+const KINDS = ["reel", "post", "story", "ad", "carousel"];
 const PLATFORMS = ["instagram", "facebook", "both"];
 const UUID = /^[0-9a-f-]{36}$/i;
 const s = (f: FormData, k: string) => { const v = f.get(k); return typeof v === "string" ? v.trim() : ""; };
@@ -29,8 +29,23 @@ function fields(form: FormData) {
 
 function saveError(message: string) {
   if (message.includes("as_ad")) return "Run 0015_content_ads.sql in Supabase first.";
-  if (message.includes("kind_check")) return "Run 0016_content_kind_ad.sql in Supabase first.";
+  if (message.includes("extra_media")) return "Run 0017_carousel_meta_ads.sql in Supabase first.";
+  if (message.includes("kind_check")) return "Run 0017_carousel_meta_ads.sql in Supabase first.";
   return message.includes("content_items") ? "Run 0005_portal.sql in Supabase first." : "Couldn't save. " + message;
+}
+
+// Carousel slides after the first, validated to sit in this item's own folder.
+function slides(raw: string, clientId: string, id: string) {
+  let list: unknown;
+  try { list = JSON.parse(raw || "[]"); } catch { return null; }
+  if (!Array.isArray(list) || list.length > 9) return null;
+  const out: { path: string; type: string }[] = [];
+  for (const x of list) {
+    const path = typeof x?.path === "string" ? x.path : "", type = typeof x?.type === "string" ? x.type.slice(0, 100) : "";
+    if (!path.startsWith(`${clientId}/${id}/`)) return null;
+    out.push({ path, type });
+  }
+  return out;
 }
 
 async function announce(clientId: string, id: string, title: string, kind: string, ad?: boolean) {
@@ -55,10 +70,14 @@ export async function createContent(_: ContentFormState, form: FormData): Promis
   if (!f.title) return { error: "Add a title." };
   if (mediaPath && !mediaPath.startsWith(`${clientId}/${id}/`)) return { error: "Upload the file again." };
   if (send && !mediaPath) return { error: "Upload the video or image before sending it for approval." };
+  const extra = slides(s(form, "extra_media"), clientId, id);
+  if (!extra) return { error: "Upload the slides again." };
+  if (send && f.kind === "carousel" && extra.length < 1) return { error: "A carousel needs at least 2 slides." };
 
   const supabase = await createClient();
   const { error } = await supabase.from("content_items").insert({
     id, client_id: clientId, ...f, media_path: mediaPath || null, media_type: s(form, "media_type") || null,
+    ...(extra.length ? { extra_media: extra } : {}),
     status: send ? "awaiting_approval" : "draft", created_by: viewer.id,
   });
   if (error) return { error: saveError(error.message) };
@@ -82,14 +101,16 @@ export async function updateContent(id: string, _: ContentFormState, form: FormD
 }
 
 // New version of the same item: replaces the file and asks the client again.
-export async function uploadRevision(id: string, mediaPath: string, mediaType: string, note: string): Promise<ContentFormState> {
+export async function uploadRevision(id: string, mediaPath: string, mediaType: string, note: string, extraMedia?: { path: string; type: string }[]): Promise<ContentFormState> {
   const viewer = await requireAdmin();
   const supabase = await createClient();
   const { data: item } = await supabase.from("content_items").select("*").eq("id", id).single();
   if (!item || !mediaPath.startsWith(`${item.client_id}/${id}/`)) return { error: "Upload the file again." };
   const version = (item.version as number) + 1;
+  const extra = extraMedia ? slides(JSON.stringify(extraMedia), item.client_id, id) : null;
+  if (extraMedia && !extra) return { error: "Upload the slides again." };
   const { error } = await supabase.from("content_items")
-    .update({ media_path: mediaPath, media_type: mediaType || null, version, status: "awaiting_approval" }).eq("id", id);
+    .update({ media_path: mediaPath, media_type: mediaType || null, version, status: "awaiting_approval", ...(extra ? { extra_media: extra } : {}) }).eq("id", id);
   if (error) return { error: error.message };
   await supabase.from("content_comments").insert({ content_id: id, author_id: viewer.id, author_role: "admin", kind: "revision", body: note.trim().slice(0, 2000) || null, version });
   await announce(item.client_id, id, item.title, item.kind, item.as_ad);

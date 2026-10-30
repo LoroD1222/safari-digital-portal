@@ -98,13 +98,24 @@ export const STAGE_LABEL = Object.fromEntries(WEBSITE_STAGES.map((s) => [s.key, 
 
 // ───────────── Content ─────────────
 export type ContentStatus = "draft" | "awaiting_approval" | "changes_requested" | "approved" | "scheduled" | "published";
-export type ContentKind = "reel" | "post" | "story" | "ad";
+export type ContentKind = "reel" | "post" | "story" | "ad" | "carousel";
 export type Platform = "instagram" | "facebook" | "both";
 export type ContentItem = {
   id: string; client_id: string; title: string; caption: string | null; kind: ContentKind; platform: Platform;
   status: ContentStatus; scheduled_for: string | null; published_at: string | null; media_path: string | null;
   media_type: string | null; version: number; created_at: string; updated_at: string;
   as_ad?: boolean;
+  extra_media?: Slide[];
+};
+export type Slide = { path: string; type: string };
+export type SignedSlide = { url: string; type: string };
+
+// Ads synced from a client's Meta ad account.
+export type MetaAd = {
+  id: string; client_id: string; name: string; status: string; format: "image" | "video" | "carousel";
+  title: string | null; body: string | null; link: string | null; cta: string | null; image_url: string | null;
+  cards: { image_url: string | null; title: string | null; link: string | null }[]; preview_url: string | null;
+  spend: number; impressions: number; clicks: number; inquiries: number; created_time: string | null; synced_at: string;
 };
 export type ContentComment = {
   id: string; content_id: string; author_role: Role; kind: "comment" | "changes_requested" | "approved" | "revision" | "sent";
@@ -114,7 +125,7 @@ export const CONTENT_LABEL: Record<ContentStatus, string> = {
   draft: "Draft", awaiting_approval: "Awaiting approval", changes_requested: "Changes requested",
   approved: "Approved", scheduled: "Scheduled", published: "Published",
 };
-export const KIND_LABEL: Record<ContentKind, string> = { reel: "Reel", post: "Post", story: "Story", ad: "Ad" };
+export const KIND_LABEL: Record<ContentKind, string> = { reel: "Reel", post: "Post", story: "Story", ad: "Ad", carousel: "Carousel" };
 export const PLATFORM_LABEL: Record<Platform, string> = { instagram: "Instagram", facebook: "Facebook", both: "Facebook & Instagram" };
 
 // ───────────── Inquiries ─────────────

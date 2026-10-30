@@ -18,6 +18,8 @@ import { PortalAccess } from "../portal-access";
 import { OnboardingSummary } from "../onboarding-summary";
 import { DataSection } from "../data-section";
 import { DangerZone } from "../danger-zone";
+import { MetaAdsGrid } from "@/components/meta-ads";
+import type { MetaAd } from "@/lib/types";
 import { AdReportForm, MissingInfoForm, PlanForm, WebsiteProjectForm } from "../manage-forms";
 import { setOnboardingStatus } from "../manage-actions";
 import { listOnboardingFiles } from "@/lib/client-files";
@@ -88,6 +90,14 @@ async function OverviewTab({ client }: { client: Client }) {
 
   return (
     <>
+      <Link href={`/admin/clients/${client.id}?tab=onboarding`} className="flex flex-wrap items-center gap-3 rounded-card border border-line px-4 py-3 text-ink no-underline hover:border-[#C9CDD6]">
+        <span className="flex min-w-[200px] flex-1 flex-col">
+          <span className="font-medium">Onboarding answers</span>
+          <span className="text-[13px] text-slate">Everything {client.name} filled in: business details, Facebook &amp; Instagram, website and files.</span>
+        </span>
+        <Badge tone={ONBOARDING_TONE[client.onboarding_status]}>{ONBOARDING_LABEL[client.onboarding_status]}</Badge>
+        <span className="text-[13px] font-medium text-brand">View answers →</span>
+      </Link>
       <PortalAccess clientId={client.id} members={members} />
       {client.website_package && (
         <Section title="Website project">
@@ -163,11 +173,13 @@ async function ReportingTab({ client, month }: { client: Client; month: string |
   const options = Array.from({ length: 12 }, (_, i) => monthBounds(-i));
   const current = options.find((o) => o.start === month) ?? options[0];
   const supabase = await createClient();
-  const [{ data: rep }, { count }, { data: recent }] = await Promise.all([
+  const [{ data: rep }, { count }, { data: recent }, { data: adRows }] = await Promise.all([
     supabase.from("ad_reports").select("*").eq("client_id", client.id).eq("month", current.start).maybeSingle(),
     supabase.from("inquiries").select("id", { count: "exact", head: true }).eq("client_id", client.id).gte("received_at", current.start).lt("received_at", current.next),
     supabase.from("ad_reports").select("month, meta_spend, meta_inquiries, updated_at").eq("client_id", client.id).order("month", { ascending: false }).limit(6),
+    supabase.from("meta_ads").select("*").eq("client_id", client.id).order("created_time", { ascending: false }),
   ]);
+  const ads = (adRows ?? []) as MetaAd[];
   const report = rep as AdReport | null;
   return (
     <>
@@ -186,6 +198,12 @@ async function ReportingTab({ client, month }: { client: Client; month: string |
         </form>
       </div>
       <AdReportForm key={current.start} clientId={client.id} month={current.start} report={report} trackedInquiries={count ?? 0} />
+      {client.meta_ad_account_id && (
+        <Section title={`Ads in Meta · ${ads.length}`}>
+          <p className="-mt-1 text-[13px] text-slate">Running, paused and in-review ads from the client&apos;s ad account, with the last 30 days of results. Synced daily and with &ldquo;Sync now&rdquo;. The client sees these on their Advertising tab.</p>
+          {ads.length ? <MetaAdsGrid ads={ads} /> : <p className="text-[13px] text-slate">No ads synced yet. Use Sync now under Connections → Facebook &amp; Instagram.</p>}
+        </Section>
+      )}
       {(recent ?? []).length > 0 && (
         <Section title="Earlier months">
           <RowList>

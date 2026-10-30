@@ -12,9 +12,9 @@ export function metaConfigured() {
   return !!process.env.META_SYSTEM_USER_TOKEN;
 }
 
-type Result<T> = { ok: true; data: T } | { ok: false; error: string };
+export type Result<T> = { ok: true; data: T } | { ok: false; error: string };
 
-async function get<T>(path: string, params: Record<string, string> = {}): Promise<Result<T>> {
+export async function get<T>(path: string, params: Record<string, string> = {}): Promise<Result<T>> {
   const token = process.env.META_SYSTEM_USER_TOKEN;
   if (!token) return { ok: false, error: "Meta isn't connected yet." };
   const qs = new URLSearchParams({ ...params, access_token: token });
@@ -48,7 +48,7 @@ type Action = { action_type: string; value: string };
 type InsightRow = { campaign_id?: string; campaign_name?: string; spend?: string; actions?: Action[] };
 
 // An "inquiry" from ads = leads (forms, website pixel) + chats started (Instagram, Messenger, WhatsApp).
-function resultsFrom(actions: Action[] | undefined) {
+export function resultsFrom(actions: Action[] | undefined) {
   const v = (t: string) => Number(actions?.find((a) => a.action_type === t)?.value ?? 0);
   const leads = Math.round(v("lead") || v("onsite_conversion.lead_grouped") || v("offsite_conversion.fb_pixel_lead"));
   const chats = Math.round(v("onsite_conversion.messaging_conversation_started_7d"));
@@ -89,11 +89,14 @@ export async function monthResults(accountId: string, offset = 0): Promise<Resul
   };
 }
 
-// Pull this month (and last month, so it ends on final numbers) into ad_reports.
+// Pull this month (and last month, so it ends on final numbers) into ad_reports,
+// plus the ads themselves (creatives and results) into meta_ads.
 export async function syncClient(clientId: string): Promise<{ ok: boolean; message: string }> {
   const admin = createAdminClient();
   const { data: c } = await admin.from("clients").select("meta_ad_account_id").eq("id", clientId).single();
   if (!c?.meta_ad_account_id) return { ok: false, message: "Choose the client's ad account first." };
+  const { syncAds } = await import("./meta-ads");
+  const ads = await syncAds(clientId, c.meta_ad_account_id).catch((e: Error) => ({ ok: false, count: 0, error: e.message }));
   const now = new Date();
   const offsets = now.getUTCDate() <= 7 ? [0, -1] : [0];
   for (const o of offsets) {
@@ -105,7 +108,7 @@ export async function syncClient(clientId: string): Promise<{ ok: boolean; messa
     }, { onConflict: "client_id,month" });
     if (error) return { ok: false, message: error.message };
   }
-  return { ok: true, message: "Synced from Meta." };
+  return { ok: true, message: ads.ok ? `Synced from Meta, including ${ads.count} ${ads.count === 1 ? "ad" : "ads"}.` : `Results synced from Meta. Ads couldn't be synced: ${ads.error}` };
 }
 
 export async function syncAll() {

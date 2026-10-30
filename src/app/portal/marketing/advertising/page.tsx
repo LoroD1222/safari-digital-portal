@@ -6,6 +6,8 @@ import { createClient } from "@/lib/supabase/server";
 import { fmtDate, money, monthBounds } from "@/lib/dates";
 import { adChats, CONTENT_LABEL, KIND_LABEL, type AdReport, type Campaign, type ContentItem } from "@/lib/types";
 import { CONTENT_TONE } from "@/lib/status-tone";
+import { MetaAdsGrid } from "@/components/meta-ads";
+import type { MetaAd } from "@/lib/types";
 import { Badge, EmptyState, Stat } from "@/components/ui";
 import { Row, RowList, Section } from "@/components/blocks";
 import { MarketingTabs } from "../tabs";
@@ -21,11 +23,19 @@ export default async function AdvertisingPage(props: PageProps<"/portal/marketin
   const { month: wanted } = await props.searchParams;
 
   const supabase = await createClient();
-  const [{ data }, { count: awaiting }, { data: adItems }] = await Promise.all([
+  const [{ data }, { count: awaiting }, { data: adItems }, { data: metaRows }] = await Promise.all([
     supabase.from("ad_reports").select("*").eq("client_id", company.id).order("month", { ascending: false }).limit(24),
     supabase.from("content_items").select("id", { count: "exact", head: true }).eq("client_id", company.id).eq("status", "awaiting_approval"),
     supabase.from("content_items").select("*").eq("client_id", company.id).eq("as_ad", true).order("updated_at", { ascending: false }).limit(12),
+    supabase.from("meta_ads").select("*").eq("client_id", company.id).order("created_time", { ascending: false }),
   ]);
+  const metaAds = ((metaRows ?? []) as MetaAd[]).sort((a, b) => Number(b.status === "ACTIVE") - Number(a.status === "ACTIVE"));
+  const liveAds = metaAds.length > 0 && (
+    <Section title="Your ads">
+      <p className="-mt-1 text-[13px] text-slate">Your Facebook &amp; Instagram ads, with results from the last 30 days. Updated daily.</p>
+      <MetaAdsGrid ads={metaAds} />
+    </Section>
+  );
   const adContent = (adItems ?? []) as ContentItem[];
   const creatives = adContent.length > 0 && (
     <Section title="Ads from your content">
@@ -55,6 +65,7 @@ export default async function AdvertisingPage(props: PageProps<"/portal/marketin
     return (
       <>
         {header}
+        {liveAds}
         {creatives}
         <EmptyState title="No advertising results yet" body="Once your Facebook & Instagram ads are running, Safari Digital adds your results here every month." />
       </>
@@ -102,6 +113,7 @@ export default async function AdvertisingPage(props: PageProps<"/portal/marketin
           <p className="whitespace-pre-wrap">{report.note}</p>
         </div>
       )}
+      {liveAds}
       {creatives}
       <Section title="Campaigns">
         {campaigns.length === 0 ? <p className="text-[13px] text-slate">No campaign breakdown for this month.</p> : (

@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import { requireAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { INQUIRY_LABEL, type Inquiry, type InquiryStatus } from "@/lib/types";
-import { ButtonLink, EmptyState, PageHeader, Select } from "@/components/ui";
+import { Alert, ButtonLink, EmptyState, PageHeader, Select } from "@/components/ui";
 import { Filters } from "@/components/blocks";
-import { InquiryList } from "@/components/inquiry-list";
+import { InquirySelectList } from "./inquiry-select-list";
 import { Icon } from "@/components/icons";
 
 export const metadata: Metadata = { title: "Inquiries" };
@@ -30,6 +30,7 @@ export default async function AdminInquiries(props: PageProps<"/admin/inquiries"
     <>
       <PageHeader title="Inquiries" subtitle="Leads across all clients. Website forms arrive automatically; add the rest here."
         actions={<ButtonLink href={`/admin/inquiries/new${client ? `?client=${client}` : ""}`}><Icon name="plus" size={16} />Add inquiry</ButtonLink>} />
+      {sp.deleted && <Alert tone="success">Inquiry deleted.</Alert>}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Filters label="Filter by status" items={[
           { href: qs(null), label: "All", active: !filter, count: all.length },
@@ -47,7 +48,7 @@ export default async function AdminInquiries(props: PageProps<"/admin/inquiries"
       </div>
       {shown.length === 0
         ? <EmptyState title="No inquiries here" body="Website form inquiries appear automatically once a client's form is connected (client → Connections)." />
-        : <InquiryList items={shown} hrefBase="/admin/inquiries" clientNames={client ? undefined : names} />}
+        : <InquirySelectList items={shown} clientNames={client ? undefined : names} />}
     </>
   );
 }

@@ -9,7 +9,8 @@ import { Alert, PageHeader } from "@/components/ui";
 import { BackLink } from "@/components/blocks";
 import { InquiryStatusPicker } from "@/components/inquiry-status";
 import { InquiryForm } from "../inquiry-form";
-import { deleteInquiry, saveInquiry } from "../actions";
+import { saveInquiry } from "../actions";
+import { DeleteInquiry } from "../delete-inquiry";
 
 export const metadata: Metadata = { title: "Inquiry" };
 const UUID = /^[0-9a-f-]{36}$/i;
@@ -27,18 +28,11 @@ export default async function AdminInquiry(props: PageProps<"/admin/inquiries/[i
   return (
     <div className="flex max-w-[720px] flex-col gap-6">
       <BackLink href="/admin/inquiries">Inquiries</BackLink>
-      <PageHeader title={q.customer_name}
+      <PageHeader title={q.customer_name} actions={<DeleteInquiry id={q.id} name={q.customer_name} />}
         subtitle={<><Link href={`/admin/clients/${q.client_id}`} className="font-medium text-brand no-underline">{q.clients?.name}</Link> · {fmtDateTime(q.received_at)} · {q.origin === "website_form" ? "from the website form" : "added by hand"}</>} />
       {created && <Alert tone="success">Inquiry added. The client can see it now.</Alert>}
       <InquiryStatusPicker id={q.id} status={q.status} />
       <InquiryForm action={saveInquiry.bind(null, q.id)} inquiry={q} cancelHref="/admin/inquiries" submitLabel="Save changes" />
-      <details className="border-t border-line-soft pt-4 text-[13px]">
-        <summary className="cursor-pointer font-medium text-danger-text">Delete this inquiry</summary>
-        <form action={deleteInquiry.bind(null, q.id)} className="mt-2 flex items-center gap-3">
-          <span className="text-slate">It disappears for the client too.</span>
-          <button className="h-8 rounded-control bg-danger px-3 font-medium text-white">Delete</button>
-        </form>
-      </details>
     </div>
   );
 }

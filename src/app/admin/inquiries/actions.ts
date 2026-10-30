@@ -79,7 +79,20 @@ export async function saveInquiry(id: string | null, _: InquiryFormState, form: 
 export async function deleteInquiry(id: string) {
   await requireAdmin();
   const supabase = await createClient();
-  await supabase.from("inquiries").delete().eq("id", id);
+  const { error } = await supabase.from("inquiries").delete().eq("id", id);
+  if (error) return { error: "Couldn't delete it. " + error.message };
   revalidatePath("/", "layout");
-  redirect("/admin/inquiries");
+  redirect("/admin/inquiries?deleted=1");
+}
+
+// Several at once, from the Inquiries list (test or spam inquiries).
+export async function deleteInquiries(ids: string[]): Promise<{ error?: string; deleted?: number }> {
+  await requireAdmin();
+  const clean = ids.filter((x) => /^[0-9a-f-]{36}$/i.test(x)).slice(0, 500);
+  if (!clean.length) return { error: "Nothing selected." };
+  const supabase = await createClient();
+  const { error, count } = await supabase.from("inquiries").delete({ count: "exact" }).in("id", clean);
+  if (error) return { error: "Couldn't delete them. " + error.message };
+  revalidatePath("/", "layout");
+  return { deleted: count ?? clean.length };
 }

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { requireAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { formatMoney, invoiceState, type Invoice, type InvoiceItem, mrr, mrrHistory, type Client, type ClientPrivate, type ContentItem, type Currency, type SupportRequest } from "@/lib/types";
+import { formatMoney, invoiceState, type Invoice, mrr, WEBSITE_PRICE, type WebsitePackage, mrrHistory, type Client, type ClientPrivate, type ContentItem, type Currency, type SupportRequest } from "@/lib/types";
 import { monthBounds } from "@/lib/dates";
 import { ButtonLink, EmptyState, PageHeader, Stat } from "@/components/ui";
 import { ActivityList, AttentionList, Section, type AttentionItem } from "@/components/blocks";
@@ -23,7 +23,7 @@ export default async function AdminOverview() {
     supabase.from("content_items").select("id, client_id, title, status, updated_at").in("status", ["awaiting_approval", "changes_requested", "approved"]),
     supabase.from("requests").select("*").neq("status", "completed").order("last_message_at", { ascending: false }),
     supabase.from("activity").select("id, client_id, message, created_at, admin_link, actor_role").order("created_at", { ascending: false }).limit(8),
-    supabase.from("client_private").select("client_id, monthly_fee, currency, billing_start"),
+    supabase.from("client_private").select("client_id, monthly_fee, currency, billing_start, website_fee"),
   ]);
   const clients = (cs ?? []) as Client[];
   const items = (content ?? []) as ContentItem[];
@@ -55,15 +55,19 @@ export default async function AdminOverview() {
     attention.push({ key: `inv-${i.id}`, title: `${name[i.client_id] ?? "Client"} — invoice overdue`, detail: `${i.number} · ${formatMoney(Number(i.total), "USD")}`, href: `/admin/invoices/${i.id}`, tone: "red" });
   }
 
-  // Website income: paid one-off invoices for a website, by the month they were paid (USD).
+  // Website income from each client's settings: their website price (after discount),
+  // in the month they started (billing start date, or the day they were added). USD.
   const months = Array.from({ length: 12 }, (_, i) => monthBounds(i - 11));
-  const { data: paidOneOff } = await supabase.from("invoices").select("total, paid_at, items, currency")
-    .eq("kind", "one_off").eq("status", "paid").gte("paid_at", months[0].start);
-  const websitePaid = (paidOneOff ?? []).filter((i) => i.currency === "USD" && i.paid_at
-    && ((i.items ?? []) as InvoiceItem[]).some((it) => /website/i.test(it.description ?? "")));
+  const priv = Object.fromEntries(((bills ?? []) as (ClientPrivate & { website_fee?: number | null })[]).map((b) => [b.client_id, b]));
+  const websites = clients.filter((c) => c.website_package).map((c) => {
+    const b = priv[c.id];
+    const fee = b?.website_fee != null ? Number(b.website_fee) : WEBSITE_PRICE[c.website_package as WebsitePackage] ?? 0;
+    return { fee, day: (b?.billing_start ?? c.created_at).slice(0, 10) };
+  }).filter((w) => w.fee > 0);
+  const inWindow = websites.filter((w) => w.day >= months[0].start);
   const websiteSeries = months.map((m) => ({
     month: m.start, label: m.label.split(" ")[0].slice(0, 3),
-    value: Math.round(websitePaid.filter((i) => i.paid_at! >= m.start && i.paid_at! < m.next).reduce((t, i) => t + Number(i.total), 0) * 100) / 100,
+    value: Math.round(inWindow.filter((w) => w.day >= m.start && w.day < m.next).reduce((t, w) => t + w.fee, 0) * 100) / 100,
   }));
   const websiteYear = websiteSeries.reduce((t, d) => t + d.value, 0);
   const websiteThisMonth = websiteSeries[websiteSeries.length - 1].value;
@@ -85,9 +89,9 @@ export default async function AdminOverview() {
           note={totals.length > 1 ? `In ${chartCurrency}, from each client's price and start date. Other currencies aren't included in the chart.` : undefined} />
       )}
       <MrrChart id="web" data={websiteSeries} currency="USD" title="Website income · last 12 months"
-        note="Paid website invoices, by the month they were paid"
+        note="Each client's website price (after discount), in the month they started"
         headline={formatMoney(websiteYear, "USD")}
-        subline={`${websitePaid.length} ${websitePaid.length === 1 ? "website" : "websites"} paid · ${formatMoney(websiteThisMonth, "USD")} this month`} />
+        subline={`${inWindow.length} ${inWindow.length === 1 ? "website" : "websites"} · ${formatMoney(websiteThisMonth, "USD")} this month`} />
       {clients.length === 0 ? (
         <EmptyState title="No clients yet" body="Add your first client to start tracking their onboarding, content and inquiries."
           action={<ButtonLink href="/admin/clients/new"><Icon name="plus" size={16} />Add client</ButtonLink>} />

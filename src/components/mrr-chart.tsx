@@ -13,22 +13,27 @@ function axisMoney(v: number, currency: Currency) {
 }
 
 // Monthly recurring revenue, one column per month (single series, brand green).
-export function MrrChart({ data, currency, note }: { data: { month: string; label: string; value: number }[]; currency: Currency; note?: string }) {
+// Also used for other monthly money series (e.g. website payments): pass title, headline and subline.
+export function MrrChart({ data, currency, note, title = "MRR · last 12 months", headline, subline, id = "mrr" }: {
+  data: { month: string; label: string; value: number }[]; currency: Currency; note?: string;
+  title?: string; headline?: string; subline?: string; id?: string;
+}) {
   const max = niceMax(Math.max(...data.map((d) => d.value)));
   const last = data[data.length - 1];
   const prev = data[data.length - 2];
   const change = prev && prev.value > 0 ? Math.round(((last.value - prev.value) / prev.value) * 100) : null;
   const ticks = [max, max / 2, 0];
   return (
-    <section aria-labelledby="mrr-h" className="flex flex-col gap-3 rounded-card border border-line px-5 py-4 shadow-[0_1px_2px_rgba(0,3,33,0.04)]">
+    <section aria-labelledby={`${id}-h`} className="flex flex-col gap-3 rounded-card border border-line px-5 py-4 shadow-[0_1px_2px_rgba(0,3,33,0.04)]">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <div className="flex flex-col">
-          <h2 id="mrr-h" className="text-[15px] font-semibold">MRR · last 12 months</h2>
+          <h2 id={`${id}-h`} className="text-[15px] font-semibold">{title}</h2>
           <span className="text-[13px] text-slate">{note ?? "From each client's monthly price and start date (paused clients excluded)"}</span>
         </div>
         <div className="flex flex-col items-end">
-          <span className="text-[22px] font-semibold tabular-nums tracking-[-0.02em]">{formatMoney(last?.value ?? 0, currency)}</span>
-          {change !== null && <span className="text-xs text-slate">{change === 0 ? "Same as last month" : `${change > 0 ? "+" : ""}${change}% vs last month`}</span>}
+          <span className="text-[22px] font-semibold tabular-nums tracking-[-0.02em]">{headline ?? formatMoney(last?.value ?? 0, currency)}</span>
+          {subline ? <span className="text-xs text-slate">{subline}</span>
+            : change !== null && <span className="text-xs text-slate">{change === 0 ? "Same as last month" : `${change > 0 ? "+" : ""}${change}% vs last month`}</span>}
         </div>
       </div>
       <figure className="m-0 flex flex-col gap-1.5">
@@ -52,8 +57,8 @@ export function MrrChart({ data, currency, note }: { data: { month: string; labe
           {data.map((d, i) => <span key={d.month} className="flex-1 text-center">{(data.length - 1 - i) % 2 === 0 ? d.label : ""}</span>)}
         </div>
         <table className="sr-only">
-          <caption>MRR by month</caption>
-          <thead><tr><th>Month</th><th>MRR</th></tr></thead>
+          <caption>{title}</caption>
+          <thead><tr><th>Month</th><th>Amount</th></tr></thead>
           <tbody>{data.map((d) => <tr key={d.month}><td>{d.label}</td><td>{formatMoney(d.value, currency)}</td></tr>)}</tbody>
         </table>
       </figure>

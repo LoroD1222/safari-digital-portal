@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { requireAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { formatMoney, invoiceState, type Invoice, mrr, mrrHistory, type Client, type ClientPrivate, type ContentItem, type Currency, type SupportRequest } from "@/lib/types";
+import { formatMoney, invoiceState, type Invoice, type InvoiceItem, mrr, mrrHistory, type Client, type ClientPrivate, type ContentItem, type Currency, type SupportRequest } from "@/lib/types";
+import { monthBounds } from "@/lib/dates";
 import { ButtonLink, EmptyState, PageHeader, Stat } from "@/components/ui";
 import { ActivityList, AttentionList, Section, type AttentionItem } from "@/components/blocks";
 import { Icon } from "@/components/icons";
@@ -54,6 +55,19 @@ export default async function AdminOverview() {
     attention.push({ key: `inv-${i.id}`, title: `${name[i.client_id] ?? "Client"} — invoice overdue`, detail: `${i.number} · ${formatMoney(Number(i.total), "USD")}`, href: `/admin/invoices/${i.id}`, tone: "red" });
   }
 
+  // Website income: paid one-off invoices for a website, by the month they were paid (USD).
+  const months = Array.from({ length: 12 }, (_, i) => monthBounds(i - 11));
+  const { data: paidOneOff } = await supabase.from("invoices").select("total, paid_at, items, currency")
+    .eq("kind", "one_off").eq("status", "paid").gte("paid_at", months[0].start);
+  const websitePaid = (paidOneOff ?? []).filter((i) => i.currency === "USD" && i.paid_at
+    && ((i.items ?? []) as InvoiceItem[]).some((it) => /website/i.test(it.description ?? "")));
+  const websiteSeries = months.map((m) => ({
+    month: m.start, label: m.label.split(" ")[0].slice(0, 3),
+    value: Math.round(websitePaid.filter((i) => i.paid_at! >= m.start && i.paid_at! < m.next).reduce((t, i) => t + Number(i.total), 0) * 100) / 100,
+  }));
+  const websiteYear = websiteSeries.reduce((t, d) => t + d.value, 0);
+  const websiteThisMonth = websiteSeries[websiteSeries.length - 1].value;
+
   const first = (viewer.fullName ?? "").split(" ")[0];
   return (
     <>
@@ -70,6 +84,10 @@ export default async function AdminOverview() {
         <MrrChart data={history} currency={chartCurrency}
           note={totals.length > 1 ? `In ${chartCurrency}, from each client's price and start date. Other currencies aren't included in the chart.` : undefined} />
       )}
+      <MrrChart id="web" data={websiteSeries} currency="USD" title="Website income · last 12 months"
+        note="Paid website invoices, by the month they were paid"
+        headline={formatMoney(websiteYear, "USD")}
+        subline={`${websitePaid.length} ${websitePaid.length === 1 ? "website" : "websites"} paid · ${formatMoney(websiteThisMonth, "USD")} this month`} />
       {clients.length === 0 ? (
         <EmptyState title="No clients yet" body="Add your first client to start tracking their onboarding, content and inquiries."
           action={<ButtonLink href="/admin/clients/new"><Icon name="plus" size={16} />Add client</ButtonLink>} />

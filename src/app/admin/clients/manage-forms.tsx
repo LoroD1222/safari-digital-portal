@@ -117,7 +117,7 @@ export function MetaForm({ client, accounts, accountsError }: { client: Client; 
       </form>
       {accounts && current && (
         <div className="flex flex-wrap items-center gap-3 rounded-control bg-sidebar px-3.5 py-3">
-          <span className="min-w-[200px] flex-1 text-[13px] text-body">Ad results sync automatically every morning. Sync now to check it works.</span>
+          <span className="min-w-[200px] flex-1 text-[13px] text-body">Ad results sync automatically every hour. Sync now to update straight away.</span>
           <Button type="button" variant="secondary" disabled={pending} onClick={() => start(async () => setSync(await syncMetaNow(client.id)))}>
             {pending ? "Syncing…" : "Sync now"}
           </Button>

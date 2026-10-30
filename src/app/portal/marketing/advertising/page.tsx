@@ -33,7 +33,7 @@ export default async function AdvertisingPage(props: PageProps<"/portal/marketin
   const metaAds = ((metaRows ?? []) as MetaAd[]).sort((a, b) => Number(b.status === "ACTIVE") - Number(a.status === "ACTIVE"));
   const liveAds = metaAds.length > 0 && (
     <Section title="Your ads">
-      <p className="-mt-1 text-[13px] text-slate">Your Facebook &amp; Instagram ads, with results from the last 30 days. Updated daily.</p>
+      <p className="-mt-1 text-[13px] text-slate">Your Facebook &amp; Instagram ads, with results from the last 30 days. Updated every hour.</p>
       <MetaAdsGrid ads={metaAds} />
     </Section>
   );

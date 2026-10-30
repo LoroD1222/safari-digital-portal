@@ -186,7 +186,7 @@ async function ReportingTab({ client, month }: { client: Client; month: string |
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex flex-col gap-0.5">
           <h2 className="text-[15px] font-semibold">Advertising results · {current.label}</h2>
-          <p className="text-[13px] text-slate">{report ? `${report.source === "synced" ? "Synced from Meta" : "Last updated"} ${fmtDate(report.updated_at, true)}` : "Not entered yet."} The client sees exactly these figures.{client.meta_ad_account_id ? " Synced daily from Meta; manual edits are replaced on the next sync." : ""}</p>
+          <p className="text-[13px] text-slate">{report ? `${report.source === "synced" ? "Synced from Meta" : "Last updated"} ${fmtDate(report.updated_at, true)}` : "Not entered yet."} The client sees exactly these figures.{client.meta_ad_account_id ? " Synced hourly from Meta; manual edits are replaced on the next sync." : ""}</p>
         </div>
         <form className="flex items-center gap-2">
           <input type="hidden" name="tab" value="reporting" />
@@ -200,7 +200,7 @@ async function ReportingTab({ client, month }: { client: Client; month: string |
       <AdReportForm key={current.start} clientId={client.id} month={current.start} report={report} trackedInquiries={count ?? 0} />
       {client.meta_ad_account_id && (
         <Section title={`Ads in Meta · ${ads.length}`}>
-          <p className="-mt-1 text-[13px] text-slate">Running, paused and in-review ads from the client&apos;s ad account, with the last 30 days of results. Synced daily and with &ldquo;Sync now&rdquo;. The client sees these on their Advertising tab.</p>
+          <p className="-mt-1 text-[13px] text-slate">Running, paused and in-review ads from the client&apos;s ad account, with the last 30 days of results. Synced hourly and with &ldquo;Sync now&rdquo;. The client sees these on their Advertising tab.</p>
           {ads.length ? <MetaAdsGrid ads={ads} /> : <p className="text-[13px] text-slate">No ads synced yet. Use Sync now under Connections → Facebook &amp; Instagram.</p>}
         </Section>
       )}

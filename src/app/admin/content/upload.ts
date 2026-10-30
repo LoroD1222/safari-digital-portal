@@ -1,12 +1,16 @@
 "use client";
 import { createClient } from "@/lib/supabase/client";
-import { CONTENT_MEDIA, compressFile } from "@/lib/compress";
+import { CONTENT_MEDIA, MAX_UPLOAD, compressFile } from "@/lib/compress";
 
 // Uploads straight from the browser to the private "content" bucket.
 // Images and videos are compressed first (Full HD, good quality for Instagram & Facebook).
 export async function uploadMedia(original: File, clientId: string, itemId: string, version: number, onStatus?: (s: string) => void) {
   onStatus?.("Compressing…");
   const file = await compressFile(original, { ...CONTENT_MEDIA, onProgress: (p) => onStatus?.(`Compressing… ${p}%`) });
+  if (file.size > MAX_UPLOAD) {
+    const mbs = Math.round(file.size / 1048576);
+    return { error: `This video is still ${mbs} MB after compressing, over the 50 MB limit. Use Chrome or Edge on a computer (they compress best), or trim the video and try again.` };
+  }
   onStatus?.("Uploading…");
   const ext = (file.name.split(".").pop() || "bin").toLowerCase().replace(/[^a-z0-9]/g, "");
   const path = `${clientId}/${itemId}/v${version}-${new Date().getTime()}.${ext}`;

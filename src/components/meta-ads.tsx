@@ -1,5 +1,4 @@
 "use client";
-import { Slider } from "./slider";
 import { Badge } from "./ui";
 import type { MetaAd } from "@/lib/types";
 
@@ -12,27 +11,16 @@ const STATUS: Record<string, [string, "green" | "amber" | "blue" | "red" | "neut
 const FORMAT = { image: "Image", video: "Video", carousel: "Carousel" } as const;
 const usd = (n: number) => "$" + n.toLocaleString("en-US", { maximumFractionDigits: n < 100 ? 2 : 0 });
 
-// Ads synced from Meta: the creative (carousels swipe), status and last 30 days.
+// Ads synced from Meta: name, status, text and last 30 days (pictures hidden for now).
 export function MetaAdsGrid({ ads }: { ads: MetaAd[] }) {
   return (
     <ul className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4">
       {ads.map((a) => {
         const [label, tone] = STATUS[a.status] ?? ["Ended", "neutral"];
-        const slides = a.format === "carousel" && a.cards.length
-          ? a.cards.map((c) => ({ url: c.image_url, type: "image/jpeg" }))
-          : [{ url: a.image_url, type: "image/jpeg" }];
         return (
           <li key={a.id} className="flex flex-col overflow-hidden rounded-card border border-line bg-white">
-            <div className="relative aspect-square bg-sidebar">
-              <Slider slides={slides} alt={a.name || "Ad"} />
-              <span className="absolute left-2 top-2 z-10"><Badge tone={tone}>{label}</Badge></span>
-              {a.format === "video" && (
-                <span className="absolute left-1/2 top-1/2 inline-flex size-10 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white/90" aria-hidden>
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="#0D3B2E"><path d="M7 4v16l13-8z" /></svg>
-                </span>
-              )}
-            </div>
             <div className="flex flex-1 flex-col gap-2 px-3.5 pb-3.5 pt-3">
+              <span className="self-start"><Badge tone={tone}>{label}</Badge></span>
               <div className="flex flex-col gap-0.5">
                 <span className="line-clamp-1 font-medium" title={a.name}>{a.name || "Ad"}</span>
                 <span className="text-xs text-slate">{FORMAT[a.format]}{a.format === "carousel" && a.cards.length ? ` · ${a.cards.length} cards` : ""}{a.cta ? ` · ${a.cta}` : ""}</span>

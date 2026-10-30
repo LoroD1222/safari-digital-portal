@@ -91,7 +91,8 @@ export const TEMPLATES: Record<TemplateKey, { title: string; note: string; prese
   },
 };
 
-export const TEMPLATE_KEYS = Object.keys(TEMPLATES) as TemplateKey[];
+// Shown lightest to strongest.
+export const TEMPLATE_KEYS: TemplateKey[] = ["gentle", "standard", "persistent"];
 
 export function presetByKey(key: string | null) {
   if (!key) return null;

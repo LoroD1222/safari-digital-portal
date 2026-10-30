@@ -48,7 +48,7 @@ export default async function PortalOverview() {
   const [inq, rep, content, reqs, act, newInq] = await Promise.all([
     supabase.from("inquiries").select("id, channel").eq("client_id", company.id).gte("received_at", month.start),
     marketing ? supabase.from("ad_reports").select("*").eq("client_id", company.id).order("month", { ascending: false }).limit(1).maybeSingle() : Promise.resolve({ data: null }),
-    marketing ? supabase.from("content_items").select("id, title, kind, status, published_at").eq("client_id", company.id) : Promise.resolve({ data: [] }),
+    marketing ? supabase.from("content_items").select("id, title, kind, status, published_at").eq("client_id", company.id).neq("status", "draft") : Promise.resolve({ data: [] }),
     supabase.from("requests").select("*").eq("client_id", company.id).neq("status", "completed").order("last_message_at", { ascending: false }),
     supabase.from("activity").select("id, message, created_at, client_link").eq("client_id", company.id).order("created_at", { ascending: false }).limit(5),
     supabase.from("inquiries").select("id", { count: "exact", head: true }).eq("client_id", company.id).eq("status", "new"),

@@ -17,7 +17,7 @@ export default async function ContentPage(props: PageProps<"/portal/marketing">)
   const month = monthBounds(0);
 
   const supabase = await createClient();
-  const { data } = await supabase.from("content_items").select("*").eq("client_id", company.id).order("created_at", { ascending: false }).limit(200);
+  const { data } = await supabase.from("content_items").select("*").eq("client_id", company.id).neq("status", "draft").order("created_at", { ascending: false }).limit(200);
   // "This month": everything not yet published, plus what was published this month.
   const items = ((data ?? []) as ContentItem[]).filter((i) => i.status !== "published" || (i.published_at ?? "") >= month.start);
   const awaiting = items.filter((i) => i.status === "awaiting_approval").length;

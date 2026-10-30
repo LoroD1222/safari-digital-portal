@@ -27,7 +27,7 @@ export default async function AdvertisingPage(props: PageProps<"/portal/marketin
   const [{ data }, { count: awaiting }, { data: adItems }, { data: metaRows }] = await Promise.all([
     supabase.from("ad_reports").select("*").eq("client_id", company.id).order("month", { ascending: false }).limit(24),
     supabase.from("content_items").select("id", { count: "exact", head: true }).eq("client_id", company.id).eq("status", "awaiting_approval"),
-    supabase.from("content_items").select("*").eq("client_id", company.id).eq("as_ad", true).order("updated_at", { ascending: false }).limit(12),
+    supabase.from("content_items").select("*").eq("client_id", company.id).eq("as_ad", true).neq("status", "draft").order("updated_at", { ascending: false }).limit(12),
     supabase.from("meta_ads").select("*").eq("client_id", company.id).order("created_time", { ascending: false }),
   ]);
   const metaAds = ((metaRows ?? []) as MetaAd[]).sort((a, b) => Number(b.status === "ACTIVE") - Number(a.status === "ACTIVE"));

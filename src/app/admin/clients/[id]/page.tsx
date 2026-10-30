@@ -18,6 +18,8 @@ import { PortalAccess } from "../portal-access";
 import { OnboardingSummary } from "../onboarding-summary";
 import { DataSection } from "../data-section";
 import { DangerZone } from "../danger-zone";
+import { startViewAs } from "@/app/view-as-actions";
+import { Icon } from "@/components/icons";
 import { MetaAdsGrid } from "@/components/meta-ads";
 import type { MetaAd } from "@/lib/types";
 import { AdReportForm, MissingInfoForm, PlanForm, WebsiteProjectForm } from "../manage-forms";
@@ -54,6 +56,11 @@ export default async function ClientPage(props: PageProps<"/admin/clients/[id]">
           <>
             <Badge tone={ONBOARDING_TONE[client.onboarding_status]}>{ONBOARDING_LABEL[client.onboarding_status]}</Badge>
             <Badge tone={ACCOUNT_TONE[client.account_status]}>{ACCOUNT_LABEL[client.account_status]}</Badge>
+            <form action={startViewAs.bind(null, client.id)}>
+              <button className="inline-flex h-9 items-center gap-1.5 rounded-control border border-field bg-white px-3.5 text-[13px] font-medium hover:bg-[#F4F5F2]">
+                <Icon name="eye" size={15} />View as client
+              </button>
+            </form>
           </>
         }
       />

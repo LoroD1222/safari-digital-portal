@@ -4,11 +4,23 @@ import { HelpButton } from "@/components/help-panel";
 import type { NavItem } from "@/components/sidebar-nav";
 import { LiveInquiries } from "@/components/live-inquiries";
 import { getPortalContext } from "@/lib/portal";
+import { stopViewAs } from "@/app/view-as-actions";
+
+function ViewAsBanner({ name }: { name: string }) {
+  return (
+    <div role="status" className="-mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-card border border-[#F1E2C3] bg-[#FFFAF0] px-4 py-2.5 text-[13px] text-[#8A5A12]">
+      <span className="min-w-[220px] flex-1">
+        <span className="font-semibold">You&apos;re viewing the portal as {name}.</span> This is exactly what they see. Buttons that act for the client, like approving content or sending a request, are for them, not for you.
+      </span>
+      <form action={stopViewAs}><button className="h-8 rounded-control bg-[#8A5A12] px-3 font-semibold text-white hover:bg-[#6F470D]">Exit client view</button></form>
+    </div>
+  );
+}
 import { getSettings } from "@/lib/settings";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function PortalLayout({ children }: LayoutProps<"/portal">) {
-  const { viewer, company } = await getPortalContext();
+  const { viewer, company, viewingAs } = await getPortalContext();
   const nav: NavItem[] = [{ href: "/portal", label: "Overview", icon: "home", exact: true }];
   let help = null;
   if (company) {
@@ -29,6 +41,7 @@ export default async function PortalLayout({ children }: LayoutProps<"/portal">)
   return (
     <AppShell navLabel="Main" nav={nav} bottom={help}
       footer={<AccountFooter name={company?.name ?? viewer.email} sub={company ? viewer.email : undefined} href="/portal/account" />}>
+      {viewingAs && company && <ViewAsBanner name={company.name} />}
       {children}
       {company && <LiveInquiries clientId={company.id} href="/portal/inquiries" />}
     </AppShell>

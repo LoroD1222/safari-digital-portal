@@ -623,7 +623,7 @@ export function Wizard(p: Props) {
           )}
 
           {group("g-ask", "1. Tell us about your business", "Short questions. Rough answers are fine, we'll ask if anything is unclear.", tasks.filter((t) => t.group === "ask"))}
-          {group("g-access", "2. Give us access", "Done in Meta and Google Drive. Each task has a short video. We never ask for your passwords.", tasks.filter((t) => t.group === "access"))}
+          {group("g-access", "2. Give us access", `Done in Meta and Google Drive.${p.metaAccessVideoUrl || p.driveTutorialVideoUrl ? " Each task has a short video." : ""} We never ask for your passwords.`, tasks.filter((t) => t.group === "access"))}
 
           <div className="flex flex-col gap-3 rounded-card border border-line bg-white p-[18px] sm:flex-row sm:items-center sm:gap-4">
             <div className="flex-1">

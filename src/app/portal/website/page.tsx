@@ -44,12 +44,12 @@ async function TrainingTab() {
   const videos = (data ?? []) as { id: string; title: string; url: string }[];
   return (
     <div className="flex flex-col gap-8">
-      <section aria-labelledby="tr-h" className="flex flex-col gap-3">
-        <h2 id="tr-h" className="text-[15px] font-semibold">Website training</h2>
-        {videos.length
-          ? <Training videos={videos} />
-          : <p className="text-[13px] text-slate">Training videos will appear here once Safari Digital adds them.</p>}
-      </section>
+      {videos.length > 0 && (
+        <section aria-labelledby="tr-h" className="flex flex-col gap-3">
+          <h2 id="tr-h" className="text-[15px] font-semibold">Website training</h2>
+          <Training videos={videos} />
+        </section>
+      )}
       <div className="flex flex-wrap items-center gap-3 rounded-card bg-sidebar px-4 py-3.5">
         <span className="flex min-w-[260px] flex-1 flex-col">
           <span className="font-medium">Need a change on your website?</span>

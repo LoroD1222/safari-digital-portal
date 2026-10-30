@@ -3,15 +3,22 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { InquiryDialog, moveInquiry, stageColor, usd } from "./inquiry-dialog";
-import { INQUIRY_LABEL, STAGES, STALE_DAYS, type Inquiry, type InquirySource, type InquiryStatus } from "@/lib/types";
+import { INQUIRY_LABEL, STAGES, STALE_DAYS, type Inquiry, type InquiryStatus } from "@/lib/types";
+import type { FollowupBadge } from "@/lib/pipeline-followups";
+import { Icon, type IconName } from "./icons";
 
-const SOURCE_TAG: Record<InquirySource, string> = { meta_ads: "Ads", meta_organic: "Social", website: "Website", direct: "Direct", unknown: "Other" };
+const BADGE: Record<FollowupBadge["kind"], [IconName, string, string]> = {
+  email: ["mail", "#F1F2F4", "#4A4F63"], whatsapp: ["whatsapp", "#F1F2F4", "#4A4F63"], due: ["whatsapp", "#E3F4EA", "#1A6647"],
+  sent: ["check", "#E3F4EA", "#1A6647"], stopped: ["close", "#F1F2F4", "#8A8FA3"],
+};
 const today = () => new Date(Date.now() + 3 * 3600e3).toISOString().slice(0, 10); // Dar es Salaam
 const daysIn = (q: Inquiry) => Math.floor((Date.now() - new Date(q.stage_changed_at ?? q.received_at).getTime()) / 864e5);
 const next = (s: InquiryStatus): InquiryStatus | null => (s === "booked" || s === "closed" ? null : STAGES[STAGES.indexOf(s) + 1]);
 
 // Drag cards between stages (desktop), or tap the arrow / open a card to move it (phones).
-export function PipelineBoard({ items, company, adminHref }: { items: Inquiry[]; company: string; adminHref?: string }) {
+export function PipelineBoard({ items, company, adminHref, followupsOn = false, followups = {} }: {
+  items: Inquiry[]; company: string; adminHref?: string; followupsOn?: boolean; followups?: Record<string, FollowupBadge>;
+}) {
   const router = useRouter();
   const [rows, setRows] = useState(items);
   // New data from the server (live updates, another tab): take it, keep local edits otherwise.
@@ -67,7 +74,10 @@ export function PipelineBoard({ items, company, adminHref }: { items: Inquiry[];
   return (
     <section aria-label="Pipeline" data-wide className="flex flex-col gap-2">
       {error && <p role="alert" className="text-[13px] text-danger-text">{error}</p>}
-      <p className="text-xs text-slate">Drag a card to another stage, or tap <span className="font-semibold text-brand">›</span> to move it on. Open a card to add the trip value, a follow-up date and notes. A red <span className="font-semibold text-[#C2413B]">2D</span> means it&apos;s been waiting that many days.</p>
+      <p className="flex flex-wrap items-center gap-x-3.5 gap-y-1 text-xs text-slate">
+        <span>Drag a card to another stage, or tap › to move it on. Open a card for details, the trip value and notes. Days in <span className="font-semibold text-[#9A4A12]">orange</span> mean it&apos;s been waiting too long.</span>
+        {followupsOn && <span className="inline-flex items-center gap-1.5"><span className="inline-flex size-4 items-center justify-center rounded-full bg-[#F1F2F4] text-[#4A4F63]"><Icon name="mail" size={9} /></span>Follow-up planned · hover for details</span>}
+      </p>
       <div ref={boardRef} className="-mx-4 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0">
         <ol className="flex w-max snap-x snap-mandatory gap-2.5 sm:w-full sm:min-w-[1100px]">
           {columns.map(({ s, list, value }) => {
@@ -93,28 +103,22 @@ export function PipelineBoard({ items, company, adminHref }: { items: Inquiry[];
                     const stale = !done && STALE_DAYS[q.status] !== undefined && daysIn(q) >= STALE_DAYS[q.status]!;
                     const overdue = !done && !!q.follow_up_on && q.follow_up_on <= now;
                     const n = next(q.status);
-                    const body = done ? (
+                    const days = daysIn(q);
+                    const fu = followupsOn ? followups[q.id] : undefined;
+                    const body = (
                       <>
-                        <span className="line-clamp-2 font-semibold leading-snug">{q.customer_name}</span>
-                        <span className="flex flex-wrap items-center gap-1.5 text-xs">
-                          {q.trip_value ? <span className="font-semibold text-ink">{usd(Number(q.trip_value))}</span> : null}
-                          {s === "closed" && q.lost_reason && <span className="text-slate">{q.lost_reason}</span>}
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        <span className="flex flex-col gap-0.5 pr-7">
-                          <span className="line-clamp-2 font-semibold leading-snug">{q.customer_name}</span>
-                          <span className="truncate text-xs text-slate">{q.interested_in || q.country || q.email || q.phone || "—"}</span>
-                        </span>
-                        <span className="flex flex-wrap items-center gap-1.5 text-xs">
-                          {q.trip_value ? <span className="font-semibold text-ink">{usd(Number(q.trip_value))}</span> : null}
-                          {q.travel_dates && <span className="truncate text-slate">{q.travel_dates}</span>}
-                        </span>
-                        <span className="flex flex-wrap items-center gap-1.5">
-                          <span className={"rounded-badge px-1.5 py-px text-[11px] font-semibold " + (q.source === "meta_ads" ? "bg-[#E8EEFB] text-[#3450A6]" : "bg-[#F1F2F4] text-[#4A4F63]")}>{SOURCE_TAG[q.source]}</span>
-                          {stale && <span title={`${daysIn(q)} days in ${INQUIRY_LABEL[q.status]}`} className="rounded-badge bg-[#C2413B] px-1.5 py-px text-[11px] font-semibold text-white">{daysIn(q)}D</span>}
-                          {overdue && <span className="rounded-badge bg-[#FDF3E1] px-1.5 py-px text-[11px] font-semibold text-[#8A5A12]">⚠ Follow up{q.follow_up_on! < now ? "" : " today"}</span>}
+                        <span className={"truncate font-semibold leading-snug" + (n ? " pr-6" : "")}>{q.customer_name}</span>
+                        {!done && <span className="truncate text-xs text-slate">{q.interested_in || q.country || q.email || q.phone || "—"}</span>}
+                        <span className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-slate">
+                          {q.trip_value ? <><span className="font-semibold tabular-nums text-ink">{usd(Number(q.trip_value))}</span>{(!done || q.lost_reason) && <span aria-hidden>·</span>}</> : null}
+                          {done ? (s === "closed" && q.lost_reason ? <span className="truncate">{q.lost_reason}</span> : null)
+                            : overdue ? <span className="truncate font-semibold text-[#8A5A12]">Follow up {q.follow_up_on! < now ? "(overdue)" : "today"}</span>
+                            : <span title={`${days} ${days === 1 ? "day" : "days"} in ${INQUIRY_LABEL[q.status]}`} className={"truncate " + (stale ? "font-semibold text-[#9A4A12]" : "")}>{days === 0 ? "Today" : `${days} ${days === 1 ? "day" : "days"}`}</span>}
+                          {fu && (
+                            <span role="img" aria-label={fu.text} title={fu.text} className="ml-auto inline-flex size-[22px] shrink-0 items-center justify-center rounded-full" style={{ background: BADGE[fu.kind][1], color: BADGE[fu.kind][2] }}>
+                              <Icon name={BADGE[fu.kind][0]} size={12} />
+                            </span>
+                          )}
                         </span>
                       </>
                     );
@@ -122,12 +126,12 @@ export function PipelineBoard({ items, company, adminHref }: { items: Inquiry[];
                       <div key={q.id} draggable onDragStart={(e) => { e.dataTransfer.setData("text/plain", q.id); e.dataTransfer.effectAllowed = "move"; setDrag(q.id); }} onDragEnd={() => { setDrag(null); setOver(null); }}
                         className={"relative rounded-control border bg-white shadow-[0_1px_2px_rgba(0,3,33,0.06)] " + (overdue ? "border-[#F1D9A8]" : "border-line") + (drag === q.id ? " opacity-50" : "")}>
                         {adminHref
-                          ? <Link href={`${adminHref}/${q.id}`} className={"flex flex-col text-ink no-underline hover:bg-[#FAFAF8] " + (done ? "gap-1 p-2.5" : "gap-2 p-3")}>{body}</Link>
-                          : <button type="button" onClick={() => setOpen({ id: q.id, intent: null })} className={"flex w-full cursor-grab flex-col text-left hover:bg-[#FAFAF8] active:cursor-grabbing " + (done ? "gap-1 p-2.5" : "gap-2 p-3")}>{body}</button>}
+                          ? <Link href={`${adminHref}/${q.id}`} className="flex flex-col gap-0.5 px-3 py-2.5 text-ink no-underline hover:bg-[#FAFAF8]">{body}</Link>
+                          : <button type="button" onClick={() => setOpen({ id: q.id, intent: null })} className="flex w-full min-w-0 cursor-grab flex-col gap-0.5 rounded-control px-3 py-2.5 text-left hover:bg-[#FAFAF8] active:cursor-grabbing">{body}</button>}
                         {n && (
                           <button type="button" onClick={() => move(q.id, n)} aria-label={`Move ${q.customer_name} to ${INQUIRY_LABEL[n]}`} title={`Move to ${INQUIRY_LABEL[n]}`}
-                            className="absolute right-2 top-2.5 inline-flex size-6 items-center justify-center rounded-full bg-brand text-white hover:bg-brand-hover">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" aria-hidden><path d="M9 18l6-6-6-6" /></svg>
+                            className="absolute right-1.5 top-2 inline-flex size-6 items-center justify-center rounded-control text-[#8A8FA3] hover:bg-[#E3F4EA] hover:text-brand">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M9 18l6-6-6-6" /></svg>
                           </button>
                         )}
                       </div>
@@ -145,7 +149,7 @@ export function PipelineBoard({ items, company, adminHref }: { items: Inquiry[];
         </ol>
       </div>
       {cur && open && (
-        <InquiryDialog q={cur} company={company} intent={open.intent} onClose={() => { setOpen(null); router.refresh(); }} onUpdate={(p) => patch(cur.id, p)} />
+        <InquiryDialog q={cur} company={company} intent={open.intent} followup={followupsOn ? followups[cur.id] ?? null : undefined} onClose={() => { setOpen(null); router.refresh(); }} onUpdate={(p) => patch(cur.id, p)} />
       )}
     </section>
   );

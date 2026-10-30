@@ -136,7 +136,7 @@ export type Inquiry = {
   interested_in: string | null; travel_dates: string | null; travellers: string | null; message: string | null;
   source: InquirySource; campaign: string | null; channel: string; status: InquiryStatus; received_at: string; origin: string;
   // Pipeline (0018): USD value, next follow-up, private notes, why it was lost, when it entered its stage.
-  trip_value?: number | null; follow_up_on?: string | null; notes?: string | null; lost_reason?: string | null; stage_changed_at?: string | null;
+  trip_value?: number | null; follow_up_on?: string | null; notes?: string | null; lost_reason?: string | null; stage_changed_at?: string | null; followups_stopped_at?: string | null;
 };
 // Pipeline order. "closed" is shown as Lost.
 export const STAGES: InquiryStatus[] = ["new", "contacted", "quoted", "negotiating", "booked", "closed"];

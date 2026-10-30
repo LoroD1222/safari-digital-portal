@@ -8,6 +8,7 @@ import { bookedInMonth } from "@/lib/pipeline";
 import { OPEN_STAGES, type Inquiry } from "@/lib/types";
 import { EmptyState, Stat } from "@/components/ui";
 import { PipelineBoard } from "@/components/pipeline-board";
+import { pipelineFollowups } from "@/lib/pipeline-followups";
 
 export const metadata: Metadata = { title: "Pipeline" };
 
@@ -25,6 +26,7 @@ export default async function PipelinePage() {
     bookedInMonth(supabase, company.id, month),
   ]);
   const rows = (board.data ?? []) as Inquiry[];
+  const fu = await pipelineFollowups(supabase, company.id, rows).catch(() => ({ on: false, badges: {} }));
   const open = rows.filter((r) => OPEN_STAGES.includes(r.status));
   const openValue = open.reduce((t, r) => t + Number(r.trip_value ?? 0), 0);
   const quoted = open.filter((r) => r.status === "quoted" || r.status === "negotiating");
@@ -47,7 +49,7 @@ export default async function PipelinePage() {
             <Stat label="Quotes out" value={quoted.length} note="Quote sent or negotiating" />
             <Stat label={`Booked in ${monthName}`} value={money(won.value)} note={`${won.count} ${won.count === 1 ? "booking" : "bookings"}${won.adsValue > 0 ? ` · ${money(won.adsValue)} from ads` : ""}`} />
           </section>
-          <PipelineBoard items={rows} company={company.name} />
+          <PipelineBoard items={rows} company={company.name} followupsOn={fu.on} followups={fu.badges} />
         </>
       )}
     </>

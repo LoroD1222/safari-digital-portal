@@ -48,3 +48,14 @@ export async function getInquiryHistory(id: string): Promise<HistoryRow[]> {
   const { data } = await supabase.from("inquiry_history").select("status, at, by_role").eq("inquiry_id", id).order("at", { ascending: false }).limit(30);
   return (data ?? []) as HistoryRow[];
 }
+
+// Stop or restart the automatic follow-ups for one guest.
+export async function setInquiryFollowups(id: string, on: boolean): Promise<{ ok: boolean; error?: string }> {
+  const viewer = await getViewer();
+  if (!viewer) return { ok: false, error: "Please sign in again." };
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_inquiry_followups", { inquiry_id: id, p_on: on });
+  if (error) return { ok: false, error: /set_inquiry_followups|function/.test(error.message) ? "Safari Digital is finishing an update. Try again shortly." : "Couldn't save. " + error.message };
+  revalidatePath("/", "layout");
+  return { ok: true };
+}

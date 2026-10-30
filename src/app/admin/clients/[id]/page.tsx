@@ -17,6 +17,7 @@ import { updateClientRecord } from "../actions";
 import { PortalAccess } from "../portal-access";
 import { OnboardingSummary } from "../onboarding-summary";
 import { DataSection } from "../data-section";
+import { DangerZone } from "../danger-zone";
 import { AdReportForm, MissingInfoForm, PlanForm, WebsiteProjectForm } from "../manage-forms";
 import { setOnboardingStatus } from "../manage-actions";
 import { listOnboardingFiles } from "@/lib/client-files";
@@ -114,6 +115,7 @@ async function OverviewTab({ client }: { client: Client }) {
       <div className="border-t border-line-soft pt-6">
         <ClientForm action={updateClientRecord.bind(null, client.id)} client={client} billing={billing as ClientPrivate | null} submitLabel="Save changes" cancelHref="/admin/clients" />
       </div>
+      <DangerZone clientId={client.id} name={client.name} logins={members.length} />
     </>
   );
 }

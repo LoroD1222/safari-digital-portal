@@ -4,14 +4,14 @@ import { requireAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { ACCOUNT_LABEL, ONBOARDING_LABEL, formatMoney, mrr, packageSummary, type Client, type ClientPrivate, type Currency } from "@/lib/types";
 import { ACCOUNT_TONE, ONBOARDING_TONE } from "@/lib/status-tone";
-import { Badge, ButtonLink, EmptyState, Input, PageHeader } from "@/components/ui";
+import { Alert, Badge, ButtonLink, EmptyState, Input, PageHeader } from "@/components/ui";
 import { Icon } from "@/components/icons";
 
 export const metadata: Metadata = { title: "Clients" };
 
 export default async function ClientsPage(props: PageProps<"/admin/clients">) {
   await requireAdmin();
-  const { q } = await props.searchParams;
+  const { q, deleted } = await props.searchParams;
   const query = typeof q === "string" ? q.trim() : "";
 
   const supabase = await createClient();
@@ -31,6 +31,7 @@ export default async function ClientsPage(props: PageProps<"/admin/clients">) {
         subtitle={totals.length && !query ? <>MRR: <span className="font-medium text-ink">{totals.map(([c, v]) => formatMoney(v, c)).join(" + ")}</span> / month</> : undefined}
         actions={<ButtonLink href="/admin/clients/new"><Icon name="plus" size={16} />Add client</ButtonLink>}
       />
+      {typeof deleted === "string" && <Alert tone="success">{deleted} was deleted.</Alert>}
       <form role="search" className="flex max-w-sm items-center gap-2">
         <label htmlFor="q" className="sr-only">Search clients</label>
         <Input id="q" name="q" type="search" placeholder="Search by company or contact" defaultValue={query} />

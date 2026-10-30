@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { Icon, type IconName } from "./icons";
 import { Alert, Badge, Button, Input, Select, Textarea } from "./ui";
+import { ConfirmDialog } from "./confirm-dialog";
 import {
   FOLLOWUP_DAYS, FOLLOWUP_STAGES, TEMPLATES, TEMPLATE_KEYS, TOKENS, presetByKey,
   type FollowupRule, type FollowupStage, type TemplateKey,
@@ -44,6 +45,17 @@ export function FollowupsManager(p: {
   const [stage, setStage] = useState<FollowupStage | "all">("all");
   const [open, setOpen] = useState<string | null>(null);
   const [tapped, setTapped] = useState<string[]>([]);
+  const [confirming, setConfirming] = useState(false);
+
+  // What a template change removes: every template follow-up (with any edits). The client's own ones stay.
+  const presetRules = p.rules.filter((r) => r.preset);
+  const ownRules = p.rules.filter((r) => !r.preset);
+  const isEdited = (r: FollowupRule) => {
+    const base = presetByKey(r.preset);
+    return !!base && (base.subject !== r.subject || base.body !== r.body || base.days !== r.days || base.name !== r.name);
+  };
+  const editedCount = presetRules.filter(isEdited).length;
+  const restoring = pick === p.template;
 
   const run = (fn: () => Promise<{ ok: boolean; error?: string }>, after?: () => void) => start(async () => {
     setError(null);
@@ -174,11 +186,16 @@ export function FollowupsManager(p: {
                   );
                 })}
               </div>
+              <p className="rounded-control border border-[#F1E2C3] bg-[#FFFAF0] px-3 py-2 text-[13px] text-[#8A5A12]">
+                {restoring
+                  ? <>Restoring puts back Safari Digital&apos;s {presetRules.length} {TEMPLATES[pick].title} follow-ups{editedCount ? <> and <span className="font-semibold">removes your changes to {editedCount}</span></> : ""}.</>
+                  : <>This <span className="font-semibold">removes your {presetRules.length} template follow-ups</span>{editedCount ? ` (${editedCount} with your changes)` : ""} and adds the {TEMPLATES[pick].presets.length} from {TEMPLATES[pick].title}.</>}
+                {" "}Which ones are on goes back to the template&apos;s choice.{" "}{ownRules.length ? `Your own ${ownRules.length === 1 ? "follow-up stays" : `${ownRules.length} follow-ups stay`}.` : "Follow-ups you added yourself would stay."}
+              </p>
               <div className="flex justify-end gap-2">
                 <Button variant="secondary" className="h-9" onClick={() => setPicking(false)}>Cancel</Button>
-                <Button className="h-9" disabled={pending}
-                  onClick={() => run(() => chooseTemplate(pick, enabled), () => { setPicking(false); setOpen(null); })}>
-                  {pick === p.template ? `Restore ${TEMPLATES[pick].title}` : `Use ${TEMPLATES[pick].title}`}
+                <Button className="h-9" disabled={pending} onClick={() => setConfirming(true)}>
+                  {restoring ? `Restore ${TEMPLATES[pick].title}` : `Switch to ${TEMPLATES[pick].title}`}
                 </Button>
               </div>
             </div>
@@ -265,6 +282,27 @@ export function FollowupsManager(p: {
           )}
         </aside>
       </div>
+      {confirming && (
+        <ConfirmDialog
+          title={restoring ? `Restore the ${TEMPLATES[pick].title} template?` : `Switch to the ${TEMPLATES[pick].title} template?`}
+          confirmLabel={restoring ? "Restore" : "Replace follow-ups"} pendingLabel="Saving…" pending={pending} error={error}
+          onClose={() => setConfirming(false)}
+          onConfirm={() => run(() => chooseTemplate(pick, enabled), () => { setConfirming(false); setPicking(false); setOpen(null); })}>
+          <div className="flex flex-col gap-2.5">
+            <span className="font-semibold text-ink">{restoring ? "These go back to Safari Digital's text:" : "These will be removed:"}</span>
+            <ul className="flex flex-col gap-1">
+              {presetRules.map((r) => (
+                <li key={r.id} className="flex items-center gap-2"><span className="size-1.5 shrink-0 rounded-full bg-danger" />{r.name}{isEdited(r) && <span className="text-danger-text">· your changes are lost</span>}</li>
+              ))}
+            </ul>
+            {!restoring && <span>They&apos;re replaced by {TEMPLATES[pick].presets.length} follow-ups from {TEMPLATES[pick].title}.</span>}
+            {ownRules.length > 0 && (
+              <span><span className="font-semibold text-ink">These stay:</span> {ownRules.map((r) => r.name).join(", ")} (your own).</span>
+            )}
+            <span className="text-slate">This can&apos;t be undone.</span>
+          </div>
+        </ConfirmDialog>
+      )}
     </div>
   );
 }

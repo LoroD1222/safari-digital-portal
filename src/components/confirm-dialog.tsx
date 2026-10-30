@@ -2,8 +2,8 @@
 import { useEffect, useRef, type ReactNode } from "react";
 
 // Small "are you sure?" dialog for destructive actions.
-export function ConfirmDialog({ title, children, confirmLabel, pending, error, onConfirm, onClose }: {
-  title: string; children: ReactNode; confirmLabel: string; pending?: boolean; error?: string | null; onConfirm: () => void; onClose: () => void;
+export function ConfirmDialog({ title, children, confirmLabel, pendingLabel = "Deleting…", pending, error, onConfirm, onClose }: {
+  title: string; children: ReactNode; confirmLabel: string; pendingLabel?: string; pending?: boolean; error?: string | null; onConfirm: () => void; onClose: () => void;
 }) {
   const cancel = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -21,7 +21,7 @@ export function ConfirmDialog({ title, children, confirmLabel, pending, error, o
         <div className="mt-1 flex justify-end gap-2">
           <button ref={cancel} type="button" onClick={onClose} disabled={pending} className="h-10 px-4 font-medium text-slate hover:text-ink">Cancel</button>
           <button type="button" onClick={onConfirm} disabled={pending} className="h-10 rounded-control bg-danger px-4 font-semibold text-white hover:bg-[#A83833] disabled:opacity-60">
-            {pending ? "Deleting…" : confirmLabel}
+            {pending ? pendingLabel : confirmLabel}
           </button>
         </div>
       </div>

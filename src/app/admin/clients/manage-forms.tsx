@@ -192,13 +192,15 @@ export function MetaEventsForm({ clientId, datasetId, hasToken }: { clientId: st
   const [pending, start] = useTransition();
   return (
     <div className="flex flex-col gap-3">
-      <form action={action} className="flex flex-col gap-3">
+      {/* Not a login form: no password field, so browsers don't auto-fill an email + saved password here. */}
+      <form action={action} autoComplete="off" data-1p-ignore data-lpignore="true" data-form-type="other" className="flex flex-col gap-3">
         <Field label="Dataset ID" htmlFor="meta_dataset_id" hint="Events Manager → the client's dataset (pixel) → Settings. Leave empty to turn events off.">
-          <Input id="meta_dataset_id" name="meta_dataset_id" inputMode="numeric" defaultValue={datasetId ?? ""} placeholder="e.g. 1995031924787890" />
+          <Input id="meta_dataset_id" name="meta_dataset_id" inputMode="numeric" autoComplete="off" data-1p-ignore data-lpignore="true" defaultValue={datasetId ?? ""} placeholder="e.g. 1995031924787890" />
         </Field>
         <Field label="Dataset access token" htmlFor="meta_capi_token" optional
           hint={hasToken ? "A token is saved (hidden). Paste a new one to replace it." : "Only if the dataset can't be shared with Safari Digital yet: Events Manager → dataset → Settings → Conversions API → Generate access token."}>
-          <Input id="meta_capi_token" name="meta_capi_token" type="password" autoComplete="off" placeholder={hasToken ? "••••••••  saved" : "Paste token"} />
+          <Input id="meta_capi_token" name="meta_capi_token" type="text" autoComplete="off" spellCheck={false} data-1p-ignore data-lpignore="true"
+            style={{ WebkitTextSecurity: "disc" } as React.CSSProperties} placeholder={hasToken ? "••••••••  saved" : "Paste token (starts with EAA)"} />
         </Field>
         {hasToken && (
           <label className="flex items-center gap-2 text-[13px]">

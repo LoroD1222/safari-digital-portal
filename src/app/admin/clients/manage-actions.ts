@@ -179,7 +179,7 @@ export async function saveMetaDataset(clientId: string, _: FormState, form: Form
   const token = str(form, "meta_capi_token");
   const clear = form.get("clear_capi_token") === "on";
   if (token || clear) {
-    if (token && !/^[A-Za-z0-9_-]{40,}$/.test(token)) return { error: "That doesn't look like a Meta access token. Copy it again from Events Manager → Settings → Conversions API." };
+    if (token && !/^EAA[A-Za-z0-9_-]{40,}$/.test(token)) return { error: "That doesn't look like a Meta access token (they start with EAA). Copy it again from Events Manager → Settings → Conversions API." };
     const { error: e2 } = await supabase.from("client_private").upsert({ client_id: clientId, meta_capi_token: clear ? null : token });
     if (e2) return { error: /meta_capi_token/.test(e2.message) ? "Run 0009_dataset_token.sql in Supabase first." : e2.message };
   }

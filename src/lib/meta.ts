@@ -24,6 +24,9 @@ export async function get<T>(path: string, params: Record<string, string> = {}):
     if (!res.ok || json.error) {
       const msg = json.error?.message ?? `Meta returned an error (${res.status}).`;
       if (json.error?.code === 190) return { ok: false, error: "Meta rejected the token. Generate a new one for the system user and update META_SYSTEM_USER_TOKEN." };
+      if (/api access blocked/i.test(msg)) {
+        return { ok: false, error: "Meta blocked the portal's app (API access blocked). Check developers.facebook.com → your app for a restriction or required check, then generate a new system user token." };
+      }
       if (json.error?.code === 10 || json.error?.code === 200 || /permission/i.test(msg)) {
         return { ok: false, error: "Meta didn't allow access to this ad account. Check it's assigned to the system user (View performance). " + msg };
       }

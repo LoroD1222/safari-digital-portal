@@ -2,7 +2,7 @@ import { Badge } from "@/components/ui";
 import { listProjects, monthRange, vercelConfigured, websiteStats } from "@/lib/vercel";
 import type { Client } from "@/lib/types";
 import { VercelProjectPicker } from "./data-connections";
-import { MetaEventsForm, MetaForm } from "./manage-forms";
+import { FollowupSenderForm, MetaEventsForm, MetaForm } from "./manage-forms";
 import { createClient } from "@/lib/supabase/server";
 import { fmtDateTime } from "@/lib/dates";
 import { createInquiryKey } from "./manage-actions";
@@ -58,6 +58,8 @@ export async function DataSection({ client }: { client: Client }) {
       <InquiryFormCard client={client} />
 
       <SnippetCard client={client} />
+
+      <FollowupCard client={client} />
 
       <Card title="Facebook & Instagram" what="Access to the client's Meta Business Suite"
         status={client.meta_access_confirmed ? <Badge tone="green">Access confirmed</Badge> : <Badge tone="amber">Not confirmed</Badge>}>
@@ -223,6 +225,32 @@ async function SnippetCard({ client }: { client: Client }) {
             <p className="mt-2 text-slate">Works with Contact Form 7, WPForms, Elementor, Gravity Forms, Fluent Forms and most others. Search boxes and login forms are ignored. Wix / Squarespace: Settings → Custom code → add to all pages, body end.</p>
           </details>
         </div>
+      )}
+    </Card>
+  );
+}
+
+// Follow-up emails to guests go from the client's own address (a domain verified in Resend).
+async function FollowupCard({ client }: { client: Client }) {
+  const supabase = await createClient();
+  const [{ data: fs, error }, { count: onRules }, { count: sent }] = await Promise.all([
+    supabase.from("followup_settings").select("*").eq("client_id", client.id).maybeSingle(),
+    supabase.from("followup_rules").select("id", { count: "exact", head: true }).eq("client_id", client.id).eq("enabled", true),
+    supabase.from("followup_sends").select("id", { count: "exact", head: true }).eq("client_id", client.id).eq("status", "sent"),
+  ]);
+  const ready = !!fs?.sender_ready && !!fs?.from_email;
+  return (
+    <Card title="Follow-up emails" what="Automatic reminders to guests who haven't replied, sent from the client's own address"
+      status={error ? <Badge tone="amber">Run 0020_followups.sql</Badge> : ready ? <Badge tone="green">Sender ready</Badge> : fs?.from_email ? <Badge tone="amber">Domain not verified</Badge> : <Badge>Not set up</Badge>}>
+      {!error && (
+        <>
+          <p className="text-[13px] text-body">
+            The client has follow-ups <span className="font-medium text-ink">{fs?.enabled ? "on" : "off"}</span>
+            {fs?.enabled ? ` · ${onRules ?? 0} switched on` : ""} · {sent ?? 0} sent so far.
+            {" "}To set up: add the client&apos;s domain in Resend (Domains), give them the DNS records, then enter the address here once it shows Verified.
+          </p>
+          <FollowupSenderForm clientId={client.id} email={fs?.from_email ?? null} name={fs?.from_name ?? null} clientName={client.name} />
+        </>
       )}
     </Card>
   );

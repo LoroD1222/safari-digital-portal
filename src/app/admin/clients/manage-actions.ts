@@ -8,6 +8,7 @@ import { notifyClient } from "@/lib/email";
 import type { Campaign, OnboardingStatus, WebsiteStage } from "@/lib/types";
 import { syncClient } from "@/lib/meta";
 import { sendTestEvent } from "@/lib/meta-events";
+import { checkSenderDomain } from "@/lib/followups";
 
 export type FormState = { error?: string; saved?: boolean; message?: string };
 
@@ -196,4 +197,21 @@ export async function sendMetaTestEvent(clientId: string, testCode: string): Pro
   if (!data?.meta_dataset_id) return { error: "Save the dataset ID first." };
   const res = await sendTestEvent(clientId, data.meta_dataset_id, code);
   return res.ok ? { saved: true, message: "Test event sent. It should appear in Events Manager → Test events within a minute." } : { error: res.error };
+}
+
+// The address follow-up emails go from. Ready only when its domain is verified in Resend.
+export async function saveFollowupSender(clientId: string, _: FormState, form: FormData): Promise<FormState> {
+  await requireAdmin();
+  const email = str(form, "from_email").toLowerCase();
+  const name = str(form, "from_name").slice(0, 80);
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: "Enter a full email address, e.g. bookings@theircompany.com" };
+  const check = email ? await checkSenderDomain(email) : { ready: false, message: "Removed. No follow-up emails will be sent for this client." };
+  const supabase = await createClient();
+  const { error } = await supabase.from("followup_settings").upsert({
+    client_id: clientId, from_email: email || null, from_name: name || null,
+    sender_ready: check.ready, sender_checked_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+  }, { onConflict: "client_id" });
+  if (error) return { error: /followup_settings|schema cache/.test(error.message) ? "Run 0020_followups.sql in Supabase first." : error.message };
+  done();
+  return check.ready ? { saved: true, message: check.message } : { error: email ? `Saved, but emails can't go yet. ${check.message}` : check.message };
 }

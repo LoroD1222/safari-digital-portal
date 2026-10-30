@@ -35,6 +35,7 @@ export default async function PortalLayout({ children }: LayoutProps<"/portal">)
     if (company.website_package || company.vercel_project_id || company.tracking_since) nav.push({ href: "/portal/website", label: "Website", icon: "globe" });
     nav.push({ href: "/portal/inquiries", label: "Inquiries", icon: "inbox", badge: newInquiries ?? 0 });
     nav.push({ href: "/portal/pipeline", label: "Pipeline", icon: "pipeline" });
+    nav.push({ href: "/portal/followups", label: "Follow-ups", icon: "mail" });
     nav.push({ href: "/portal/requests", label: "Requests", icon: "message", badge: replies ?? 0 });
     help = <HelpButton whatsapp={settings.support_whatsapp} email={settings.support_email} openRequests={replies ?? 0} />;
   }

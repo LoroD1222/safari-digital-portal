@@ -4,7 +4,7 @@ import { Alert, Button, Field, Input, Select, Textarea } from "@/components/ui";
 import { SubmitButton } from "@/components/submit-button";
 import { WEBSITE_STAGES, type AdReport, type Campaign, type Client } from "@/lib/types";
 import {
-  requestDesignReview, requestMissingInfo, saveAdReport, saveMeta, saveMetaDataset, savePlan, sendMetaTestEvent, saveWebsiteProject, syncMetaNow, type FormState,
+  requestDesignReview, requestMissingInfo, saveAdReport, saveFollowupSender, saveMeta, saveMetaDataset, savePlan, sendMetaTestEvent, saveWebsiteProject, syncMetaNow, type FormState,
 } from "./manage-actions";
 
 function Feedback({ state }: { state: FormState }) {
@@ -222,5 +222,23 @@ export function MetaEventsForm({ clientId, datasetId, hasToken }: { clientId: st
       )}
       <Feedback state={test} />
     </div>
+  );
+}
+
+export function FollowupSenderForm({ clientId, email, name, clientName }: { clientId: string; email: string | null; name: string | null; clientName: string }) {
+  const [state, action] = useActionState<FormState, FormData>(saveFollowupSender.bind(null, clientId), {});
+  return (
+    <form action={action} autoComplete="off" data-1p-ignore data-lpignore="true" data-form-type="other" className="flex flex-col gap-3">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Send from" htmlFor="fu_from_email" hint="An address on the client's own domain, e.g. bookings@theircompany.com. Replies go here too.">
+          <Input id="fu_from_email" name="from_email" type="text" inputMode="email" autoComplete="off" data-1p-ignore data-lpignore="true" defaultValue={email ?? ""} placeholder="bookings@theircompany.com" />
+        </Field>
+        <Field label="Sender name" htmlFor="fu_from_name" optional hint={`Shown to guests. Leave empty to use "${clientName}".`}>
+          <Input id="fu_from_name" name="from_name" autoComplete="off" defaultValue={name ?? ""} placeholder={clientName} maxLength={80} />
+        </Field>
+      </div>
+      <div className="flex justify-end"><SubmitButton variant="secondary">Save and check domain</SubmitButton></div>
+      <Feedback state={state} />
+    </form>
   );
 }

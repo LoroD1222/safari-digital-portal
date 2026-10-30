@@ -68,7 +68,7 @@ export async function monthResults(accountId: string, offset = 0): Promise<Resul
       level: "campaign", fields: "campaign_id,campaign_name,spend,actions",
       time_range: JSON.stringify({ since: m.start, until }), limit: "200",
     }),
-    get<{ data: { id: string; effective_status: string }[] }>(`/${accountId}/campaigns`, { fields: "id,effective_status", limit: "200" }),
+    get<{ data: { id: string; name: string; effective_status: string }[] }>(`/${accountId}/campaigns`, { fields: "id,name,effective_status", limit: "200" }),
   ]);
   if (!ins.ok) return ins;
   const status = Object.fromEntries((camps.ok ? camps.data.data : []).map((c) => [c.id, c.effective_status]));
@@ -80,7 +80,16 @@ export async function monthResults(accountId: string, offset = 0): Promise<Resul
       spend: Math.round(Number(r.spend ?? 0) * 100) / 100,
       ...resultsFrom(r.actions),
     };
-  }).filter((c) => c.spend > 0 || c.inquiries > 0).sort((a, b) => b.spend - a.spend);
+  }).filter((c) => c.spend > 0 || c.inquiries > 0);
+  // This month: also show campaigns that are live or in review but haven't spent yet.
+  if (offset === 0 && camps.ok) {
+    const seen = new Set(ins.data.data.map((r) => r.campaign_id));
+    for (const c of camps.data.data) {
+      if (seen.has(c.id) || !["ACTIVE", "IN_PROCESS", "WITH_ISSUES"].includes(c.effective_status)) continue;
+      campaigns.push({ name: c.name || "Campaign", status: "active", spend: 0, leads: 0, chats: 0, inquiries: 0 } as Campaign);
+    }
+  }
+  campaigns.sort((a, b) => b.spend - a.spend);
   return {
     ok: true,
     data: {

@@ -78,18 +78,35 @@ export function FollowupsManager(p: {
       </header>
 
       {/* The main switch. Off for everyone until they turn it on. */}
-      <section aria-label="Follow-ups on or off" className={`flex items-center gap-4 rounded-card border px-5 py-4 ${enabled ? "border-[#BFE3CF] bg-[#F1FAF6]" : "border-line bg-white"}`}>
+      <section aria-label="Follow-ups on or off" className={`flex flex-col overflow-hidden rounded-card border ${enabled ? "border-[#BFE3CF] bg-[#F1FAF6]" : "border-line bg-white"}`}>
+        <div className="flex items-center gap-4 px-5 py-4">
         <span className={`flex size-10 shrink-0 items-center justify-center rounded-control ${enabled ? "bg-white text-brand" : "bg-sidebar text-slate"}`}><Icon name="mail" size={20} /></span>
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="text-[15px] font-semibold">{enabled ? "Follow-ups are on" : "Follow-ups are off"}</span>
           <span className="text-[13px] text-slate">
             {enabled
               ? p.senderReady ? `${onCount} ${onCount === 1 ? "follow-up is" : "follow-ups are"} switched on. Emails go from ${p.fromEmail} every morning at 9:00.`
-                : "Emails start as soon as Safari Digital has set up your email address. WhatsApp follow-ups work already."
+                : `${onCount} ${onCount === 1 ? "follow-up is" : "follow-ups are"} switched on. Emails start once your address is connected.`
               : "Nothing is sent. Turn on to send the follow-ups below automatically."}
           </span>
         </span>
         <Switch size="lg" on={enabled} label={enabled ? "Turn follow-ups off" : "Turn follow-ups on"} onChange={toggleAll} disabled={pending} />
+        </div>
+        {/* Is the client's email address connected? Without it only WhatsApp follow-ups work. */}
+        <div className={`flex flex-wrap items-center gap-x-3 gap-y-1 border-t px-5 py-2.5 text-[13px] ${enabled ? "border-[#D4EBDD]" : "border-line-soft"} ${p.senderReady ? "bg-white/60" : "bg-[#FFFAF0]"}`}>
+          {p.senderReady ? (
+            <>
+              <span className="inline-flex items-center gap-1.5 font-semibold text-forest"><span className="inline-flex size-4 items-center justify-center rounded-full bg-brand text-white"><Icon name="check" size={10} /></span>Email connected</span>
+              <span className="min-w-0 flex-1 text-body">Follow-ups go from <span className="font-medium text-ink">{p.fromEmail}</span>, and guests&apos; replies come back to it.</span>
+            </>
+          ) : (
+            <>
+              <span className="inline-flex items-center gap-1.5 font-semibold text-[#8A5A12]"><span className="size-2 rounded-full bg-[#E0A458]" />Email not connected yet</span>
+              <span className="min-w-[220px] flex-1 text-[#8A5A12]">Safari Digital connects your own address (like bookings@yourcompany.com) so follow-ups come from you. Until then, only WhatsApp follow-ups work.</span>
+              <Link href="/portal/requests" className="font-semibold text-[#8A5A12] underline-offset-2 hover:underline">Ask Safari Digital</Link>
+            </>
+          )}
+        </div>
       </section>
 
       {error && <Alert>{error}</Alert>}

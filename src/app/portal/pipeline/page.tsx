@@ -31,9 +31,12 @@ export default async function PipelinePage() {
 
   return (
     <>
-      <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-[-0.02em]">Pipeline</h1>
-        <p className="text-slate">Follow every inquiry from the first message to a booking. New inquiries appear here automatically.</p>
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div className="flex flex-col gap-1">
+          <h1 className="text-2xl font-semibold tracking-[-0.02em]">Pipeline</h1>
+          <p className="text-slate">Follow every inquiry from the first message to a booking. New inquiries appear here automatically.</p>
+        </div>
+        <Link href="/portal/inquiries" className="text-[13px] font-medium text-brand no-underline">See all inquiries →</Link>
       </header>
       {board.error ? (
         <EmptyState title="The pipeline is almost ready" body="Safari Digital is finishing setting it up. Until then, your inquiries are on the Inquiries page." />
@@ -45,7 +48,6 @@ export default async function PipelinePage() {
             <Stat label={`Booked in ${monthName}`} value={money(won.value)} note={`${won.count} ${won.count === 1 ? "booking" : "bookings"}${won.adsValue > 0 ? ` · ${money(won.adsValue)} from ads` : ""}`} />
           </section>
           <PipelineBoard items={rows} company={company.name} />
-          <p className="text-[13px] text-slate">Looking for the full list or another month? <Link href="/portal/inquiries" className="font-medium text-brand no-underline">See all inquiries</Link>.</p>
         </>
       )}
     </>

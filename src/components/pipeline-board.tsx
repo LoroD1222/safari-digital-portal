@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { InquiryDialog, moveInquiry, stageColor, usd } from "./inquiry-dialog";
 import { INQUIRY_LABEL, STAGES, STALE_DAYS, type Inquiry, type InquirySource, type InquiryStatus } from "@/lib/types";
 
@@ -22,6 +22,20 @@ export function PipelineBoard({ items, company, adminHref }: { items: Inquiry[];
   const [over, setOver] = useState<InquiryStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [, start] = useTransition();
+  // Columns run down to the bottom of the window, whatever sits above the board.
+  const boardRef = useRef<HTMLDivElement>(null);
+  const [fill, setFill] = useState(420);
+  useEffect(() => {
+    const measure = () => requestAnimationFrame(() => {
+      const el = boardRef.current;
+      if (!el) return;
+      const top = el.getBoundingClientRect().top + window.scrollY;
+      setFill(Math.max(320, Math.round(window.innerHeight - top - 32)));
+    });
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
   const now = today();
 
   const columns = useMemo(() => STAGES.map((s) => {
@@ -53,18 +67,19 @@ export function PipelineBoard({ items, company, adminHref }: { items: Inquiry[];
   return (
     <section aria-label="Pipeline" data-wide className="flex flex-col gap-2">
       {error && <p role="alert" className="text-[13px] text-danger-text">{error}</p>}
-      <div className="-mx-4 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0">
+      <p className="text-xs text-slate">Drag a card to another stage, or tap <span className="font-semibold text-brand">›</span> to move it on. Open a card to add the trip value, a follow-up date and notes. A red <span className="font-semibold text-[#C2413B]">2D</span> means it&apos;s been waiting that many days.</p>
+      <div ref={boardRef} className="-mx-4 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0">
         <ol className="flex w-max snap-x snap-mandatory gap-2.5 sm:w-full sm:min-w-[1100px]">
           {columns.map(({ s, list, value }) => {
             const [, fg, dot] = stageColor(s);
             const done = s === "booked" || s === "closed";
             return (
-              <li key={s} className={"w-[78vw] flex-none snap-start " + (done ? "sm:w-[160px]" : "sm:w-auto sm:min-w-[190px] sm:flex-1")}>
+              <li key={s} style={{ minHeight: fill }} className={"flex w-[78vw] flex-none snap-start flex-col " + (done ? "sm:w-[160px]" : "sm:w-auto sm:min-w-[190px] sm:flex-1")}>
                 <div
                   onDragOver={(e) => { if (drag) { e.preventDefault(); setOver(s); } }}
                   onDragLeave={() => setOver((o) => (o === s ? null : o))}
                   onDrop={(e) => { e.preventDefault(); const id = e.dataTransfer.getData("text/plain") || drag; setOver(null); setDrag(null); if (id) move(id, s); }}
-                  className={"flex h-full min-h-[320px] flex-col gap-2 rounded-card p-2 transition-colors " + (over === s ? "bg-[#E3F4EA] outline-2 outline-dashed outline-brand" : "bg-sidebar")}>
+                  className={"flex flex-1 flex-col gap-2 rounded-card p-2 transition-colors " + (over === s ? "bg-[#E3F4EA] outline-2 outline-dashed outline-brand" : "bg-sidebar")}>
                   <div className="flex flex-col gap-0.5 px-1.5 pb-1 pt-0.5">
                     <span className="flex items-center gap-2 font-semibold" style={{ color: s === "closed" ? undefined : fg }}>
                       <span className="size-2 rounded-full" style={{ background: dot }} aria-hidden />{INQUIRY_LABEL[s]}
@@ -129,7 +144,6 @@ export function PipelineBoard({ items, company, adminHref }: { items: Inquiry[];
           })}
         </ol>
       </div>
-      <p className="text-xs text-slate">Drag a card to another stage, or tap <span className="font-semibold text-brand">›</span> to move it on. Open a card to add the trip value, a follow-up date and notes. A red <span className="font-semibold text-[#C2413B]">2D</span> means it&apos;s been waiting that many days.</p>
       {cur && open && (
         <InquiryDialog q={cur} company={company} intent={open.intent} onClose={() => { setOpen(null); router.refresh(); }} onUpdate={(p) => patch(cur.id, p)} />
       )}

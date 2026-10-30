@@ -3,7 +3,7 @@ import { metaConfigured, syncAll } from "@/lib/meta";
 import { retryMetaEvents } from "@/lib/meta-events";
 
 // Hourly Meta sync (ad results, campaigns, ads) + resending failed lead events.
-// Called by Supabase pg_cron (0019_hourly_meta_sync.sql) with "Authorization: Bearer $CRON_SECRET".
+// Vercel cron (vercel.json, every hour at :07) sends "Authorization: Bearer $CRON_SECRET".
 // Monthly reports and invoices stay in the daily /api/cron/meta-sync job.
 export const maxDuration = 60;
 

@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 import { emailConfigured } from "@/lib/email";
 import { Badge } from "@/components/ui";
 import { MonthlyReports } from "./reports";
+import { CompressExisting } from "./compress-existing";
 import { monthBounds } from "@/lib/dates";
 
 export const metadata: Metadata = { title: "Settings" };
@@ -49,6 +50,13 @@ export default async function SettingsPage() {
           <p className="text-[13px] text-slate">Every client gets last month&apos;s results by email on the 1st: inquiries, bookings, ad spend, cost per inquiry, posts and website visitors. Each client gets it once a month. Clients with no activity are skipped.</p>
         </div>
         <MonthlyReports clients={(cl ?? []) as { id: string; name: string }[]} month={lastMonth} />
+      </section>
+      <section className="flex flex-col gap-3 border-t border-line-soft pt-6">
+        <div className="flex flex-col gap-0.5">
+          <h2 className="text-[15px] font-semibold">Storage</h2>
+          <p className="text-[13px] text-slate">New uploads are compressed automatically. Use this once to shrink files uploaded before that. It runs in this browser and replaces each file at the same address, so nothing breaks.</p>
+        </div>
+        <CompressExisting />
       </section>
     </div>
   );

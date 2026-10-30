@@ -63,18 +63,18 @@ export const WEBSITE_LABEL: Record<WebsitePackage, string> = {
 };
 
 // List price, used as the suggested monthly price / one-time fee (USD). null = custom.
-export const MARKETING_PRICE: Record<MarketingPackage, number | null> = { growth: 450, scale: 750, partner: null };
-export const WEBSITE_PRICE: Record<WebsitePackage, number | null> = { landing_page: 120, tour_operator: 800, advanced: null };
+export const MARKETING_PRICE: Record<MarketingPackage, number | null> = { growth: 440, scale: 770, partner: null };
+export const WEBSITE_PRICE: Record<WebsitePackage, number | null> = { landing_page: 195, tour_operator: 820, advanced: null };
 
 // What's included, shown on the client's Account page.
 export const MARKETING_FEATURES: Record<MarketingPackage, string[]> = {
-  growth: ["Facebook & Instagram ads, managed for you", "International targeting strategy", "4 ad creatives a month, with copywriting", "Meta Pixel and conversion tracking", "Monthly report"],
-  scale: ["Everything in Growth", "TikTok Ads management", "8 ad creatives a month", "Advanced testing across platforms", "Monthly strategy call and detailed reports"],
+  growth: ["Facebook & Instagram ads, managed for you", "International targeting strategy", "Campaign setup and optimization", "4 ad creatives a month, with copywriting", "Meta Pixel, conversion tracking and retargeting", "Monthly report"],
+  scale: ["Everything in Growth", "TikTok Ads management", "ChatGPT ads where available", "8 ad creatives a month", "Advanced testing and cross-platform optimization", "Landing page conversion recommendations", "Monthly strategy call and detailed reports"],
   partner: ["Everything in Scale, tailored to you", "Multi-channel advertising and funnels", "CRM, WhatsApp and email automations", "Custom landing pages and advanced analytics", "Dedicated strategy and support"],
 };
 export const WEBSITE_FEATURES: Record<WebsitePackage, string[]> = {
-  landing_page: ["Single-page responsive website", "Tour or offer presentation", "WhatsApp and inquiry form", "Basic SEO", "One revision"],
-  tour_operator: ["Up to 6 pages and 5 safari itineraries", "Easy-to-use CMS", "Galleries, reviews and inquiry forms", "SEO, speed, Meta Pixel and analytics", "Two revisions and website training"],
+  landing_page: ["Single-page, mobile-friendly website", "Tour or offer showcase", "WhatsApp and inquiry form", "Design focused on conversions", "Basic SEO", "Two rounds of revisions"],
+  tour_operator: ["Up to 6 pages and 5 safari itineraries", "Easy-to-use CMS", "Galleries, reviews and inquiry forms", "SEO, speed, Meta Pixel and analytics", "Four rounds of revisions and website training"],
   advanced: ["Custom website design", "Advanced tour management", "Search, filters and multiple languages", "Booking and CRM integrations", "Custom features and automations"],
 };
 

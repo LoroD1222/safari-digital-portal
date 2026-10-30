@@ -8,12 +8,13 @@ export function RevisionUpload({ id, clientId, version }: { id: string; clientId
   const [file, setFile] = useState<File | null>(null);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState("Uploading…");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   async function send() {
     if (!file) return;
     setBusy(true); setMsg(null);
-    const up = await uploadMedia(file, clientId, id, version + 1);
+    const up = await uploadMedia(file, clientId, id, version + 1, setStatus);
     if ("error" in up) { setBusy(false); setMsg({ ok: false, text: up.error ?? "Upload failed." }); return; }
     const r = await uploadRevision(id, up.path, up.type, note);
     setBusy(false);
@@ -31,7 +32,7 @@ export function RevisionUpload({ id, clientId, version }: { id: string; clientId
       <label htmlFor="rev-note" className="sr-only">What changed</label>
       <Textarea id="rev-note" rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="What changed (optional)" />
       {msg && <Alert tone={msg.ok ? "success" : "error"}>{msg.text}</Alert>}
-      <div className="flex justify-end"><Button type="button" onClick={send} disabled={!file || busy}>{busy ? "Uploading…" : "Upload & send for approval"}</Button></div>
+      <div className="flex justify-end"><Button type="button" onClick={send} disabled={!file || busy}>{busy ? status : "Upload & send for approval"}</Button></div>
     </div>
   );
 }

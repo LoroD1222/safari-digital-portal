@@ -1,6 +1,7 @@
 "use client";
 import { useActionState, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { TUTORIAL_VIDEO, compressFile } from "@/lib/compress";
 import { Alert, Field, Input, Textarea } from "@/components/ui";
 import { SubmitButton } from "@/components/submit-button";
 import { VideoEmbed, toEmbed } from "@/components/video-embed";
@@ -10,11 +11,15 @@ import type { Settings } from "@/lib/settings";
 function VideoSetting({ name, label, where, initial }: { name: string; label: string; where: string; initial: string }) {
   const [url, setUrl] = useState(initial);
   const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState("Uploading…");
   const [err, setErr] = useState<string | null>(null);
   const bad = !!url.trim() && !toEmbed(url);
 
-  async function upload(file?: File) {
-    if (!file) return;
+  async function upload(picked?: File) {
+    if (!picked) return;
+    setErr(null); setBusy(true); setStatus("Compressing…");
+    const file = await compressFile(picked, { ...TUTORIAL_VIDEO, onProgress: (p) => setStatus(`Compressing… ${p}%`) });
+    setStatus("Uploading…"); setBusy(false);
     if (file.size > 50 * 1024 * 1024) { setErr("That video is over 50 MB. Upload it to YouTube (Unlisted) and paste the link instead."); return; }
     setErr(null); setBusy(true);
     const supabase = createClient();
@@ -39,7 +44,7 @@ function VideoSetting({ name, label, where, initial }: { name: string; label: st
             placeholder="YouTube, Loom, Vimeo or Google Drive link" />
         </div>
         <label className="inline-flex h-10 cursor-pointer items-center rounded-control border border-field bg-white px-4 font-medium hover:bg-[#F4F5F2]">
-          {busy ? "Uploading…" : "Upload video"}
+          {busy ? status : "Upload video"}
           <input type="file" accept="video/mp4,video/webm,video/quicktime" className="sr-only" disabled={busy}
             onChange={(e) => { upload(e.target.files?.[0]); e.target.value = ""; }} />
         </label>

@@ -54,13 +54,14 @@ export function NewContentForm({ clients, defaultClient }: { clients: { id: stri
   const [clientId, setClientId] = useState(defaultClient ?? "");
   const [media, setMedia] = useState<{ path: string; type: string; preview: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState("Uploading…");
   const [err, setErr] = useState<string | null>(null);
 
   async function pick(file?: File) {
     if (!file) return;
     if (!clientId) { setErr("Choose the client first."); return; }
     setErr(null); setBusy(true);
-    const r = await uploadMedia(file, clientId, id, 1);
+    const r = await uploadMedia(file, clientId, id, 1, setStatus);
     setBusy(false);
     if ("error" in r) { setErr(r.error ?? null); return; }
     setMedia({ path: r.path, type: r.type, preview: URL.createObjectURL(file) });
@@ -91,8 +92,8 @@ export function NewContentForm({ clients, defaultClient }: { clients: { id: stri
           </div>
         ) : (
           <label className="flex cursor-pointer flex-col items-center gap-1 rounded-card border border-dashed border-field px-5 py-8 text-center hover:bg-[#FAFAF8]">
-            <span className="font-medium">{busy ? "Uploading…" : "Choose a video or image"}</span>
-            <span className="text-xs text-slate">MP4, MOV, JPG or PNG</span>
+            <span className="font-medium">{busy ? status : "Choose a video or image"}</span>
+            <span className="text-xs text-slate">{busy ? "Keep this page open" : "MP4, MOV, JPG or PNG · compressed automatically"}</span>
             <input type="file" accept="video/*,image/*" className="sr-only" disabled={busy} onChange={(e) => { pick(e.target.files?.[0]); e.target.value = ""; }} />
           </label>
         )}

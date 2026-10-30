@@ -2,13 +2,15 @@
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { ATTACHMENT, compressFile } from "@/lib/compress";
 import { createRequest, replyToRequest } from "@/app/request-actions";
 import { Alert, Button, Field, Input, Select, Textarea } from "./ui";
 import { Icon } from "./icons";
 import { CATEGORY_LABEL, type RequestCategory } from "@/lib/types";
 
-async function uploadAttachment(file: File, clientId: string) {
-  if (file.size > 20 * 1024 * 1024) return { error: "Attachments can be up to 20 MB." };
+async function uploadAttachment(picked: File, clientId: string) {
+  const file = await compressFile(picked, ATTACHMENT);
+  if (file.size > 20 * 1024 * 1024) return { error: "Attachments can be up to 20 MB, even after compressing." };
   const safe = file.name.replace(/[^\w.\-]+/g, "_").slice(-80);
   const path = `${clientId}/${crypto.randomUUID()}-${safe}`;
   const { error } = await createClient().storage.from("request-files").upload(path, file, { contentType: file.type || undefined });

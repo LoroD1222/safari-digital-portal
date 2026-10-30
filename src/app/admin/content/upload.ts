@@ -1,8 +1,13 @@
 "use client";
 import { createClient } from "@/lib/supabase/client";
+import { CONTENT_MEDIA, compressFile } from "@/lib/compress";
 
 // Uploads straight from the browser to the private "content" bucket.
-export async function uploadMedia(file: File, clientId: string, itemId: string, version: number) {
+// Images and videos are compressed first (Full HD, good quality for Instagram & Facebook).
+export async function uploadMedia(original: File, clientId: string, itemId: string, version: number, onStatus?: (s: string) => void) {
+  onStatus?.("Compressing…");
+  const file = await compressFile(original, { ...CONTENT_MEDIA, onProgress: (p) => onStatus?.(`Compressing… ${p}%`) });
+  onStatus?.("Uploading…");
   const ext = (file.name.split(".").pop() || "bin").toLowerCase().replace(/[^a-z0-9]/g, "");
   const path = `${clientId}/${itemId}/v${version}-${new Date().getTime()}.${ext}`;
   const { error } = await createClient().storage.from("content").upload(path, file, { contentType: file.type || undefined, upsert: false });

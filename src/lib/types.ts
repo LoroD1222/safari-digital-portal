@@ -194,6 +194,7 @@ export type ClientPrivate = {
   client_id: string; monthly_fee: number | null; currency: Currency; billing_start: string | null; notes: string | null;
   discount_type?: DiscountType; discount_value?: number | null;
   website_fee?: number | null; website_discount_type?: DiscountType; website_discount_value?: number | null;
+  website_built_on?: string | null; // first day of the month the website was built
 };
 
 // List price minus a discount (percent or fixed amount), never below zero.

@@ -66,6 +66,7 @@ function readPrivate(form: FormData): { values: Record<string, unknown>; error?:
   const webFee = !web ? null : webList !== null ? discounted(webList, wd.type, wd.value) : typedWeb.value;
 
   const start = text(form, "billing_start");
+  const built = text(form, "website_built_on");
   return {
     values: {
       monthly_fee: monthly,
@@ -75,6 +76,7 @@ function readPrivate(form: FormData): { values: Record<string, unknown>; error?:
       website_fee: webFee,
       website_discount_type: wd.type, website_discount_value: webList !== null ? wd.value : 0,
       billing_start: start && /^\d{4}-\d{2}-\d{2}$/.test(start) ? start : null,
+      website_built_on: web && built && /^\d{4}-\d{2}$/.test(built) ? `${built}-01` : null,
       notes: text(form, "notes"),
     },
   };
@@ -83,6 +85,7 @@ function readPrivate(form: FormData): { values: Record<string, unknown>; error?:
 async function savePrivate(supabase: Awaited<ReturnType<typeof createClient>>, clientId: string, values: Record<string, unknown>) {
   const { error } = await supabase.from("client_private").upsert({ client_id: clientId, ...values });
   if (!error) return null;
+  if (/website_built_on/.test(error.message)) return "Run 0019_website_month.sql in Supabase to save the website month.";
   if (/discount|website_fee/.test(error.message)) return "Run 0010_packages.sql in Supabase to save package prices and discounts.";
   return error.message.includes("client_private") ? "Run 0007_billing.sql in Supabase to save prices and notes." : error.message;
 }

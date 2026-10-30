@@ -179,6 +179,13 @@ function PackagePricing({ client, billing, val, fe }: { client?: Client; billing
             ))}
         </div>
         {web && webList !== null && <Summary list={webList} final={discounted(webList, wType, num(wVal))} per=" one-time" type={wType} value={num(wVal)} />}
+        {web && (
+          <div className="max-w-[240px]">
+            <Field label="Website built in" htmlFor="website_built_on" optional hint="The month the website was finished. Used for the website income chart.">
+              <Input id="website_built_on" name="website_built_on" type="month" defaultValue={val("website_built_on", billing?.website_built_on ? billing.website_built_on.slice(0, 7) : "")} />
+            </Field>
+          </div>
+        )}
 
         <div className="max-w-[240px]">
           <Field label="Paying since" htmlFor="billing_start" optional hint="When the monthly price started. Used for the MRR chart.">

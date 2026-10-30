@@ -23,7 +23,7 @@ export default async function AdminOverview() {
     supabase.from("content_items").select("id, client_id, title, status, updated_at").in("status", ["awaiting_approval", "changes_requested", "approved"]),
     supabase.from("requests").select("*").neq("status", "completed").order("last_message_at", { ascending: false }),
     supabase.from("activity").select("id, client_id, message, created_at, admin_link, actor_role").order("created_at", { ascending: false }).limit(8),
-    supabase.from("client_private").select("client_id, monthly_fee, currency, billing_start, website_fee"),
+    supabase.from("client_private").select("*"),
   ]);
   const clients = (cs ?? []) as Client[];
   const items = (content ?? []) as ContentItem[];
@@ -58,11 +58,11 @@ export default async function AdminOverview() {
   // Website income from each client's settings: their website price (after discount),
   // in the month they started (billing start date, or the day they were added). USD.
   const months = Array.from({ length: 12 }, (_, i) => monthBounds(i - 11));
-  const priv = Object.fromEntries(((bills ?? []) as (ClientPrivate & { website_fee?: number | null })[]).map((b) => [b.client_id, b]));
+  const priv = Object.fromEntries(((bills ?? []) as ClientPrivate[]).map((b) => [b.client_id, b]));
   const websites = clients.filter((c) => c.website_package).map((c) => {
     const b = priv[c.id];
     const fee = b?.website_fee != null ? Number(b.website_fee) : WEBSITE_PRICE[c.website_package as WebsitePackage] ?? 0;
-    return { fee, day: (b?.billing_start ?? c.created_at).slice(0, 10) };
+    return { fee, day: (b?.website_built_on ?? b?.billing_start ?? c.created_at).slice(0, 10) };
   }).filter((w) => w.fee > 0);
   const inWindow = websites.filter((w) => w.day >= months[0].start);
   const websiteSeries = months.map((m) => ({
@@ -89,7 +89,7 @@ export default async function AdminOverview() {
           note={totals.length > 1 ? `In ${chartCurrency}, from each client's price and start date. Other currencies aren't included in the chart.` : undefined} />
       )}
       <MrrChart id="web" data={websiteSeries} currency="USD" title="Website income · last 12 months"
-        note="Each client's website price (after discount), in the month they started"
+        note="Each client's website price (after discount), in the month it was built"
         headline={formatMoney(websiteYear, "USD")}
         subline={`${inWindow.length} ${inWindow.length === 1 ? "website" : "websites"} · ${formatMoney(websiteThisMonth, "USD")} this month`} />
       {clients.length === 0 ? (

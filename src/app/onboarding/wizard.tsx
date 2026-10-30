@@ -23,6 +23,7 @@ type Props = {
   metaConfirmed: boolean;
   supportWhatsapp: string | null;
   metaBusinessId: string | null;
+  metaAdEmails: string[];
   driveShareEmail: string | null;
   metaAccessVideoUrl: string | null;
   driveTutorialVideoUrl: string | null;
@@ -509,8 +510,28 @@ export function Wizard(p: Props) {
                     <span className="text-[13px] text-slate">We never ask for your password.</span>
                   </div>
                 </Section>
-                <Section title="Step 3 · Confirm">
+                {p.metaAdEmails.length > 0 && (
+                  <Section title="Step 3 · Add our team to your ad account">
+                    <ol className="list-decimal space-y-2 pl-5 text-body">
+                      <li>In <strong className="font-semibold text-ink">Meta Business Suite</strong>, go to <strong className="font-semibold text-ink">Settings → People → Invite people</strong>.</li>
+                      <li>
+                        Add {p.metaAdEmails.length === 1 ? "this email" : "these emails"}:
+                        <span className="mt-1.5 flex flex-wrap gap-2">
+                          {p.metaAdEmails.map((e) => (
+                            <span key={e} className="inline-flex items-center gap-2 rounded-badge border border-line bg-sidebar py-0.5 pl-2.5 pr-1 font-mono text-[13px] text-ink">{e}<CopyButton text={e} /></span>
+                          ))}
+                        </span>
+                      </li>
+                      <li>Give them access to your <strong className="font-semibold text-ink">ad account</strong> with <strong className="font-semibold text-ink">full control</strong> (Manage ad account), then send the invite.</li>
+                    </ol>
+                    <a href="https://business.facebook.com/settings/people" target="_blank" rel="noopener noreferrer" className={buttonClass("secondary", "h-9 self-start")}>Open People settings ↗</a>
+                  </Section>
+                )}
+                <Section title={p.metaAdEmails.length > 0 ? "Step 4 · Confirm" : "Step 3 · Confirm"}>
                   <Check checked={m.invite_sent} onChange={(v) => update("marketing", { invite_sent: v })}>I&apos;ve sent the partner request to Safari Digital</Check>
+                  {p.metaAdEmails.length > 0 && (
+                    <Check checked={!!m.people_added} onChange={(v) => update("marketing", { people_added: v })}>I&apos;ve added the Safari Digital team to our ad account</Check>
+                  )}
                   <span className="text-xs text-slate">
                     {p.metaConfirmed ? "Confirmed. We can see your pages." : "We'll accept it and confirm here, usually the same day."}
                   </span>

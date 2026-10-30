@@ -15,6 +15,7 @@ export type Answers = {
     facebook?: string;
     no_instagram?: boolean;
     invite_sent?: boolean;
+    people_added?: boolean;
     budget?: string;
     ad_goals?: string[];
     promote?: string;

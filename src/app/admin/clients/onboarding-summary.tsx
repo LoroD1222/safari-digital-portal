@@ -56,6 +56,7 @@ export function OnboardingSummary({ answers, submittedAt, files }: {
           <Section title="Facebook & Instagram" rows={[
             { k: "Instagram", v: m.no_instagram ? "None yet, wants one set up" : m.instagram }, { k: "Facebook page", v: m.facebook },
             { k: "Meta access invite", v: m.invite_sent ? "Client says it's sent" : "Not sent yet" },
+            { k: "Team added to ad account", v: m.people_added ? "Client says they're added" : "Not yet" },
             { k: "Monthly ad budget", v: m.budget ? `$${m.budget}` : null }, { k: "Ad goals", v: list(m.ad_goals) }, { k: "Promote first", v: m.promote },
           ]} />
           <Section title="Website" rows={[

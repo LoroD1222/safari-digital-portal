@@ -42,6 +42,7 @@ export default async function OnboardingPage() {
       supportWhatsapp={settings.support_whatsapp}
       note={company.onboarding_note ?? null}
       metaBusinessId={settings.meta_business_id}
+      metaAdEmails={(settings.meta_ad_emails ?? "").split(/[\s,;]+/).filter((e) => e.includes("@"))}
       driveShareEmail={settings.drive_share_email}
       metaAccessVideoUrl={settings.meta_video_url}
       driveTutorialVideoUrl={settings.drive_video_url}

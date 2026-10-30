@@ -76,6 +76,9 @@ export function SettingsForm({ initial }: { initial: Settings }) {
           <Field label="Meta Business ID" htmlFor="meta_business_id" hint="Clients add this as a partner in Meta Business Suite.">
             <Input id="meta_business_id" name="meta_business_id" defaultValue={v("meta_business_id")} inputMode="numeric" />
           </Field>
+          <Field label="Team emails to add to ad accounts" htmlFor="meta_ad_emails" hint="Clients add these people to their Facebook ad account. Separate with commas.">
+            <Input id="meta_ad_emails" name="meta_ad_emails" defaultValue={v("meta_ad_emails")} placeholder="name@gmail.com, name2@gmail.com" />
+          </Field>
           <Field label="Email to share Drive folders with" htmlFor="drive_share_email" hint="Leave empty to ask for 'Anyone with the link'.">
             <Input id="drive_share_email" name="drive_share_email" type="email" defaultValue={v("drive_share_email")} />
           </Field>

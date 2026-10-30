@@ -85,3 +85,18 @@ export async function setRequestStatus(id: string, status: RequestStatus) {
   }
   revalidatePath("/", "layout");
 }
+
+// Admin only: remove requests with their messages and attached files.
+export async function deleteRequests(ids: string[]): Promise<{ error?: string; deleted?: number }> {
+  await requireAdmin();
+  const clean = ids.filter((x) => /^[0-9a-f-]{36}$/i.test(x)).slice(0, 300);
+  if (!clean.length) return { error: "Nothing selected." };
+  const supabase = await createClient();
+  const { data: files } = await supabase.from("request_messages").select("attachment_path").in("request_id", clean).not("attachment_path", "is", null);
+  const paths = (files ?? []).map((f) => f.attachment_path as string).filter(Boolean);
+  if (paths.length) await supabase.storage.from("request-files").remove(paths);
+  const { error, count } = await supabase.from("requests").delete({ count: "exact" }).in("id", clean);
+  if (error) return { error: "Couldn't delete. " + error.message };
+  revalidatePath("/", "layout");
+  return { deleted: count ?? clean.length };
+}

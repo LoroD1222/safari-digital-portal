@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import { requireAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { REQUEST_LABEL_ADMIN, type RequestStatus, type SupportRequest } from "@/lib/types";
-import { EmptyState, PageHeader, Select } from "@/components/ui";
+import { Alert, EmptyState, PageHeader, Select } from "@/components/ui";
 import { Filters } from "@/components/blocks";
-import { RequestList } from "@/components/request-list";
+import { RequestSelectList } from "./request-select-list";
 
 export const metadata: Metadata = { title: "Requests" };
 const STATUSES: RequestStatus[] = ["submitted", "in_progress", "waiting_for_client", "completed"];
@@ -29,6 +29,7 @@ export default async function AdminRequests(props: PageProps<"/admin/requests">)
   return (
     <>
       <PageHeader title="Requests" subtitle="Website changes and help requests from clients." />
+      {sp.deleted && <Alert tone="success">Request deleted.</Alert>}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Filters label="Filter" items={[
           { href: qs("open"), label: "Open", active: filter === "open", count: open.length },
@@ -47,7 +48,7 @@ export default async function AdminRequests(props: PageProps<"/admin/requests">)
       </div>
       {shown.length === 0
         ? <EmptyState title={filter === "open" ? "No open requests" : "No requests here"} body="Clients send requests from Help and from their Website page." />
-        : <RequestList items={shown} hrefBase="/admin/requests" admin clientNames={client ? undefined : names} />}
+        : <RequestSelectList items={shown} clientNames={client ? undefined : names} />}
     </>
   );
 }

@@ -173,3 +173,13 @@ export async function restoreInvoice(id: string): Promise<InvoiceFormState> {
   done();
   return { saved: true, message: "Restored as a draft." };
 }
+
+// Remove any invoice for good (sent, paid or cancelled too). Its number isn't reused.
+export async function deleteInvoice(id: string): Promise<{ error?: string }> {
+  await requireAdmin();
+  const supabase = await createClient();
+  const { error } = await supabase.from("invoices").delete().eq("id", id);
+  if (error) return { error: "Couldn't delete it. " + error.message };
+  done();
+  redirect("/admin/invoices?deleted=1");
+}

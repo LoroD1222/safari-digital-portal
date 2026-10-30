@@ -10,6 +10,7 @@ import { BackLink } from "@/components/blocks";
 import { ReplyForm } from "@/components/request-forms";
 import { Thread, loadThread } from "@/components/request-thread";
 import { setRequestStatus } from "@/app/request-actions";
+import { DeleteRequest } from "../delete-request";
 
 export const metadata: Metadata = { title: "Request" };
 const UUID = /^[0-9a-f-]{36}$/i;
@@ -29,7 +30,7 @@ export default async function AdminRequest(props: PageProps<"/admin/requests/[id
   return (
     <div className="flex max-w-[760px] flex-col gap-6">
       <BackLink href="/admin/requests">Requests</BackLink>
-      <PageHeader title={r.subject}
+      <PageHeader title={r.subject} actions={<DeleteRequest id={r.id} subject={r.subject} />}
         subtitle={<><Link href={`/admin/clients/${r.client_id}`} className="font-medium text-brand no-underline">{name}</Link> · {CATEGORY_LABEL[r.category]} · {fmtDate(r.created_at, true)}</>} />
       <div role="group" aria-label="Status" className="inline-flex w-fit flex-wrap rounded-control bg-[#F1F2F4] p-[3px]">
         {STATUSES.map((s) => (

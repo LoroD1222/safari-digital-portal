@@ -7,6 +7,7 @@ import { INVOICE_LABEL, INVOICE_TONE, invoiceState, type Invoice } from "@/lib/t
 import { fmtDate, fmtDateTime } from "@/lib/dates";
 import { Alert, Badge } from "@/components/ui";
 import { InvoiceEditor, InvoiceActions } from "./invoice-forms";
+import { DeleteInvoice } from "./delete-invoice";
 import { billingEmails } from "@/lib/invoices";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -38,7 +39,10 @@ export default async function InvoicePage(props: PageProps<"/admin/invoices/[id]
             {inv.overdue_sent_at && <> · overdue notice sent</>}
           </p>
         </div>
-        <a href={`/api/invoices/${inv.id}/pdf`} target="_blank" rel="noopener" className="inline-flex h-9 items-center rounded-control border border-field px-3.5 text-[13px] font-medium text-ink no-underline hover:bg-[#F4F5F2]">Open PDF ↗</a>
+        <div className="flex flex-wrap gap-2">
+          <a href={`/api/invoices/${inv.id}/pdf`} target="_blank" rel="noopener" className="inline-flex h-9 items-center rounded-control border border-field px-3.5 text-[13px] font-medium text-ink no-underline hover:bg-[#F4F5F2]">Open PDF ↗</a>
+          <DeleteInvoice id={inv.id} number={inv.number} status={inv.status} />
+        </div>
       </div>
       {sp.exists && <Alert tone="info">There&apos;s already a monthly invoice for this client this month, so here it is.</Alert>}
       {!logins && !c?.contact_email && state !== "paid" && <Alert>This client has no login and no contact email, so the invoice can&apos;t be emailed. Add a contact email on the client page.</Alert>}

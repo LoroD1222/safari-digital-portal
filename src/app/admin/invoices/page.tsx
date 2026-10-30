@@ -36,6 +36,7 @@ export default async function InvoicesPage(props: PageProps<"/admin/invoices">) 
     <>
       <PageHeader title="Invoices" subtitle="Monthly invoices are prepared on the 1st and wait for your approval. Nothing reaches a client until you approve and send it."
         actions={<ButtonLink href={`/admin/invoices/new${client ? `?client=${client}` : ""}`}><Icon name="plus" size={16} />New invoice</ButtonLink>} />
+      {sp.deleted && <p role="status" className="rounded-control border border-[#BFE3CF] bg-[#F1FAF6] px-3.5 py-2.5 text-[13px] text-forest">Invoice deleted.</p>}
       {error && <p className="text-[13px] text-danger-text">Run 0012_invoices.sql in Supabase to start using invoices.</p>}
       <section aria-label="Summary" className="grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-3">
         <Stat label="Unpaid" value={sum(unpaid)} note={`${unpaid.length} ${unpaid.length === 1 ? "invoice" : "invoices"}`} />

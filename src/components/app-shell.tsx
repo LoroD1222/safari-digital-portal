@@ -18,7 +18,7 @@ export function AppShell({ nav, navLabel, badge, footer, children, bottom }: {
         {footer}
       </nav>
       <main className="min-w-0 flex-[999_1_560px] px-4 pb-16 pt-10 sm:px-10">
-        <div className="mx-auto flex max-w-[960px] flex-col gap-8">{children}</div>
+        <div className="mx-auto flex max-w-[960px] flex-col gap-8 has-[[data-wide]]:max-w-[1400px]">{children}</div>
       </main>
     </div>
   );

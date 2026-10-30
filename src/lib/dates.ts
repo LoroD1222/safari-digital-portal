@@ -32,3 +32,8 @@ export function ago(iso: string, now = Date.now()) {
 export function money(n: number) {
   return "$" + n.toLocaleString("en-US", { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 });
 }
+
+// ISO timestamp for `days` days ago (for "last 30 days" filters).
+export function daysAgo(days: number) {
+  return new Date(Date.now() - days * 864e5).toISOString();
+}

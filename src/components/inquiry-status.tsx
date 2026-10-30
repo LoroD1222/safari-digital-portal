@@ -1,9 +1,9 @@
 "use client";
 import { useOptimistic, useTransition } from "react";
 import { updateInquiryStatus } from "@/app/inquiry-actions";
-import { INQUIRY_LABEL, type InquiryStatus } from "@/lib/types";
+import { INQUIRY_LABEL, STAGES, type InquiryStatus } from "@/lib/types";
 
-const ORDER: InquiryStatus[] = ["new", "contacted", "booked", "closed"];
+const ORDER: InquiryStatus[] = STAGES;
 
 export function InquiryStatusPicker({ id, status }: { id: string; status: InquiryStatus }) {
   const [pending, start] = useTransition();

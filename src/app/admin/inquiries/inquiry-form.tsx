@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useActionState } from "react";
 import { Alert, Field, Input, Select, Textarea, buttonClass } from "@/components/ui";
 import { SubmitButton } from "@/components/submit-button";
-import { CHANNEL_LABEL, INQUIRY_LABEL, SOURCE_LABEL, type Inquiry } from "@/lib/types";
+import { CHANNEL_LABEL, INQUIRY_LABEL, LOST_REASONS, SOURCE_LABEL, type Inquiry } from "@/lib/types";
 import type { InquiryFormState } from "./actions";
 
 export function InquiryForm({ action, inquiry, clients, defaultClient, cancelHref, submitLabel }: {
@@ -79,6 +79,26 @@ export function InquiryForm({ action, inquiry, clients, defaultClient, cancelHre
           </Select>
         </Field>
       </div>
+      <fieldset className="grid gap-4 border-t border-line-soft pt-5 sm:grid-cols-2">
+        <legend className="mb-1 font-semibold">Deal</legend>
+        <Field label="Trip value (USD)" htmlFor="trip_value" optional error={fe.trip_value} hint="The total the guest pays. Sent to Meta with Booked.">
+          <Input id="trip_value" name="trip_value" inputMode="decimal" placeholder="4200" defaultValue={v("trip_value", inquiry?.trip_value != null ? String(inquiry.trip_value) : "")} />
+        </Field>
+        <Field label="Next follow-up" htmlFor="follow_up_on" optional>
+          <Input id="follow_up_on" name="follow_up_on" type="date" defaultValue={v("follow_up_on", inquiry?.follow_up_on)} />
+        </Field>
+        <Field label="Lost reason" htmlFor="lost_reason" optional hint="Only when the stage is Lost.">
+          <Select id="lost_reason" name="lost_reason" defaultValue={v("lost_reason", inquiry?.lost_reason)}>
+            <option value="">—</option>
+            {LOST_REASONS.map((r) => <option key={r} value={r}>{r}</option>)}
+          </Select>
+        </Field>
+        <div className="sm:col-span-2">
+          <Field label="Notes" htmlFor="notes" optional hint="The client sees these too.">
+            <Textarea id="notes" name="notes" rows={3} defaultValue={v("notes", inquiry?.notes)} />
+          </Field>
+        </div>
+      </fieldset>
       <div className="flex justify-end gap-2 border-t border-line-soft pt-5">
         <Link href={cancelHref} className={buttonClass("ghost")}>Cancel</Link>
         <SubmitButton>{submitLabel}</SubmitButton>

@@ -83,6 +83,8 @@ async function buildReport(clientId: string, offset: number) {
     admin.from("content_items").select("id", { count: "exact", head: true }).eq("client_id", clientId).gte("published_at", m.start).lt("published_at", m.next),
   ]);
   if (!c) return null;
+  const { bookedInMonth } = await import("./pipeline");
+  const won = await bookedInMonth(admin, clientId, m);
   const list = inq ?? [];
   const booked = list.filter((i) => i.status === "booked").length;
   const spend = rep ? Number(rep.meta_spend) : null;
@@ -91,11 +93,13 @@ async function buildReport(clientId: string, offset: number) {
   let visitors: number | null = null;
   const s = await clientWebsiteStats(c, monthRange(offset));
   if (s?.ok) visitors = s.data.visitors;
-  const hasAnything = list.length > 0 || (spend ?? 0) > 0 || (posts ?? 0) > 0 || (visitors ?? 0) > 0;
+  const hasAnything = list.length > 0 || won.count > 0 || (spend ?? 0) > 0 || (posts ?? 0) > 0 || (visitors ?? 0) > 0;
   const rows: [string, string | null][] = [
     ["Inquiries", `${list.length}`],
     ["Confirmed bookings", `${booked}${list.length ? ` (${Math.round((booked / list.length) * 100)}%)` : ""}`],
+    ["Booked revenue", won.value > 0 ? `${formatMoney(won.value, "USD")} from ${won.count} ${won.count === 1 ? "booking" : "bookings"}` : null],
     ["Ad spend", spend !== null && spend > 0 ? formatMoney(spend, "USD") : null],
+    ["Booked from ads", won.adsValue > 0 ? `${formatMoney(won.adsValue, "USD")}${spend ? ` · ${(won.adsValue / spend).toFixed(1)}× your ad spend` : ""}` : null],
     ["Inquiries from ads", adInq ? `${adInq}${chats ? ` (incl. ${chats} chats)` : ""}` : null],
     ["Cost per inquiry from ads", spend && adInq ? formatMoney(Math.round((spend / adInq) * 100) / 100, "USD") : null],
     ["Posts and Reels published", posts ? `${posts}` : null],

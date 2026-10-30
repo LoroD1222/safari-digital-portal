@@ -7,6 +7,7 @@ import { fmtDate, money, monthBounds } from "@/lib/dates";
 import { adChats, CONTENT_LABEL, KIND_LABEL, type AdReport, type Campaign, type ContentItem } from "@/lib/types";
 import { CONTENT_TONE } from "@/lib/status-tone";
 import { MetaAdsGrid } from "@/components/meta-ads";
+import { bookedInMonth } from "@/lib/pipeline";
 import type { MetaAd } from "@/lib/types";
 import { Badge, EmptyState, Stat } from "@/components/ui";
 import { Row, RowList, Section } from "@/components/blocks";
@@ -75,6 +76,7 @@ export default async function AdvertisingPage(props: PageProps<"/portal/marketin
   const m = monthBounds(0, new Date(report.month + "T00:00:00Z"));
   const { count: tracked } = await supabase.from("inquiries").select("id", { count: "exact", head: true })
     .eq("client_id", company.id).gte("received_at", m.start).lt("received_at", m.next);
+  const won = await bookedInMonth(supabase, company.id, m);
   const spend = Number(report.meta_spend);
   const cpi = report.meta_inquiries > 0 ? spend / report.meta_inquiries : null;
   const campaigns = (report.campaigns ?? []) as Campaign[];
@@ -103,6 +105,8 @@ export default async function AdvertisingPage(props: PageProps<"/portal/marketin
         <Stat label="Inquiries from ads" value={report.meta_inquiries} note={chats === null ? "As reported by Meta" : `${forms} form ${forms === 1 ? "lead" : "leads"} + ${chats} ${chats === 1 ? "chat" : "chats"}`} />
         {chats !== null && <Stat label="Chats from ads" value={chats} note="Instagram, Messenger & WhatsApp messages started from your ads" />}
         <Stat label="Cost per inquiry" value={cpi === null ? "—" : money(Math.round(cpi * 100) / 100)} note="Ad spend ÷ inquiries from ads" />
+        <Stat label="Booked from ads" value={won.adsValue > 0 ? money(won.adsValue) : "—"}
+          note={won.adsValue > 0 ? `${won.adsCount} ${won.adsCount === 1 ? "booking" : "bookings"}${spend ? ` · ${(won.adsValue / spend).toFixed(1)}× your ad spend` : ""}` : "Mark bookings in Inquiries with their trip value"} />
       </section>
       <p className="-mt-3 text-[13px] text-slate">
         All tracked inquiries in {m.label}, from every source: <Link href="/portal/inquiries" className="font-medium text-brand no-underline">{tracked ?? 0}</Link>

@@ -88,14 +88,18 @@ async function post(token: string | null, datasetId: string, event: Record<strin
   }
 }
 
-function buildEvent(name: MetaEventName, at: Date, u: Record<string, unknown>, eventId: string) {
+function buildEvent(name: MetaEventName, at: Date, u: Record<string, unknown>, eventId: string, value?: number | null) {
   return {
     event_name: name,
     event_time: Math.floor(at.getTime() / 1000),
     event_id: eventId,
     action_source: "system_generated",
     user_data: u,
-    custom_data: { event_source: "crm", lead_event_source: SOURCE_NAME },
+    custom_data: {
+      event_source: "crm", lead_event_source: SOURCE_NAME,
+      // Booked carries the trip value, so ads can learn which inquiries are worth the most.
+      ...(name === "Booked" && value && value > 0 ? { value: Math.round(value * 100) / 100, currency: "USD" } : {}),
+    },
   };
 }
 
@@ -105,10 +109,13 @@ async function deliver(rowId: string) {
   if (!ev || ev.status === "sent" || ev.status === "skipped") return;
   const finish = (patch: Record<string, unknown>) => admin.from("meta_events").update(patch).eq("id", rowId);
 
-  const [{ data: client }, { data: inq }] = await Promise.all([
+  const cols = "id, client_id, customer_name, email, phone, country, origin, external_id, fbc, fbp, received_at";
+  const [{ data: client }, withValue] = await Promise.all([
     admin.from("clients").select("meta_dataset_id").eq("id", ev.client_id).single(),
-    admin.from("inquiries").select("id, client_id, customer_name, email, phone, country, origin, external_id, fbc, fbp, received_at").eq("id", ev.inquiry_id).maybeSingle(),
+    admin.from("inquiries").select(cols + ", trip_value").eq("id", ev.inquiry_id).maybeSingle(),
   ]);
+  // Before 0018_pipeline.sql there's no trip_value column; still send the event.
+  const inq = withValue.error ? (await admin.from("inquiries").select(cols).eq("id", ev.inquiry_id).maybeSingle()).data : withValue.data;
   const dataset = client?.meta_dataset_id;
   if (!dataset) return finish({ status: "skipped", error: "No Meta dataset ID for this client." });
   if (!inq) return finish({ status: "skipped", error: "The inquiry was deleted." });
@@ -117,7 +124,7 @@ async function deliver(rowId: string) {
   const u = userData(inq as InquiryRow);
   if (!matchable(u)) return finish({ status: "skipped", error: "No email, phone or ad click to match on." });
 
-  const res = await post(await tokenFor(ev.client_id), dataset, buildEvent(ev.event_name as MetaEventName, at, u, ev.event_key));
+  const res = await post(await tokenFor(ev.client_id), dataset, buildEvent(ev.event_name as MetaEventName, at, u, ev.event_key, Number((inq as { trip_value?: number | null }).trip_value ?? 0) || null));
   const attempts = (ev.attempts ?? 0) + 1;
   if (res.ok) return finish({ status: "sent", attempts, error: null, sent_at: new Date().toISOString() });
   return finish({ status: "failed", attempts, error: res.error });

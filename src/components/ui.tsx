@@ -56,13 +56,15 @@ export function Textarea({ className, ...props }: ComponentProps<"textarea">) {
   return <textarea className={cx(INPUT, "h-auto py-2.5", className)} {...props} />;
 }
 
-const TONES = {
+export const TONES = {
   neutral: ["#F1F2F4", "#4A4F63", "#8A8FA3"],
   amber: ["#FDF3E1", "#8A5A12", "#E0A458"],
   red: ["#FBEAEA", "#9C2F2B", "#C2413B"],
   green: ["#E3F4EA", "#1A6647", "#1A6647"],
   blue: ["#E8EEFB", "#3450A6", "#5B7BE0"],
   forest: ["#E8F6EF", "#0D3B2E", "#0D3B2E"],
+  purple: ["#F1ECFB", "#5B3FA6", "#8B6FE0"],
+  orange: ["#FCEBDD", "#9A4A12", "#E07B3A"],
 } as const;
 export type Tone = keyof typeof TONES;
 

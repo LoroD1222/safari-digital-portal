@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getPortalContext } from "@/lib/portal";
 import { createClient } from "@/lib/supabase/server";
-import { monthBounds, money } from "@/lib/dates";
+import { daysAgo, monthBounds, money } from "@/lib/dates";
 import type { Inquiry } from "@/lib/types";
 import { Stat } from "@/components/ui";
 import { Icon } from "@/components/icons";
@@ -10,6 +10,8 @@ import { InquiryTable } from "./inquiry-table";
 import { DailyChart, perDay } from "@/components/daily-chart";
 import { AddInquiry } from "./add-inquiry";
 import { adChats, type Campaign } from "@/lib/types";
+import Link from "next/link";
+import { PipelineBoard } from "@/components/pipeline-board";
 
 export const metadata: Metadata = { title: "Inquiries" };
 
@@ -22,13 +24,29 @@ export default async function InquiriesPage(props: PageProps<"/portal/inquiries"
   const month = monthBounds(offset);
   const label = offset === 0 ? `${month.label} (so far)` : month.label;
 
+  const view = sp.view === "list" ? "list" : "board";
+  const since30 = daysAgo(30);
   const supabase = await createClient();
-  const [{ data }, { data: rep }] = await Promise.all([
+  const [{ data }, { data: rep }, board, { data: bookedRows }] = await Promise.all([
     supabase.from("inquiries").select("*").eq("client_id", company.id).gte("received_at", month.start).lt("received_at", month.next).order("received_at", { ascending: false }),
     company.marketing_package
       ? supabase.from("ad_reports").select("meta_spend, meta_inquiries, campaigns").eq("client_id", company.id).eq("month", month.start).maybeSingle()
       : Promise.resolve({ data: null }),
+    // Board: every open inquiry, plus Booked and Lost from the last 30 days.
+    supabase.from("inquiries").select("*").eq("client_id", company.id)
+      .or(`status.in.(new,contacted,quoted,negotiating),stage_changed_at.gte.${since30}`)
+      .order("received_at", { ascending: false }).limit(400),
+    // Booked during the month (by when it was booked), for revenue.
+    supabase.from("inquiries").select("trip_value, source").eq("client_id", company.id).eq("status", "booked")
+      .gte("stage_changed_at", month.start).lt("stage_changed_at", month.next),
   ]);
+  const boardRows = board.error ? null : ((board.data ?? []) as Inquiry[]);
+  const bookedValue = (bookedRows ?? []).reduce((t, r) => t + Number(r.trip_value ?? 0), 0);
+  const tab = (v: string, label: string) => (
+    <Link href={`/portal/inquiries?${new URLSearchParams({ ...(v === "list" ? { view: "list" } : {}), ...(offset ? { m: String(offset) } : {}) })}`}
+      aria-current={view === v ? "page" : undefined}
+      className={"inline-flex h-8 items-center rounded-badge px-3.5 text-[13px] font-medium no-underline " + (view === v ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,3,33,0.12)]" : "text-body hover:text-ink")}>{label}</Link>
+  );
   const rows = (data ?? []) as Inquiry[];
   const booked = rows.filter((r) => r.status === "booked").length;
   const spend = rep ? Number(rep.meta_spend) : 0;
@@ -59,12 +77,22 @@ export default async function InquiriesPage(props: PageProps<"/portal/inquiries"
       <section aria-label="Summary" className="grid grid-cols-[repeat(auto-fit,minmax(190px,1fr))] gap-3.5">
         <Stat label="Total inquiries" value={rows.length} note={`${label} · all sources`} />
         <Stat label="New inquiries" value={rows.filter((r) => r.status === "new").length} note="Not contacted yet" />
-        <Stat label="Confirmed bookings" value={booked} note={rows.length ? `${Math.round((booked / rows.length) * 100)}% of inquiries` : "—"} />
+        <Stat label="Booked revenue" value={money(bookedValue)} note={`${(bookedRows ?? []).length} ${(bookedRows ?? []).length === 1 ? "booking" : "bookings"} in ${monthName}${rows.length ? ` · ${Math.round((booked / rows.length) * 100)}% of this month's inquiries` : ""}`} />
         {company.marketing_package && (
           <Stat label="Cost per Meta Ads inquiry" value={spend && metaN ? money(Math.round((spend / metaN) * 100) / 100) : "—"}
             note={spend && metaN ? `${money(spend)} ad spend ÷ ${metaN} Meta Ads inquiries` : `Shown once ${monthName} ad spend is reported`} />
         )}
       </section>
+
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <nav aria-label="View" className="inline-flex rounded-control bg-[#F1F2F4] p-[3px]">{tab("board", "Pipeline")}{tab("list", "List")}</nav>
+          <span className="text-[13px] text-slate">{view === "board" ? "All open inquiries · Booked and Lost from the last 30 days" : `${label} · all stages`}</span>
+        </div>
+        {view === "board" && boardRows
+          ? <PipelineBoard items={boardRows} company={company.name} />
+          : <InquiryTable key={`${month.start}-${rows.length}`} items={rows} company={company.name} openId={typeof sp.open === "string" ? sp.open : null} />}
+      </div>
 
       <DailyChart title={`Inquiries per day · ${label}`} days={perDay(month.start, rows.map((r) => r.received_at))}
         note={`${rows.length} ${rows.length === 1 ? "inquiry" : "inquiries"} from all sources`} />
@@ -79,8 +107,6 @@ export default async function InquiriesPage(props: PageProps<"/portal/inquiries"
           <AddInquiry />
         </div>
       )}
-
-      <InquiryTable key={`${month.start}-${rows.length}`} items={rows} company={company.name} openId={typeof sp.open === "string" ? sp.open : null} />
 
       <div className="flex items-start gap-3 rounded-card bg-sidebar px-4 py-3.5">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#565A7C" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="mt-0.5 flex-none"><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8h.01" /></svg>

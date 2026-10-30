@@ -12,7 +12,7 @@ export type InquiryFormState = { error?: string; fieldErrors?: Record<string, st
 
 const SOURCES = ["meta_ads", "meta_organic", "website", "direct", "unknown"];
 const CHANNELS = ["website_form", "meta_lead_form", "whatsapp", "facebook_message", "instagram_message", "email", "phone", "other"];
-const STATUSES = ["new", "contacted", "booked", "closed"];
+const STATUSES: string[] = ["new", "contacted", "quoted", "negotiating", "booked", "closed"];
 
 function t(form: FormData, k: string, max = 500) {
   const v = form.get(k);
@@ -38,6 +38,10 @@ export async function saveInquiry(id: string | null, _: InquiryFormState, form: 
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) fe.email = "That doesn't look like an email address.";
   const received = t(form, "received_at", 10);
   if (received && !/^\d{4}-\d{2}-\d{2}$/.test(received)) fe.received_at = "Use a valid date.";
+  const rawValue = t(form, "trip_value", 30)?.replace(/[$,\s]/g, "") ?? null;
+  const tripValue = rawValue === null ? null : Number(rawValue);
+  if (tripValue !== null && (!Number.isFinite(tripValue) || tripValue < 0)) fe.trip_value = "Enter a number of US dollars, e.g. 4200.";
+  const follow = t(form, "follow_up_on", 10);
   if (Object.keys(fe).length) return { fieldErrors: fe, values: echo(form) };
 
   const pickOne = (k: string, allowed: string[], d: string) => { const v = t(form, k); return v && allowed.includes(v) ? v : d; };
@@ -53,6 +57,10 @@ export async function saveInquiry(id: string | null, _: InquiryFormState, form: 
     channel: pickOne("channel", CHANNELS, "other"),
     campaign: t(form, "campaign", 200),
     status: pickOne("status", STATUSES, "new"),
+    trip_value: tripValue === null ? null : Math.round(tripValue * 100) / 100,
+    follow_up_on: follow && /^\d{4}-\d{2}-\d{2}$/.test(follow) ? follow : null,
+    notes: t(form, "notes", 5000),
+    lost_reason: t(form, "lost_reason", 200),
     ...(received ? { received_at: new Date(received + "T09:00:00Z").toISOString() } : {}),
   };
 
@@ -60,14 +68,14 @@ export async function saveInquiry(id: string | null, _: InquiryFormState, form: 
   if (id) {
     const { data: before } = await supabase.from("inquiries").select("status").eq("id", id).single();
     const { error } = await supabase.from("inquiries").update(row).eq("id", id);
-    if (error) return { error: "Couldn't save. " + error.message, values: echo(form) };
+    if (error) return { error: /trip_value|follow_up_on|lost_reason|notes|quoted|negotiating/.test(error.message) ? "Run 0018_pipeline.sql in Supabase to use the pipeline." : "Couldn't save. " + error.message, values: echo(form) };
     const event = before?.status !== row.status ? STATUS_EVENT[row.status] : undefined;
     if (event) after(() => sendInquiryEvent(id, event));
     revalidatePath("/", "layout");
     return { saved: true };
   }
   const { data, error } = await supabase.from("inquiries").insert({ ...row, client_id: clientId, origin: "manual", created_by: viewer.id }).select("id").single();
-  if (error || !data) return { error: "Couldn't add the inquiry. " + (error?.message ?? ""), values: echo(form) };
+  if (error || !data) return { error: error && /trip_value|follow_up_on|lost_reason|notes|quoted|negotiating/.test(error.message) ? "Run 0018_pipeline.sql in Supabase to use the pipeline." : "Couldn't add the inquiry. " + (error?.message ?? ""), values: echo(form) };
   const stage = STATUS_EVENT[row.status];
   after(async () => { await sendInquiryEvent(data.id, "Lead"); if (stage) await sendInquiryEvent(data.id, stage); });
   if (row.status === "new") after(() => emailNewInquiry(data.id));

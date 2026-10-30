@@ -230,9 +230,10 @@ export function mrr(clients: Pick<Client, "id" | "account_status" | "created_at"
     const c = live.get(b.client_id);
     const fee = Number(b.monthly_fee);
     if (!c || !fee || !Number.isFinite(fee)) continue;
-    if (startOf(b, c) > today) { upcoming++; continue; }
+    // Every invited client counts towards the total, including ones starting later.
+    // The monthly chart (mrrHistory) still uses each client's start date.
     totals[b.currency] = (totals[b.currency] ?? 0) + fee;
-    paying++;
+    if (startOf(b, c) > today) upcoming++; else paying++;
   }
   return { totals, paying, upcoming, billable: live.size };
 }
@@ -247,7 +248,7 @@ export function mrrHistory(
   const out: { month: string; label: string; value: number }[] = [];
   for (let i = months - 1; i >= 0; i--) {
     const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
-    // The current month only counts what has started by today, so the last bar matches the MRR card.
+    // The current month only counts what has started by today (the MRR card also includes clients starting later).
     const end = i === 0 ? today : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i + 1, 0)).toISOString().slice(0, 10);
     let value = 0;
     for (const b of billing) {

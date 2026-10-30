@@ -78,7 +78,7 @@ export default async function AdminOverview() {
       <PageHeader title={`${greeting()}${first ? `, ${first}` : ""}`} subtitle="Here's what needs doing today." />
       <section aria-label="Summary" className="grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-3">
         <Stat label="MRR" value={totals.length ? totals.map(([c, v]) => formatMoney(v, c)).join(" + ") : "—"}
-          note={billsError ? "Run 0007_billing.sql in Supabase" : totals.length ? `${revenue.paying} of ${revenue.billable} clients priced${revenue.upcoming ? ` · ${revenue.upcoming} starting later` : ""}` : revenue.upcoming ? `${revenue.upcoming} starting later` : "Add each client's monthly price"} href="/admin/clients" />
+          note={billsError ? "Run 0007_billing.sql in Supabase" : totals.length ? `${revenue.paying + revenue.upcoming} of ${revenue.billable} clients priced${revenue.upcoming ? ` · incl. ${revenue.upcoming} starting later` : ""}` : "Add each client's monthly price"} href="/admin/clients" />
         <Stat label="Active clients" value={activeCount} href="/admin/clients" />
         <Stat label="Awaiting onboarding" value={awaitingOnboarding.length} href="/admin/clients" />
         <Stat label="Content awaiting approval" value={awaitingApproval.length} href="/admin/content?status=awaiting_approval" />

@@ -1,12 +1,12 @@
 "use client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { Icon, type IconName } from "./icons";
 import { Alert, Badge, Button, Input, Select, Textarea } from "./ui";
 import { ConfirmDialog } from "./confirm-dialog";
 import {
-  FOLLOWUP_DAYS, FOLLOWUP_STAGES, TEMPLATES, TEMPLATE_KEYS, TOKENS, presetByKey,
+  FOLLOWUP_DAYS, FOLLOWUP_STAGES, TEMPLATES, TEMPLATE_KEYS, TOKENS, fillTokens, presetByKey,
   type FollowupRule, type FollowupStage, type TemplateKey,
 } from "@/lib/followup-presets";
 import { INQUIRY_LABEL } from "@/lib/types";
@@ -155,7 +155,7 @@ export function FollowupsManager(p: {
             <div className="flex items-center gap-4 rounded-card border border-[#D4EBDD] bg-[#F1FAF6] px-4 py-3">
               <span className="flex min-w-0 flex-1 flex-col">
                 <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-brand">Template</span>
-                <span className="truncate text-forest"><span className="font-semibold">{TEMPLATES[p.template].title}</span> <span className="text-body">· by Safari Digital · {onCount} of {p.rules.length} on</span></span>
+                <span className="truncate text-forest"><span className="font-semibold">{TEMPLATES[p.template].title}</span> <span className="text-body">· {p.template === "blank" ? "only follow-ups you write" : "by Safari Digital"} · {onCount} of {p.rules.length} on</span></span>
               </span>
               <button type="button" onClick={() => { setPick(p.template); setPicking(true); }} className="inline-flex h-8 items-center gap-1 rounded-control px-2 text-[13px] font-semibold text-brand hover:bg-white">
                 Change<Icon name="chevronRight" size={16} />
@@ -167,7 +167,7 @@ export function FollowupsManager(p: {
                 <span className="font-semibold">Choose a starting template</span>
                 <span className="text-xs text-slate">Written by Safari Digital. You can still edit every email, and your own follow-ups stay.</span>
               </div>
-              <div role="radiogroup" aria-label="Templates" className="grid gap-2.5 sm:grid-cols-3">
+              <div role="radiogroup" aria-label="Templates" className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
                 {TEMPLATE_KEYS.map((k) => {
                   const sel = pick === k;
                   return (
@@ -178,7 +178,7 @@ export function FollowupsManager(p: {
                         <span className="font-semibold">{TEMPLATES[k].title}</span>
                       </span>
                       <span className="text-xs font-medium text-body">
-                        {TEMPLATES[k].presets.length} follow-ups{k === "standard" && <span className="text-brand"> · Recommended</span>}
+                        {k === "blank" ? "No follow-ups" : `${TEMPLATES[k].presets.length} follow-ups`}{k === "standard" && <span className="text-brand"> · Recommended</span>}
                       </span>
                       <span className="text-xs leading-[1.45] text-slate">{TEMPLATES[k].note}</span>
                       {p.template === k && <span className="text-[11px] font-semibold text-brand">In use now</span>}
@@ -189,8 +189,8 @@ export function FollowupsManager(p: {
               <p className="rounded-control border border-[#F1E2C3] bg-[#FFFAF0] px-3 py-2 text-[13px] text-[#8A5A12]">
                 {restoring
                   ? <>Restoring puts back Safari Digital&apos;s {presetRules.length} {TEMPLATES[pick].title} follow-ups{editedCount ? <> and <span className="font-semibold">removes your changes to {editedCount}</span></> : ""}.</>
-                  : <>This <span className="font-semibold">removes your {presetRules.length} template follow-ups</span>{editedCount ? ` (${editedCount} with your changes)` : ""} and adds the {TEMPLATES[pick].presets.length} from {TEMPLATES[pick].title}.</>}
-                {" "}Which ones are on goes back to the template&apos;s choice.{" "}{ownRules.length ? `Your own ${ownRules.length === 1 ? "follow-up stays" : `${ownRules.length} follow-ups stay`}.` : "Follow-ups you added yourself would stay."}
+                  : <>This <span className="font-semibold">removes your {presetRules.length} template follow-ups</span>{editedCount ? ` (${editedCount} with your changes)` : ""}{pick === "blank" ? ". You start with no Safari Digital follow-ups." : ` and adds the ${TEMPLATES[pick].presets.length} from ${TEMPLATES[pick].title}.`}</>}
+                {" "}{pick !== "blank" && <>Which ones are on goes back to the template&apos;s choice.{" "}</>}{ownRules.length ? `Your own ${ownRules.length === 1 ? "follow-up stays" : `${ownRules.length} follow-ups stay`}.` : "Follow-ups you added yourself would stay."}
               </p>
               <div className="flex justify-end gap-2">
                 <Button variant="secondary" className="h-9" onClick={() => setPicking(false)}>Cancel</Button>
@@ -212,6 +212,13 @@ export function FollowupsManager(p: {
             </div>
           )}
 
+          {p.rules.length === 0 && (
+            <div className="flex flex-col items-center gap-1 rounded-card border border-dashed border-field px-5 py-8 text-center">
+              <span className="font-semibold">No follow-ups yet</span>
+              <span className="max-w-sm text-[13px] text-slate">Write your own below, or choose a Safari Digital template to start from.</span>
+            </div>
+          )}
+
           {groups.map((g) => (
             <div key={g.stage} className="overflow-hidden rounded-card border border-line bg-white">
               <div className="flex items-center gap-2 border-b border-[#EEF0F2] bg-sidebar px-4 py-2.5">
@@ -221,7 +228,7 @@ export function FollowupsManager(p: {
               </div>
               <ul className="divide-y divide-[#EEF0F2]">
                 {g.rules.map((r) => (
-                  <RuleRow key={r.id} rule={r} open={open === r.id} pending={pending}
+                  <RuleRow key={r.id} rule={r} company={p.company} open={open === r.id} pending={pending}
                     onOpen={() => setOpen(open === r.id ? null : r.id)}
                     onToggle={() => run(() => saveRule(r.id, { enabled: !r.enabled }))}
                     onSave={(patch) => run(() => saveRule(r.id, patch), () => setOpen(null))}
@@ -295,7 +302,7 @@ export function FollowupsManager(p: {
                 <li key={r.id} className="flex items-center gap-2"><span className="size-1.5 shrink-0 rounded-full bg-danger" />{r.name}{isEdited(r) && <span className="text-danger-text">· your changes are lost</span>}</li>
               ))}
             </ul>
-            {!restoring && <span>They&apos;re replaced by {TEMPLATES[pick].presets.length} follow-ups from {TEMPLATES[pick].title}.</span>}
+            {!restoring && <span>{pick === "blank" ? "Nothing replaces them: you write your own follow-ups." : `They're replaced by ${TEMPLATES[pick].presets.length} follow-ups from ${TEMPLATES[pick].title}.`}</span>}
             {ownRules.length > 0 && (
               <span><span className="font-semibold text-ink">These stay:</span> {ownRules.map((r) => r.name).join(", ")} (your own).</span>
             )}
@@ -307,8 +314,8 @@ export function FollowupsManager(p: {
   );
 }
 
-function RuleRow({ rule, open, pending, onOpen, onToggle, onSave, onReset, onDelete }: {
-  rule: FollowupRule; open: boolean; pending: boolean;
+function RuleRow({ rule, company, open, pending, onOpen, onToggle, onSave, onReset, onDelete }: {
+  rule: FollowupRule; company: string; open: boolean; pending: boolean;
   onOpen: () => void; onToggle: () => void; onSave: (p: RulePatch) => void; onReset: () => void; onDelete: () => void;
 }) {
   const own = !rule.preset;
@@ -318,7 +325,21 @@ function RuleRow({ rule, open, pending, onOpen, onToggle, onSave, onReset, onDel
   if (rule !== seen) { setSeen(rule); setD({ name: rule.name, stage: rule.stage, days: rule.days, subject: rule.subject, body: rule.body }); }
   const changed = d.name !== rule.name || d.stage !== rule.stage || d.days !== rule.days || d.subject !== rule.subject || d.body !== rule.body;
   const edited = !!preset && (preset.subject !== rule.subject || preset.body !== rule.body || preset.days !== rule.days || preset.name !== rule.name);
-  const insert = (t: string) => setD((x) => ({ ...x, body: x.body.trimEnd() + " " + t }));
+  // Tags go in where the cursor is, in the subject or the message (whichever was used last).
+  const subjectRef = useRef<HTMLInputElement>(null);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const last = useRef<"subject" | "body">("body");
+  const insert = (t: string) => {
+    const field = last.current;
+    const el = field === "subject" ? subjectRef.current : bodyRef.current;
+    const text = d[field];
+    const start = el?.selectionStart ?? text.length;
+    const end = el?.selectionEnd ?? text.length;
+    const next = text.slice(0, start) + t + text.slice(end);
+    setD({ ...d, [field]: next });
+    requestAnimationFrame(() => { el?.focus(); el?.setSelectionRange(start + t.length, start + t.length); });
+  };
+  const example = { name: TOKENS[0].example, trip: TOKENS[1].example, company };
   const id = `fu-${rule.id}`;
 
   return (
@@ -360,13 +381,22 @@ function RuleRow({ rule, open, pending, onOpen, onToggle, onSave, onReset, onDel
               </Select></label>
           )}
           <label className="flex flex-col gap-1.5 text-[13px] font-medium">Subject
-            <Input value={d.subject} maxLength={150} onChange={(e) => setD({ ...d, subject: e.target.value })} /></label>
+            <Input ref={subjectRef} value={d.subject} maxLength={150} onFocus={() => { last.current = "subject"; }} onChange={(e) => setD({ ...d, subject: e.target.value })} /></label>
           <label className="flex flex-col gap-1.5 text-[13px] font-medium">Message
-            <Textarea rows={10} value={d.body} maxLength={4000} onChange={(e) => setD({ ...d, body: e.target.value })} className="leading-[1.55]" /></label>
-          <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate">Insert:
-            {TOKENS.map((t) => (
-              <button key={t.token} type="button" onClick={() => insert(t.token)} className="h-6 rounded-[6px] border border-field bg-sidebar px-2 text-xs text-body hover:bg-white">{t.label}</button>
-            ))}
+            <Textarea ref={bodyRef} rows={10} value={d.body} maxLength={4000} onFocus={() => { last.current = "body"; }} onChange={(e) => setD({ ...d, body: e.target.value })} className="leading-[1.55]" /></label>
+          <div className="flex flex-col gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate">Add a tag:
+              {TOKENS.map((t) => (
+                <button key={t.token} type="button" title={t.help} onMouseDown={(e) => e.preventDefault()} onClick={() => insert(t.token)}
+                  className="h-6 rounded-[6px] border border-field bg-sidebar px-2 text-xs font-medium text-body hover:bg-white">{t.token}</button>
+              ))}
+            </div>
+            <span className="text-xs text-slate">Tags fill in for each guest: [First name] becomes Sarah, [Trip] becomes what they asked about (like Kilimanjaro climb), [Company name] becomes {company}.</span>
+          </div>
+          <div className="flex flex-col gap-1 rounded-control border border-line-soft bg-sidebar px-3.5 py-3">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-slate">Preview for Sarah, asking about a Kilimanjaro climb</span>
+            <span className="text-[13px] font-semibold">{fillTokens(d.subject, example)}</span>
+            <span className="line-clamp-4 whitespace-pre-line text-[13px] text-body">{fillTokens(d.body, example)}</span>
           </div>
           <div className="flex flex-wrap items-center gap-4">
             <Button className="h-9" disabled={!changed || pending} onClick={() => onSave(own ? d : { days: d.days, subject: d.subject, body: d.body })}>Save</Button>

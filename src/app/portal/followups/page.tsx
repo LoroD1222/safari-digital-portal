@@ -33,8 +33,9 @@ export default async function FollowupsPage() {
   const template = (settings?.template ?? "standard") as TemplateKey;
   let rules = (rulesRes.data ?? []) as FollowupRule[];
 
-  // First visit: start with the Standard template (switched off until the client turns follow-ups on).
-  if (!rules.length) {
+  // First visit (no settings yet): start with the Standard template, switched off until the client turns follow-ups on.
+  // A client who chose the Empty template has settings, so they're never refilled.
+  if (!rules.length && !settings) {
     const { data } = await supabase.from("followup_rules").insert(TEMPLATES[template].presets.map((p) => ({
       client_id: company.id, preset: p.key, stage: p.stage, days: p.days, name: p.name, subject: p.subject, body: p.body, enabled: p.on,
     }))).select("*");

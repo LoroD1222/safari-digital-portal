@@ -35,10 +35,13 @@ export async function chooseTemplate(template: TemplateKey, enabled: boolean): P
   if (!TEMPLATE_KEYS.includes(template)) return { ok: false, error: "Unknown template." };
   const del = await supabase.from("followup_rules").delete().eq("client_id", clientId).not("preset", "is", null);
   if (del.error) return fail(del.error.message);
-  const ins = await supabase.from("followup_rules").insert(TEMPLATES[template].presets.map((p) => ({
-    client_id: clientId, preset: p.key, stage: p.stage, days: p.days, name: p.name, subject: p.subject, body: p.body, enabled: p.on,
-  })));
-  if (ins.error) return fail(ins.error.message);
+  const presets = TEMPLATES[template].presets;
+  if (presets.length) {
+    const ins = await supabase.from("followup_rules").insert(presets.map((p) => ({
+      client_id: clientId, preset: p.key, stage: p.stage, days: p.days, name: p.name, subject: p.subject, body: p.body, enabled: p.on,
+    })));
+    if (ins.error) return fail(ins.error.message);
+  }
   const { error } = await supabase.rpc("set_followups", { p_client_id: clientId, p_enabled: enabled, p_template: template });
   return error ? fail(error.message) : done();
 }
@@ -85,7 +88,7 @@ export async function addRule(stage: FollowupStage): Promise<{ ok: true; id: str
   if (!FOLLOWUP_STAGES.includes(stage)) return { ok: false, error: "Pick a stage." };
   const { data, error } = await supabase.from("followup_rules").insert({
     client_id: clientId, preset: null, stage, days: 5, enabled: false, name: "My follow-up",
-    subject: "Your {trip}", body: "Hi {name},\n\n\n\nBest regards,\n{company}",
+    subject: "Your [Trip]", body: "Hi [First name],\n\n\n\nBest regards,\n[Company name]",
   }).select("id").single();
   if (error || !data) return fail(error?.message ?? "unknown error") as { ok: false; error: string };
   revalidatePath("/portal/followups");

@@ -5,10 +5,10 @@ import { createClient } from "@/lib/supabase/server";
 import { monthBounds, money } from "@/lib/dates";
 import type { Inquiry } from "@/lib/types";
 import { Stat } from "@/components/ui";
-import { Icon } from "@/components/icons";
 import { InquiryTable } from "./inquiry-table";
 import { DailyChart, perDay } from "@/components/daily-chart";
 import { AddInquiry } from "./add-inquiry";
+import { AdChatsBanner } from "./ad-chats";
 import { adChats, type Campaign } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Inquiries" };
@@ -69,16 +69,7 @@ export default async function InquiriesPage(props: PageProps<"/portal/inquiries"
       <DailyChart title={`Inquiries per day · ${label}`} days={perDay(month.start, rows.map((r) => r.received_at))}
         note={`${rows.length} ${rows.length === 1 ? "inquiry" : "inquiries"} from all sources`} />
 
-      {chats !== null && chats > 0 && (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-card border border-line px-4 py-3">
-          <span className="flex size-9 flex-none items-center justify-center rounded-full bg-[#E3F4EA] text-brand"><Icon name="chat" size={18} /></span>
-          <span className="min-w-[220px] flex-1 text-[13px] text-body">
-            <span className="font-semibold text-ink">{chats} {chats === 1 ? "chat" : "chats"} started from your ads</span> in {monthName}, on Instagram, Messenger and WhatsApp.
-            {" "}{logged ? `${logged} of them ${logged === 1 ? "is" : "are"} in your list.` : "Add the serious ones here so you can track bookings."}
-          </span>
-          <AddInquiry />
-        </div>
-      )}
+      {chats !== null && chats > 0 && <AdChatsBanner chats={chats} added={logged} monthName={monthName} current={offset === 0} />}
 
       <InquiryTable key={`${month.start}-${rows.length}`} items={rows} company={company.name} openId={typeof sp.open === "string" ? sp.open : null} />
 
@@ -86,7 +77,7 @@ export default async function InquiriesPage(props: PageProps<"/portal/inquiries"
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#565A7C" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="mt-0.5 flex-none"><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8h.01" /></svg>
         <span className="flex flex-col gap-0.5 text-[13px] text-body">
           <span className="font-semibold text-ink">How inquiries get here</span>
-          <span>Your website form sends them in automatically. Inquiries from WhatsApp, Messenger, calls and Meta lead forms are added by Safari Digital.</span>
+          <span>Your website form sends them in automatically. Chats on WhatsApp, Instagram and Messenger, and calls, you add with &ldquo;Add inquiry&rdquo; (or &ldquo;Add chats from ads&rdquo; when the banner shows some are missing).</span>
           <span>&ldquo;Source&rdquo; is where the person first found you. &ldquo;Via&rdquo; is how they got in touch. If we can&apos;t tell the source, it says Unknown.</span>
         </span>
       </div>

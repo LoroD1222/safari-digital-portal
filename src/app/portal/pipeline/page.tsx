@@ -9,6 +9,8 @@ import { OPEN_STAGES, type Inquiry } from "@/lib/types";
 import { EmptyState, Stat } from "@/components/ui";
 import { PipelineBoard } from "@/components/pipeline-board";
 import { pipelineFollowups } from "@/lib/pipeline-followups";
+import { AdChatsBanner } from "../inquiries/ad-chats";
+import { adChats, type Campaign } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Pipeline" };
 
@@ -18,13 +20,19 @@ export default async function PipelinePage() {
   const month = monthBounds(0);
   const monthName = month.label.split(" ")[0];
   const supabase = await createClient();
-  const [board, won] = await Promise.all([
+  const [board, won, rep, logged] = await Promise.all([
     // Every open inquiry, plus Booked and Lost from the last 30 days.
     supabase.from("inquiries").select("*").eq("client_id", company.id)
       .or(`status.in.(${OPEN_STAGES.join(",")}),stage_changed_at.gte.${daysAgo(30)}`)
       .order("received_at", { ascending: false }).limit(400),
     bookedInMonth(supabase, company.id, month),
+    company.marketing_package
+      ? supabase.from("ad_reports").select("campaigns").eq("client_id", company.id).eq("month", month.start).maybeSingle()
+      : Promise.resolve({ data: null }),
+    supabase.from("inquiries").select("id", { count: "exact", head: true }).eq("client_id", company.id).eq("source", "meta_ads")
+      .neq("channel", "website_form").gte("received_at", month.start).lt("received_at", month.next),
   ]);
+  const chats = rep.data ? adChats(rep.data.campaigns as Campaign[]) : null;
   const rows = (board.data ?? []) as Inquiry[];
   const fu = await pipelineFollowups(supabase, company.id, rows).catch(() => ({ on: false, badges: {} }));
   const open = rows.filter((r) => OPEN_STAGES.includes(r.status));
@@ -49,6 +57,7 @@ export default async function PipelinePage() {
             <Stat label="Quotes out" value={quoted.length} note="Quote sent or negotiating" />
             <Stat label={`Booked in ${monthName}`} value={money(won.value)} note={`${won.count} ${won.count === 1 ? "booking" : "bookings"}${won.adsValue > 0 ? ` · ${money(won.adsValue)} from ads` : ""}`} />
           </section>
+          {chats !== null && chats > (logged.count ?? 0) && <AdChatsBanner chats={chats} added={logged.count ?? 0} monthName={monthName} current />}
           <PipelineBoard items={rows} company={company.name} followupsOn={fu.on} followups={fu.badges} />
         </>
       )}

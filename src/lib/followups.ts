@@ -44,15 +44,13 @@ function esc(s: string) {
 }
 
 // Plain and personal: reads like the agent wrote it. No Safari Digital branding.
-function render(body: string, company: string, unsub: string) {
+// Just the message, like an email the agent typed: no footer or unsubscribe line.
+// (The hidden List-Unsubscribe header stays, so email apps can offer their own button and the domain stays trusted.)
+function render(body: string) {
   const paras = body.trim().split(/\n{2,}/).map((p) => `<p style="margin:0 0 14px">${esc(p).replace(/\n/g, "<br>")}</p>`).join("");
-  const footer = `You're receiving this because you asked ${company} about a trip.`;
   const html = `<!doctype html><html><body style="margin:0;background:#ffffff;font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#1d1f2b">
-<div style="max-width:560px;padding:24px 20px">${paras}
-<p style="margin:28px 0 0;font-size:11px;line-height:1.5;color:#8a8fa3">${esc(footer)} <a href="${esc(unsub)}" style="color:#8a8fa3">Unsubscribe</a></p>
-</div></body></html>`;
-  const text = `${body.trim()}\n\n--\n${footer} Unsubscribe: ${unsub}`;
-  return { html, text };
+<div style="max-width:560px;padding:24px 20px">${paras}</div></body></html>`;
+  return { html, text: body.trim() };
 }
 
 export async function sendFollowupEmail(o: {
@@ -60,7 +58,7 @@ export async function sendFollowupEmail(o: {
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   if (!process.env.RESEND_API_KEY) return { ok: false, error: "RESEND_API_KEY is not set" };
   const unsub = unsubscribeUrl(o.inquiryId);
-  const { html, text } = render(o.body, o.company, unsub);
+  const { html, text } = render(o.body);
   const name = o.fromName.replace(/["<>]/g, "").trim();
   try {
     const res = await fetch("https://api.resend.com/emails", {

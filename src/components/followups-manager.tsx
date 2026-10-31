@@ -268,7 +268,7 @@ export function FollowupsManager(p: {
                 </li>
               ))}
             </ol>
-            <p className="text-xs text-slate">Every guest with a phone number also appears under &quot;Send on WhatsApp today&quot; when a follow-up is due, so you can message them too. Guests can unsubscribe from the emails at any time.</p>
+            <p className="text-xs text-slate">Every guest with a phone number also appears under &quot;Send on WhatsApp today&quot; when a follow-up is due, so you can message them too. If a guest asks you to stop, switch off follow-ups on their card in the Pipeline.</p>
             <Link href="/portal/pipeline" className="text-[13px] font-medium text-brand no-underline">Open the Pipeline →</Link>
           </div>
           {p.recent.length > 0 && (

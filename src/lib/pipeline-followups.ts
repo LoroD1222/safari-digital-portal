@@ -1,63 +1,120 @@
 import "server-only";
 import type { createClient } from "./supabase/server";
-import { FOLLOWUP_STAGES, waNumber, type FollowupRule, type FollowupSettings } from "./followup-presets";
-import type { Inquiry } from "./types";
+import { FOLLOWUP_STAGES, TEMPLATES, waNumber, type FollowupRule, type FollowupSettings } from "./followup-presets";
+import { DAY, type Cycle, type Plan, type SendRow } from "./followup-plan";
+import { planFor, type InquiryLite } from "./followups";
 
-// What the automatic follow-ups will do next for each card on the Pipeline.
-export type FollowupBadge = { kind: "email" | "whatsapp" | "due" | "sent" | "stopped"; text: string };
+type Supabase = Awaited<ReturnType<typeof createClient>>;
 
-const DAY = 86_400_000;
-const SEND_HOUR_UTC = 6; // 09:00 Tanzania time, same as the cron
+// What the automatic follow-ups do next for each card on the Pipeline, and in the inquiry panel.
+export type FollowupBadge = {
+  kind: "email" | "whatsapp" | "due" | "sent" | "stopped" | "awaiting" | "paused" | "attention";
+  text: string;
+};
 
-function inDays(n: number) {
-  return n <= 1 ? "tomorrow" : `in ${n} days`;
+export function whenText(t: number, tz: string) {
+  return new Intl.DateTimeFormat("en-GB", { timeZone: tz, weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(t));
 }
 
-export async function pipelineFollowups(
-  supabase: Awaited<ReturnType<typeof createClient>>, clientId: string, inquiries: Inquiry[], now = Date.now(),
-): Promise<{ on: boolean; badges: Record<string, FollowupBadge> }> {
-  const [{ data: s }, { data: r }] = await Promise.all([
-    supabase.from("followup_settings").select("*").eq("client_id", clientId).maybeSingle(),
-    supabase.from("followup_rules").select("*").eq("client_id", clientId).eq("enabled", true),
-  ]);
-  const settings = s as FollowupSettings | null;
-  const rules = ((r ?? []) as FollowupRule[]).sort((a, b) => a.days - b.days);
-  if (!settings?.enabled) return { on: false, badges: {} };
-  const emailReady = !!settings.sender_ready && !!settings.from_email;
-  const open = inquiries.filter((q) => (FOLLOWUP_STAGES as string[]).includes(q.status));
-  const { data: sendData } = open.length
-    ? await supabase.from("followup_sends").select("inquiry_id, rule_id, stage_since, channel, status, created_at").in("inquiry_id", open.map((q) => q.id))
-    : { data: [] };
-  const sends = sendData ?? [];
-  const badges: Record<string, FollowupBadge> = {};
+const STAGE_MESSAGE: Record<string, string> = { contacted: "your first reply", quoted: "the quote", negotiating: "your latest message" };
 
-  for (const q of open) {
-    if (q.followups_stopped_at) { badges[q.id] = { kind: "stopped", text: "Follow-ups stopped for this guest" }; continue; }
-    const since = new Date(q.stage_changed_at ?? q.received_at).getTime();
-    const mine = sends.filter((x) => x.inquiry_id === q.id && new Date(x.stage_since as string).getTime() === since && x.status !== "failed");
-    const stageRules = rules.filter((x) => x.stage === q.status);
-    const useEmail = emailReady && !!q.email;
-    const useWa = !useEmail && !!waNumber(q.phone);
-    const nextRule = stageRules.find((x) => !mine.some((m) => m.rule_id === x.id));
-    if (!nextRule || (!useEmail && !useWa)) {
-      const last = mine.sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))[0];
-      if (last) badges[q.id] = { kind: "sent", text: `Follow-up sent ${new Date(last.created_at as string).toLocaleDateString("en-GB", { day: "numeric", month: "short" })} by ${last.channel === "whatsapp" ? "WhatsApp" : "email"}` };
-      continue;
+export function badgeFor(plan: Plan, q: InquiryLite, cycle: Cycle | null, tz: string): FollowupBadge | undefined {
+  switch (plan.state) {
+    case "off": case "none": return undefined;
+    case "awaiting": return { kind: "awaiting", text: `Confirm you sent ${STAGE_MESSAGE[cycle?.stage ?? ""] ?? "the message"} to start follow-ups` };
+    case "replied": case "paused": return { kind: "paused", text: plan.label };
+    case "stopped": return { kind: "stopped", text: plan.label };
+    case "trip_passed": case "quote_expired": return { kind: "attention", text: plan.label };
+    case "done": case "limit": return { kind: "sent", text: plan.label };
+    case "no_email": {
+      if (!waNumber(q.phone) || !cycle?.confirmed_at) return undefined;
+      return { kind: "whatsapp", text: "Follow-ups for this guest go on WhatsApp, from the Follow-ups page" };
     }
-    const dueAt = since + nextRule.days * DAY;
-    if (useEmail) {
-      // The cron runs once a day at 06:00 UTC: work out which run picks it up.
-      const run = new Date(dueAt);
-      run.setUTCHours(SEND_HOUR_UTC, 0, 0, 0);
-      if (run.getTime() < dueAt) run.setTime(run.getTime() + DAY);
-      if (run.getTime() < now) run.setTime(Date.UTC(new Date(now).getUTCFullYear(), new Date(now).getUTCMonth(), new Date(now).getUTCDate(), SEND_HOUR_UTC) + (new Date(now).getUTCHours() >= SEND_HOUR_UTC ? DAY : 0));
-      const days = Math.round((Date.UTC(run.getUTCFullYear(), run.getUTCMonth(), run.getUTCDate()) - Date.UTC(new Date(now).getUTCFullYear(), new Date(now).getUTCMonth(), new Date(now).getUTCDate())) / DAY);
-      badges[q.id] = { kind: "email", text: `"${nextRule.name}" email goes ${days <= 0 ? "today" : inDays(days)} at 9:00` };
-    } else if (dueAt <= now) {
-      badges[q.id] = { kind: "due", text: `WhatsApp follow-up due: send it from Follow-ups` };
-    } else {
-      badges[q.id] = { kind: "whatsapp", text: `WhatsApp follow-up ${inDays(Math.ceil((dueAt - now) / DAY))}` };
+    case "scheduled": {
+      const n = plan.next!;
+      return { kind: "email", text: `Next email: "${n.rule.subject}", ${whenText(n.dueAt, tz)} (${tz.split("/").pop()?.replace(/_/g, " ")} time)` };
     }
   }
+}
+
+export async function loadFollowups(supabase: Supabase, clientId: string, inquiryIds: string[]) {
+  const [{ data: s }, { data: r }, cyc, sends, { data: supp }] = await Promise.all([
+    supabase.from("followup_settings").select("*").eq("client_id", clientId).maybeSingle(),
+    supabase.from("followup_rules").select("*").eq("client_id", clientId),
+    inquiryIds.length ? supabase.from("followup_cycles").select("*").in("inquiry_id", inquiryIds).neq("status", "ended") : Promise.resolve({ data: [] }),
+    inquiryIds.length ? supabase.from("followup_sends").select("*").in("inquiry_id", inquiryIds).order("created_at", { ascending: false }) : Promise.resolve({ data: [] }),
+    supabase.from("followup_suppressions").select("email").eq("client_id", clientId),
+  ]);
+  return {
+    settings: s as FollowupSettings | null,
+    rules: (r ?? []) as FollowupRule[],
+    cycles: ((cyc.data ?? []) as (Cycle & { inquiry_id: string })[]),
+    sends: ((sends.data ?? []) as (SendRow & { inquiry_id: string; rule_name: string; subject: string; error: string | null; scheduled_for: string | null })[]),
+    suppressed: new Set((supp ?? []).map((x) => String(x.email).toLowerCase())),
+  };
+}
+
+export async function pipelineFollowups(supabase: Supabase, clientId: string, inquiries: InquiryLite[], now = Date.now()): Promise<{ on: boolean; badges: Record<string, FollowupBadge> }> {
+  const open = inquiries.filter((q) => (FOLLOWUP_STAGES as string[]).includes(q.status));
+  const f = await loadFollowups(supabase, clientId, open.map((q) => q.id));
+  if (!f.settings?.enabled) return { on: false, badges: {} };
+  const tz = f.settings.send_timezone || "Africa/Dar_es_Salaam";
+  const badges: Record<string, FollowupBadge> = {};
+  for (const q of open) {
+    const cycle = f.cycles.find((c) => c.inquiry_id === q.id) ?? null;
+    const plan = planFor({ now, settings: f.settings, rules: f.rules, cycle, sends: f.sends.filter((x) => x.inquiry_id === q.id), inquiry: q, suppressed: !!q.email && f.suppressed.has(q.email.trim().toLowerCase()) });
+    const b = badgeFor(plan, q, cycle, tz);
+    if (b) badges[q.id] = b;
+  }
   return { on: true, badges };
+}
+
+// Everything the inquiry panel shows about follow-ups.
+export type InquiryFollowupView = {
+  on: boolean; template: string; state: Plan["state"]; label: string; stage: string | null; stageMessage: string;
+  confirmed: boolean; canPause: boolean; canResume: boolean; stopped: boolean;
+  next: { subject: string; when: string } | null; remaining: number;
+  lastSent: { subject: string; when: string } | null;
+  history: { id: string; subject: string; status: string; when: string; note: string | null; channel: string }[];
+  upcoming: { subject: string; day: number }[];
+};
+
+export async function inquiryFollowupView(supabase: Supabase, q: InquiryLite, now = Date.now()): Promise<InquiryFollowupView> {
+  const f = await loadFollowups(supabase, q.client_id, [q.id]);
+  const tz = f.settings?.send_timezone || "Africa/Dar_es_Salaam";
+  const cycle = f.cycles[0] ?? null;
+  const plan = planFor({ now, settings: f.settings, rules: f.rules, cycle, sends: f.sends, inquiry: q, suppressed: !!q.email && f.suppressed.has(q.email.trim().toLowerCase()) });
+  const sent = f.sends.filter((x) => x.status === "sent");
+  const anchor = cycle?.confirmed_at ? new Date(cycle.confirmed_at).getTime() : null;
+  const done = (id: string) => f.sends.some((x) => x.cycle_id === cycle?.id && x.step_key === id && x.channel === "email" && x.status !== "failed");
+  const upcoming = cycle ? f.rules.filter((r) => r.enabled && r.stage === cycle.stage && !done(r.id)).sort((a, b) => a.days - b.days).map((r) => ({ subject: r.subject, day: r.days })) : [];
+  const label = (s: string) => ({ sent: "Sent", sending: "Sending", failed: "Failed", canceled: "Canceled", skipped: "Skipped", scheduled: "Scheduled" })[s] ?? s;
+  return {
+    on: !!f.settings?.enabled, template: TEMPLATES[f.settings?.template ?? "standard"]?.title ?? "Standard",
+    state: plan.state, label: plan.label, stage: cycle?.stage ?? null, stageMessage: STAGE_MESSAGE[cycle?.stage ?? ""] ?? "the message",
+    confirmed: !!cycle?.confirmed_at,
+    canPause: cycle?.status === "active" || cycle?.status === "awaiting",
+    canResume: cycle?.status === "paused" || cycle?.status === "replied",
+    stopped: !!q.followups_stopped_at,
+    next: plan.next ? { subject: plan.next.rule.subject, when: whenText(plan.next.dueAt, tz) } : null,
+    remaining: plan.remaining,
+    lastSent: sent[0] ? { subject: sent[0].subject, when: whenText(new Date(sent[0].sent_at ?? sent[0].created_at).getTime(), tz) } : null,
+    history: f.sends.slice(0, 30).map((x, i) => ({
+      id: `${i}`, subject: x.subject, status: label(x.status), channel: x.channel,
+      when: whenText(new Date(x.sent_at ?? x.created_at).getTime(), tz), note: x.status === "sent" ? null : x.error,
+    })),
+    upcoming: anchor ? upcoming : upcoming,
+  };
+}
+
+// Guests with a WhatsApp number whose follow-up is due (manual: one tap each). Uses the same steps and the
+// same confirmed start as the emails, but no sending window: the operator sends them by hand.
+export function whatsappDueFor(o: { now: number; rules: FollowupRule[]; cycle: Cycle | null; sends: SendRow[] }) {
+  const c = o.cycle;
+  if (!c || c.status !== "active" || !c.confirmed_at) return null;
+  const anchor = new Date(c.confirmed_at).getTime();
+  const done = (id: string) => o.sends.some((s) => s.cycle_id === c.id && s.step_key === id && s.channel === "whatsapp");
+  return o.rules.filter((r) => r.enabled && r.stage === c.stage && !done(r.id))
+    .filter((r) => { const at = anchor + r.days * DAY; return at <= o.now && at >= o.now - 7 * DAY; })
+    .sort((a, b) => b.days - a.days)[0] ?? null;
 }

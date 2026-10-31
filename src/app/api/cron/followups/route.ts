@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { runFollowups } from "@/lib/followups";
 
-// Daily follow-up emails to guests, at 06:00 UTC = 09:00 Tanzania time (vercel.json).
+// Follow-up emails to guests, every hour at :15 (vercel.json). Each email waits for
+// Monday–Friday 9:00–17:00 in the guest's time zone.
 // Vercel cron sends "Authorization: Bearer $CRON_SECRET".
 export const maxDuration = 300;
 

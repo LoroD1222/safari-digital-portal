@@ -1,18 +1,18 @@
 import "server-only";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { createAdminClient } from "./supabase/admin";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import {
-  FOLLOWUP_STAGES, fillTokens, firstName, tripLabel,
-  type FollowupRule, type FollowupSettings, type FollowupStage,
+  TEMPLATES, TEMPLATE_VERSION, composeEmail, firstName, travelDatesLabel, tripLabel,
+  type FollowupRule, type FollowupSettings, type TemplateKey,
 } from "./followup-presets";
+import { MAX_ATTEMPTS, planFollowups, type Cycle, type Plan, type SendRow } from "./followup-plan";
+import { sendViaResend, webhookAction } from "./followup-mail";
 
-// Sends the automatic follow-up emails. Runs once a day from /api/cron/followups (09:00 Tanzania time).
-// A follow-up goes out when an inquiry has sat in the same stage for the follow-up's number of days.
-// Moving the card resets the clock, so a guest who replied (and was moved on) never gets one.
+// Sends the automatic follow-up emails. Runs every hour from /api/cron/followups; each email goes
+// inside Monday–Friday 9:00–17:00 in the guest's time zone. See followup-plan.ts for the rules.
 
-const DAY = 86_400_000;
-const CATCH_UP_DAYS = 3;          // a follow-up that was due up to 3 days ago still goes (cron missed a day)
-const MAX_PER_RUN = 250;          // keeps one run inside the time limit
+const MAX_PER_RUN = 200;          // keeps one run inside the time limit
 const GAP_MS = 600;               // Resend allows about 2 emails a second
 
 function secret() {
@@ -39,44 +39,6 @@ export function unsubscribeUrl(inquiryId: string) {
   return `${portalUrl()}/api/followups/unsubscribe?i=${inquiryId}&t=${unsubscribeToken(inquiryId)}`;
 }
 
-function esc(s: string) {
-  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
-}
-
-// Plain and personal: reads like the agent wrote it. No Safari Digital branding.
-// Just the message, like an email the agent typed: no footer or unsubscribe line.
-// (The hidden List-Unsubscribe header stays, so email apps can offer their own button and the domain stays trusted.)
-function render(body: string) {
-  const paras = body.trim().split(/\n{2,}/).map((p) => `<p style="margin:0 0 14px">${esc(p).replace(/\n/g, "<br>")}</p>`).join("");
-  const html = `<!doctype html><html><body style="margin:0;background:#ffffff;font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#1d1f2b">
-<div style="max-width:560px;padding:24px 20px">${paras}</div></body></html>`;
-  return { html, text: body.trim() };
-}
-
-export async function sendFollowupEmail(o: {
-  fromEmail: string; fromName: string; to: string; subject: string; body: string; company: string; inquiryId: string;
-}): Promise<{ ok: true } | { ok: false; error: string }> {
-  if (!process.env.RESEND_API_KEY) return { ok: false, error: "RESEND_API_KEY is not set" };
-  const unsub = unsubscribeUrl(o.inquiryId);
-  const { html, text } = render(o.body);
-  const name = o.fromName.replace(/["<>]/g, "").trim();
-  try {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        from: name ? `${name} <${o.fromEmail}>` : o.fromEmail,
-        to: [o.to], reply_to: o.fromEmail, subject: o.subject, html, text,
-        headers: { "List-Unsubscribe": `<${unsub}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" },
-      }),
-    });
-    if (!res.ok) return { ok: false, error: `Resend ${res.status}: ${(await res.text()).slice(0, 300)}` };
-    return { ok: true };
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Network error" };
-  }
-}
-
 // Is the domain of this address verified in Resend? Then follow-ups can go from it.
 export async function checkSenderDomain(email: string): Promise<{ ready: boolean; message: string }> {
   const domain = email.split("@")[1]?.toLowerCase();
@@ -95,81 +57,159 @@ export async function checkSenderDomain(email: string): Promise<{ ready: boolean
   }
 }
 
-type Due = { inquiry: InquiryRow; rule: FollowupRule; settings: FollowupSettings; company: string };
-type InquiryRow = { id: string; client_id: string; customer_name: string; email: string; interested_in: string | null; status: FollowupStage; stage_changed_at: string };
 
-export async function runFollowups(now = new Date()) {
-  const admin = createAdminClient();
-  const { data: list, error } = await admin.from("followup_settings").select("*")
-    .eq("enabled", true).eq("sender_ready", true).not("from_email", "is", null);
+// ───────────── Template rules ─────────────
+
+// Puts the chosen template's emails in (the client's own follow-ups stay). Used on first visit,
+// when the client switches template, and when Safari Digital updates the template copy.
+export async function installTemplate(db: SupabaseClient, clientId: string, template: TemplateKey) {
+  const del = await db.from("followup_rules").delete().eq("client_id", clientId).not("preset", "is", null);
+  if (del.error) return del.error;
+  const presets = TEMPLATES[template].presets;
+  if (!presets.length) return null;
+  const { error } = await db.from("followup_rules").insert(presets.map((x) => ({
+    client_id: clientId, preset: x.key, step: x.step, stage: x.stage, days: x.days, name: x.step,
+    subject: x.subject, body: x.body, enabled: true,
+  })));
+  return error;
+}
+
+// Clients on older template copy get the current emails (with the admin client).
+async function upgradeTemplates(db: SupabaseClient, settings: FollowupSettings[]) {
+  for (const s of settings.filter((x) => (x.template_version ?? 1) < TEMPLATE_VERSION)) {
+    const err = await installTemplate(db, s.client_id, s.template);
+    if (!err) {
+      await db.from("followup_settings").update({ template_version: TEMPLATE_VERSION }).eq("client_id", s.client_id);
+      s.template_version = TEMPLATE_VERSION;
+    }
+  }
+}
+
+// ───────────── Planning one inquiry ─────────────
+
+export type InquiryLite = {
+  id: string; client_id: string; customer_name: string; email: string | null; phone: string | null; interested_in: string | null;
+  travel_dates: string | null; country: string | null; status: string; followups_stopped_at?: string | null;
+};
+
+export function planFor(o: {
+  now: number; settings: FollowupSettings | null; rules: FollowupRule[]; cycle: Cycle | null; sends: SendRow[];
+  inquiry: InquiryLite; suppressed: boolean;
+}): Plan {
+  const s = o.settings;
+  return planFollowups({
+    now: o.now,
+    settings: { enabled: !!s?.enabled, enabled_at: s?.enabled_at ?? null, quote_valid_days: s?.quote_valid_days ?? null, senderReady: !!s?.sender_ready && !!s?.from_email },
+    maxSends: o.rules.filter((r) => r.enabled).length,
+    rules: o.rules, cycle: o.cycle, sends: o.sends,
+    inquiry: { email: o.inquiry.email, stopped: !!o.inquiry.followups_stopped_at, suppressed: o.suppressed, travelDates: o.inquiry.travel_dates, country: o.inquiry.country },
+    timezone: s?.send_timezone || "Africa/Dar_es_Salaam",
+  });
+}
+
+// ───────────── The hourly run ─────────────
+
+export async function runFollowups(now = Date.now()) {
+  const db = createAdminClient();
+  const { data: list, error } = await db.from("followup_settings").select("*").eq("enabled", true);
   if (error) return { ok: false, error: error.message };
-  const out: Record<string, { sent: number; failed: number }> = {};
+  const settingsList = (list ?? []) as FollowupSettings[];
+  await upgradeTemplates(db, settingsList);
+  const out: Record<string, { sent: number; failed: number; skipped: number }> = {};
   let total = 0;
 
-  for (const s of (list ?? []) as FollowupSettings[]) {
+  for (const s of settingsList) {
     if (total >= MAX_PER_RUN) break;
-    const [{ data: rulesData }, { data: client }] = await Promise.all([
-      admin.from("followup_rules").select("*").eq("client_id", s.client_id).eq("enabled", true),
-      admin.from("clients").select("name, account_status").eq("id", s.client_id).maybeSingle(),
+    if (!s.sender_ready || !s.from_email) continue;
+    const [{ data: rulesData }, { data: client }, { data: cyclesData }, { data: supp }] = await Promise.all([
+      db.from("followup_rules").select("*").eq("client_id", s.client_id),
+      db.from("clients").select("name, account_status").eq("id", s.client_id).maybeSingle(),
+      db.from("followup_cycles").select("*").eq("client_id", s.client_id).eq("status", "active").not("confirmed_at", "is", null).limit(2000),
+      db.from("followup_suppressions").select("email").eq("client_id", s.client_id),
     ]);
     const rules = (rulesData ?? []) as FollowupRule[];
-    if (!rules.length || !client || client.account_status === "paused") continue;
-    const stages = FOLLOWUP_STAGES.filter((st) => rules.some((r) => r.stage === st));
-    const minDays = Math.min(...rules.map((r) => r.days));
-    const maxDays = Math.max(...rules.map((r) => r.days));
-
-    const { data: inqData } = await admin.from("inquiries")
-      .select("id, client_id, customer_name, email, interested_in, status, stage_changed_at")
-      .eq("client_id", s.client_id).in("status", stages).not("email", "is", null).is("followups_stopped_at", null)
-      .lte("stage_changed_at", new Date(now.getTime() - minDays * DAY).toISOString())
-      .gte("stage_changed_at", new Date(now.getTime() - (maxDays + CATCH_UP_DAYS) * DAY).toISOString())
-      .limit(1000);
-    const inquiries = ((inqData ?? []) as InquiryRow[]).filter((q) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(q.email.trim()));
-    if (!inquiries.length) continue;
-
-    const { data: sendData } = await admin.from("followup_sends").select("inquiry_id, rule_id, stage_since, created_at")
-      .eq("channel", "email").in("inquiry_id", inquiries.map((q) => q.id));
-    const sends = sendData ?? [];
+    const cycles = (cyclesData ?? []) as (Cycle & { inquiry_id: string })[];
+    if (!client || client.account_status === "paused" || !rules.some((r) => r.enabled) || !cycles.length) continue;
+    const ids = cycles.map((c) => c.inquiry_id);
+    const [{ data: inqData }, { data: sendData }] = await Promise.all([
+      db.from("inquiries").select("id, client_id, customer_name, email, phone, interested_in, travel_dates, country, status, followups_stopped_at").in("id", ids),
+      db.from("followup_sends").select("id, inquiry_id, cycle_id, step_key, channel, status, attempts, sent_at, created_at, message_id").in("inquiry_id", ids),
+    ]);
+    const suppressed = new Set((supp ?? []).map((x) => String(x.email).toLowerCase()));
     const company = s.from_name?.trim() || client.name;
-    const due: Due[] = [];
-    for (const q of inquiries) {
-      const mine = sends.filter((x) => x.inquiry_id === q.id);
-      // At most one follow-up per guest per day.
-      if (mine.some((x) => now.getTime() - new Date(x.created_at).getTime() < 20 * 3_600_000)) continue;
-      const since = new Date(q.stage_changed_at).getTime();
-      const next = rules
-        .filter((r) => r.stage === q.status)
-        .filter((r) => {
-          const at = since + r.days * DAY;
-          return at <= now.getTime() && at >= now.getTime() - CATCH_UP_DAYS * DAY;
-        })
-        .filter((r) => !mine.some((x) => x.rule_id === r.id && new Date(x.stage_since).getTime() === since))
-        .sort((a, b) => a.days - b.days)[0];
-      if (next) due.push({ inquiry: q, rule: next, settings: s, company });
-    }
+    const tally = { sent: 0, failed: 0, skipped: 0 };
 
-    const tally = { sent: 0, failed: 0 };
-    for (const d of due) {
+    for (const c of cycles) {
       if (total >= MAX_PER_RUN) break;
-      const v = { name: firstName(d.inquiry.customer_name), trip: tripLabel(d.inquiry.interested_in), company: d.company };
-      const subject = fillTokens(d.rule.subject, v).slice(0, 200);
-      const body = fillTokens(d.rule.body, v);
-      // Claim it first: the unique key stops a second run sending the same email.
-      const { data: claim, error: claimError } = await admin.from("followup_sends").insert({
-        client_id: d.inquiry.client_id, inquiry_id: d.inquiry.id, rule_id: d.rule.id, rule_name: d.rule.name,
-        stage: d.inquiry.status, stage_since: d.inquiry.stage_changed_at, channel: "email", to_address: d.inquiry.email.trim(), subject,
-      }).select("id").single();
-      if (claimError || !claim) continue;
+      const q = ((inqData ?? []) as InquiryLite[]).find((x) => x.id === c.inquiry_id);
+      if (!q) continue;
+      const sends = ((sendData ?? []) as (SendRow & { id: number; inquiry_id: string; message_id: string | null })[]).filter((x) => x.inquiry_id === q.id);
+      const plan = planFor({ now, settings: s, rules, cycle: c, sends, inquiry: q, suppressed: !!q.email && suppressed.has(q.email.trim().toLowerCase()) });
+
+      // Record skipped steps so they're never sent late.
+      if (plan.skip.length) {
+        await db.from("followup_sends").upsert(plan.skip.map((k) => ({
+          client_id: q.client_id, inquiry_id: q.id, cycle_id: c.id, step_key: k.rule.id, rule_id: k.rule.id, rule_name: k.rule.step ?? k.rule.name,
+          stage: c.stage, stage_since: c.started_at, channel: "email", to_address: q.email ?? "", subject: k.rule.subject,
+          template: s.template, status: "skipped", error: k.reason,
+        })), { onConflict: "cycle_id,step_key,channel", ignoreDuplicates: true });
+        tally.skipped += plan.skip.length;
+      }
+      if (!plan.next?.sendNow || !q.email) continue;
+      const rule = plan.next.rule;
+      const mail = composeEmail(rule, { firstName: firstName(q.customer_name), trip: tripLabel(q.interested_in), travelDates: travelDatesLabel(q.travel_dates), agent: s.agent_name, company });
+
+      // Claim the step first: the unique (cycle, step, channel) key stops two runs sending it twice.
+      const row = {
+        client_id: q.client_id, inquiry_id: q.id, cycle_id: c.id, step_key: rule.id, rule_id: rule.id, rule_name: rule.step ?? rule.name,
+        stage: c.stage, stage_since: c.started_at, channel: "email", to_address: q.email.trim(), subject: mail.subject,
+        template: s.template, scheduled_for: new Date(plan.next.dueAt).toISOString(), status: "sending", attempts: plan.next.attempt,
+      };
+      let claimId: number | null = null;
+      if (plan.next.attempt === 1) {
+        const { data } = await db.from("followup_sends").insert(row).select("id").maybeSingle();
+        claimId = (data?.id as number | undefined) ?? null;
+      } else {
+        const { data } = await db.from("followup_sends").update({ status: "sending", attempts: plan.next.attempt, error: null })
+          .eq("cycle_id", c.id).eq("step_key", rule.id).eq("channel", "email").eq("status", "failed").lt("attempts", MAX_ATTEMPTS).select("id").maybeSingle();
+        claimId = (data?.id as number | undefined) ?? null;
+      }
+      if (!claimId) continue;
       total++;
-      const r = await sendFollowupEmail({
-        fromEmail: d.settings.from_email!, fromName: d.company, to: d.inquiry.email.trim(),
-        subject, body, company: d.company, inquiryId: d.inquiry.id,
-      });
-      await admin.from("followup_sends").update(r.ok ? { status: "sent" } : { status: "failed", error: r.error }).eq("id", claim.id);
-      if (r.ok) tally.sent++; else tally.failed++;
+
+      const domain = s.from_email.split("@")[1] ?? "followups";
+      const res = await sendViaResend({
+        fromEmail: s.from_email, fromName: company, to: q.email.trim(), subject: mail.subject, body: mail.body, inquiryId: q.id,
+        unsubscribeUrl: unsubscribeUrl(q.id), idempotencyKey: `followup-${c.id}-${rule.id}`, threadId: `<inquiry-${q.id}@${domain}>`,
+      }, process.env.RESEND_API_KEY);
+      if (res.ok) {
+        await db.from("followup_sends").update({ status: "sent", sent_at: new Date().toISOString(), provider_id: res.id, error: null }).eq("id", claimId);
+        tally.sent++;
+      } else {
+        // Errors that won't fix themselves use up the attempts at once.
+        await db.from("followup_sends").update({ status: "failed", error: res.error, attempts: res.retry ? plan.next.attempt : MAX_ATTEMPTS }).eq("id", claimId);
+        tally.failed++;
+      }
       await new Promise((ok) => setTimeout(ok, GAP_MS));
     }
-    if (tally.sent || tally.failed) out[company] = tally;
+    if (tally.sent || tally.failed || tally.skipped) out[company] = tally;
   }
   return { ok: true, total, clients: out };
+}
+
+// ───────────── Resend webhook: bounces and spam complaints stop follow-ups ─────────────
+
+export async function handleResendEvent(event: Parameters<typeof webhookAction>[0]) {
+  const action = webhookAction(event);
+  if (action.kind === "ignore") return { ok: true, action: "ignored" };
+  const db = createAdminClient();
+  const { data: send } = await db.from("followup_sends").select("id, client_id, inquiry_id, to_address").eq("provider_id", action.providerId).maybeSingle();
+  if (!send) return { ok: true, action: "not a follow-up" };
+  if (action.kind === "delivered") return { ok: true, action: "delivered" };
+  const email = (action.email || String(send.to_address)).toLowerCase();
+  await db.from("followup_suppressions").upsert({ client_id: send.client_id, email, reason: action.reason }, { onConflict: "client_id,email" });
+  await db.from("followup_sends").update({ status: "failed", error: action.reason, attempts: MAX_ATTEMPTS }).eq("id", send.id);
+  await db.from("inquiries").update({ followups_stopped_at: new Date().toISOString(), followups_stop_reason: action.reason })
+    .eq("client_id", send.client_id).ilike("email", email).is("followups_stopped_at", null);
+  return { ok: true, action: "suppressed" };
 }

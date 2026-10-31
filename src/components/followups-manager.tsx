@@ -6,12 +6,12 @@ import { Icon, type IconName } from "./icons";
 import { Alert, Badge, Button, Input, Select, Textarea } from "./ui";
 import { ConfirmDialog } from "./confirm-dialog";
 import {
-  FOLLOWUP_DAYS, FOLLOWUP_STAGES, TEMPLATES, TEMPLATE_KEYS, TOKENS, fillTokens, presetByKey,
+  FOLLOWUP_DAYS, FOLLOWUP_STAGES, TEMPLATES, TEMPLATE_KEYS, TOKENS, composeEmail, presetByKey,
   type FollowupRule, type FollowupStage, type TemplateKey,
 } from "@/lib/followup-presets";
 import { INQUIRY_LABEL } from "@/lib/types";
 import {
-  addRule, chooseTemplate, deleteRule, logWhatsappFollowup, resetRule, saveRule, setFollowupsEnabled, type RulePatch,
+  addRule, chooseTemplate, deleteRule, logWhatsappFollowup, resetRule, saveFollowupPrefs, saveRule, setFollowupsEnabled, type RulePatch,
 } from "@/app/portal/followups/actions";
 
 export type WhatsappDue = { inquiryId: string; ruleId: string; guest: string; trip: string; stage: string; days: number; ruleName: string; url: string };
@@ -19,6 +19,34 @@ export type RecentSend = { id: string; guest: string; name: string; channel: "em
 
 const STAGE_DOT: Record<FollowupStage, string> = { contacted: "#E0A458", quoted: "#8B6FE0", negotiating: "#E07B3A" };
 const dayWord = (n: number) => (n === 1 ? "day" : "days");
+const TAG_LABEL: Record<string, string> = Object.fromEntries(TOKENS.map((t) => [t.token, t.label]));
+
+// Shows {{first_name}} and friends as small labelled pills, so a subject reads naturally.
+function Tagged({ text }: { text: string }) {
+  const parts = text.split(/(\{\{\s*\w+\s*\}\})/g);
+  return (
+    <>
+      {parts.map((x, i) => {
+        const key = x.replace(/\s+/g, "");
+        return TAG_LABEL[key]
+          ? <span key={i} className="mx-px inline-flex h-[18px] items-center rounded-[5px] bg-[#E8EEFB] px-1.5 align-[1px] text-[11px] font-medium text-[#3450A6]">{TAG_LABEL[key]}</span>
+          : <span key={i}>{x}</span>;
+      })}
+    </>
+  );
+}
+
+// The first line after the greeting, for the list.
+function bodyPreview(body: string) {
+  const lines = body.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+  const first = /^(hi|hello|hey|dear)\b/i.test(lines[0] ?? "") ? lines[1] : lines[0];
+  return first ?? "";
+}
+
+const TIMEZONES = [
+  ["Africa/Dar_es_Salaam", "Tanzania (EAT)"], ["Africa/Nairobi", "Kenya (EAT)"], ["Europe/London", "UK"], ["Europe/Berlin", "Central Europe"],
+  ["America/New_York", "US East"], ["America/Los_Angeles", "US West"], ["Asia/Dubai", "Gulf"], ["Australia/Sydney", "Australia East"],
+] as const;
 
 function Switch({ on, label, onChange, disabled, size = "md" }: { on: boolean; label: string; onChange: () => void; disabled?: boolean; size?: "md" | "lg" }) {
   const w = size === "lg" ? "w-12 h-7" : "w-10 h-6";
@@ -32,9 +60,11 @@ function Switch({ on, label, onChange, disabled, size = "md" }: { on: boolean; l
   );
 }
 
+export type FollowupPrefs = { agent_name: string; timezone: string; quote_valid_days: number | null };
+
 export function FollowupsManager(p: {
-  company: string; enabled: boolean; template: TemplateKey; senderReady: boolean; fromEmail: string | null;
-  rules: FollowupRule[]; whatsapp: WhatsappDue[]; recent: RecentSend[];
+  company: string; enabled: boolean; template: TemplateKey; senderReady: boolean; fromEmail: string | null; prefs: FollowupPrefs;
+  rules: FollowupRule[]; whatsapp: WhatsappDue[]; recent: RecentSend[]; scheduled: number; awaiting: number;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -52,7 +82,7 @@ export function FollowupsManager(p: {
   const ownRules = p.rules.filter((r) => !r.preset);
   const isEdited = (r: FollowupRule) => {
     const base = presetByKey(r.preset);
-    return !!base && (base.subject !== r.subject || base.body !== r.body || base.days !== r.days || base.name !== r.name);
+    return !!base && (base.subject !== r.subject || base.body !== r.body || base.days !== r.days);
   };
   const editedCount = presetRules.filter(isEdited).length;
   const restoring = pick === p.template;
@@ -97,8 +127,8 @@ export function FollowupsManager(p: {
           <span className="text-[15px] font-semibold">{enabled ? "Follow-ups are on" : "Follow-ups are off"}</span>
           <span className="text-[13px] text-slate">
             {enabled
-              ? p.senderReady ? `${onCount} ${onCount === 1 ? "follow-up is" : "follow-ups are"} switched on. Emails go from ${p.fromEmail} every morning at 9:00.`
-                : `${onCount} ${onCount === 1 ? "follow-up is" : "follow-ups are"} switched on. Emails start once your address is connected.`
+              ? p.senderReady ? `${p.scheduled} ${p.scheduled === 1 ? "follow-up is" : "follow-ups are"} scheduled. Emails go Monday to Friday, 9:00–17:00 in the guest's time zone.`
+                : "Emails start once your address is connected. WhatsApp follow-ups work already."
               : "Nothing is sent. Turn on to send the follow-ups below automatically."}
           </span>
         </span>
@@ -119,6 +149,17 @@ export function FollowupsManager(p: {
             </>
           )}
         </div>
+        {/* Replies aren't read automatically (no inbox connection), so the operator pauses by hand. */}
+        <div className={`flex flex-wrap items-start gap-x-3 gap-y-1 border-t px-5 py-2.5 text-[13px] ${enabled ? "border-[#D4EBDD] bg-white/60" : "border-line-soft"}`}>
+          <span className="inline-flex items-center gap-1.5 font-semibold text-ink"><Icon name="message" size={14} />Replies aren&apos;t detected automatically</span>
+          <span className="min-w-[220px] flex-1 text-body">When a guest replies, open their card and click <span className="font-medium text-ink">Guest replied</span>, or move the card. Their follow-ups stop straight away.</span>
+        </div>
+        {enabled && p.awaiting > 0 && (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-[#F1E2C3] bg-[#FFFAF0] px-5 py-2.5 text-[13px] text-[#8A5A12]">
+            <span className="min-w-[220px] flex-1"><span className="font-semibold">{p.awaiting} {p.awaiting === 1 ? "guest is" : "guests are"} waiting for you to confirm</span> that you sent them a message. Follow-ups only start once you do.</span>
+            <Link href="/portal/pipeline" className="font-semibold text-[#8A5A12] underline-offset-2 hover:underline">Open the Pipeline</Link>
+          </div>
+        )}
       </section>
 
       {error && <Alert>{error}</Alert>}
@@ -155,7 +196,7 @@ export function FollowupsManager(p: {
             <div className="flex items-center gap-4 rounded-card border border-[#D4EBDD] bg-[#F1FAF6] px-4 py-3">
               <span className="flex min-w-0 flex-1 flex-col">
                 <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-brand">Template</span>
-                <span className="truncate text-forest"><span className="font-semibold">{TEMPLATES[p.template].title}</span> <span className="text-body">· {p.template === "blank" ? "only follow-ups you write" : "by Safari Digital"} · {onCount} of {p.rules.length} on</span></span>
+                <span className="truncate text-forest"><span className="font-semibold">{TEMPLATES[p.template].title}</span> <span className="text-body">· {p.template === "blank" ? "only emails you write" : "by Safari Digital"} · {onCount} of {p.rules.length} on</span></span>
               </span>
               <button type="button" onClick={() => { setPick(p.template); setPicking(true); }} className="inline-flex h-8 items-center gap-1 rounded-control px-2 text-[13px] font-semibold text-brand hover:bg-white">
                 Change<Icon name="chevronRight" size={16} />
@@ -178,7 +219,7 @@ export function FollowupsManager(p: {
                         <span className="font-semibold">{TEMPLATES[k].title}</span>
                       </span>
                       <span className="text-xs font-medium text-body">
-                        {k === "blank" ? "No follow-ups" : `${TEMPLATES[k].presets.length} follow-ups`}{k === "standard" && <span className="text-brand"> · Recommended</span>}
+                        {k === "blank" ? "No emails" : `${TEMPLATES[k].presets.length} emails`}{k === "standard" && <span className="text-brand"> · Recommended</span>}
                       </span>
                       <span className="text-xs leading-[1.45] text-slate">{TEMPLATES[k].note}</span>
                       {p.template === k && <span className="text-[11px] font-semibold text-brand">In use now</span>}
@@ -228,7 +269,7 @@ export function FollowupsManager(p: {
               </div>
               <ul className="divide-y divide-[#EEF0F2]">
                 {g.rules.map((r) => (
-                  <RuleRow key={r.id} rule={r} company={p.company} open={open === r.id} pending={pending}
+                  <RuleRow key={r.id} rule={r} company={p.company} agent={p.prefs.agent_name} open={open === r.id} pending={pending}
                     onOpen={() => setOpen(open === r.id ? null : r.id)}
                     onToggle={() => run(() => saveRule(r.id, { enabled: !r.enabled }))}
                     onSave={(patch) => run(() => saveRule(r.id, patch), () => setOpen(null))}
@@ -255,9 +296,9 @@ export function FollowupsManager(p: {
             <h2 className="text-[15px] font-semibold">How follow-ups work</h2>
             <ol className="flex flex-col gap-3.5">
               {([
-                ["inbox", "An inquiry waits", "It stays in the same stage on your Pipeline, for example Quote sent."],
-                ["clock", "The days pass", "After the wait you set, the follow-up goes out once."],
-                ["send", "From your address", "Guests reply straight to you. Move the card on the Pipeline and the follow-ups stop."],
+                ["send", "You send the message", "Move the card on the Pipeline (for example to Quote sent) and confirm you sent it. Nothing starts before that."],
+                ["clock", "The days pass", "Each email goes once, on its day, Monday to Friday 9:00–17:00 in the guest's time zone. Never two at once."],
+                ["inbox", "It stops by itself", "When you move the card, mark Booked or Lost, or click Guest replied. Replies go straight to your inbox."],
               ] as [IconName, string, string][]).map(([icon, t, d], i) => (
                 <li key={t} className="flex flex-col items-start gap-2">
                   <span className="flex size-8 items-center justify-center rounded-control bg-white text-brand shadow-[0_0_0_1px_#E6E8EC]"><Icon name={icon} size={17} /></span>
@@ -268,9 +309,10 @@ export function FollowupsManager(p: {
                 </li>
               ))}
             </ol>
-            <p className="text-xs text-slate">Every guest with a phone number also appears under &quot;Send on WhatsApp today&quot; when a follow-up is due, so you can message them too. If a guest asks you to stop, switch off follow-ups on their card in the Pipeline.</p>
+            <p className="text-xs text-slate">Every guest with a phone number also appears under &quot;Send on WhatsApp today&quot; when a follow-up is due, so you can message them too. If a guest asks you to stop, switch off follow-ups on their card.</p>
             <Link href="/portal/pipeline" className="text-[13px] font-medium text-brand no-underline">Open the Pipeline →</Link>
           </div>
+          <PrefsCard prefs={p.prefs} company={p.company} />
           {p.recent.length > 0 && (
             <div className="flex flex-col gap-2 rounded-card border border-line p-4">
               <h2 className="text-[13px] font-semibold">Recently sent</h2>
@@ -299,14 +341,14 @@ export function FollowupsManager(p: {
             <span className="font-semibold text-ink">{restoring ? "These go back to Safari Digital's text:" : "These will be removed:"}</span>
             <ul className="flex flex-col gap-1">
               {presetRules.map((r) => (
-                <li key={r.id} className="flex items-center gap-2"><span className="size-1.5 shrink-0 rounded-full bg-danger" />{r.name}{isEdited(r) && <span className="text-danger-text">· your changes are lost</span>}</li>
+                <li key={r.id} className="flex items-center gap-2"><span className="size-1.5 shrink-0 rounded-full bg-danger" /><span className="truncate">{r.subject}</span>{isEdited(r) && <span className="shrink-0 text-danger-text">· your changes are lost</span>}</li>
               ))}
             </ul>
             {!restoring && <span>{pick === "blank" ? "Nothing replaces them: you write your own follow-ups." : `They're replaced by ${TEMPLATES[pick].presets.length} follow-ups from ${TEMPLATES[pick].title}.`}</span>}
             {ownRules.length > 0 && (
-              <span><span className="font-semibold text-ink">These stay:</span> {ownRules.map((r) => r.name).join(", ")} (your own).</span>
+              <span><span className="font-semibold text-ink">These stay:</span> {ownRules.map((r) => r.subject).join(", ")} (your own).</span>
             )}
-            <span className="text-slate">This can&apos;t be undone.</span>
+            <span className="text-slate">Emails already sent stay sent. Any new step that would already be due is skipped, not sent late. This can&apos;t be undone.</span>
           </div>
         </ConfirmDialog>
       )}
@@ -314,8 +356,46 @@ export function FollowupsManager(p: {
   );
 }
 
-function RuleRow({ rule, company, open, pending, onOpen, onToggle, onSave, onReset, onDelete }: {
-  rule: FollowupRule; company: string; open: boolean; pending: boolean;
+function PrefsCard({ prefs, company }: { prefs: FollowupPrefs; company: string }) {
+  const router = useRouter();
+  const [d, setD] = useState(prefs);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [pending, start] = useTransition();
+  const changed = d.agent_name !== prefs.agent_name || d.timezone !== prefs.timezone || d.quote_valid_days !== prefs.quote_valid_days;
+  const known = TIMEZONES.some(([z]) => z === d.timezone);
+  return (
+    <div className="flex flex-col gap-3 rounded-card border border-line p-4">
+      <h2 className="text-[13px] font-semibold">Email settings</h2>
+      <label className="flex flex-col gap-1.5 text-[13px] font-medium">Sign emails as
+        <Input value={d.agent_name} maxLength={80} placeholder={`e.g. Juma, ${company}`} onChange={(e) => setD({ ...d, agent_name: e.target.value })} />
+        <span className="text-xs font-normal text-slate">Your name, above the company name. Leave empty to sign as {company}.</span>
+      </label>
+      <label className="flex flex-col gap-1.5 text-[13px] font-medium">Time zone when the guest&apos;s isn&apos;t known
+        <Select value={d.timezone} onChange={(e) => setD({ ...d, timezone: e.target.value })}>
+          {!known && <option value={d.timezone}>{d.timezone}</option>}
+          {TIMEZONES.map(([z, l]) => <option key={z} value={z}>{l}</option>)}
+        </Select>
+      </label>
+      <label className="flex flex-col gap-1.5 text-[13px] font-medium">Quotes are valid for
+        <Select value={d.quote_valid_days ?? ""} onChange={(e) => setD({ ...d, quote_valid_days: e.target.value ? Number(e.target.value) : null })}>
+          <option value="">No limit</option>
+          {[7, 14, 30, 45, 60, 90].map((n) => <option key={n} value={n}>{n} days</option>)}
+        </Select>
+        <span className="text-xs font-normal text-slate">After this, quote follow-ups pause so you can refresh the price first.</span>
+      </label>
+      <div className="flex items-center gap-3">
+        <Button variant="secondary" className="h-9" disabled={!changed || pending}
+          onClick={() => start(async () => { const r = await saveFollowupPrefs(d); setMsg(r.ok ? { ok: true, text: "Saved." } : { ok: false, text: r.error }); if (r.ok) router.refresh(); })}>
+          {pending ? "Saving…" : "Save"}
+        </Button>
+        {msg && <span role="status" className={"text-xs " + (msg.ok ? "text-forest" : "text-danger-text")}>{msg.text}</span>}
+      </div>
+    </div>
+  );
+}
+
+function RuleRow({ rule, company, agent, open, pending, onOpen, onToggle, onSave, onReset, onDelete }: {
+  rule: FollowupRule; company: string; agent: string; open: boolean; pending: boolean;
   onOpen: () => void; onToggle: () => void; onSave: (p: RulePatch) => void; onReset: () => void; onDelete: () => void;
 }) {
   const own = !rule.preset;
@@ -324,7 +404,7 @@ function RuleRow({ rule, company, open, pending, onOpen, onToggle, onSave, onRes
   const [seen, setSeen] = useState(rule);
   if (rule !== seen) { setSeen(rule); setD({ name: rule.name, stage: rule.stage, days: rule.days, subject: rule.subject, body: rule.body }); }
   const changed = d.name !== rule.name || d.stage !== rule.stage || d.days !== rule.days || d.subject !== rule.subject || d.body !== rule.body;
-  const edited = !!preset && (preset.subject !== rule.subject || preset.body !== rule.body || preset.days !== rule.days || preset.name !== rule.name);
+  const edited = !!preset && (preset.subject !== rule.subject || preset.body !== rule.body || preset.days !== rule.days);
   // Tags go in where the cursor is, in the subject or the message (whichever was used last).
   const subjectRef = useRef<HTMLInputElement>(null);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
@@ -339,47 +419,46 @@ function RuleRow({ rule, company, open, pending, onOpen, onToggle, onSave, onRes
     setD({ ...d, [field]: next });
     requestAnimationFrame(() => { el?.focus(); el?.setSelectionRange(start + t.length, start + t.length); });
   };
-  const example = { name: TOKENS[0].example, trip: TOKENS[1].example, company };
+  const preview = composeEmail(d, { firstName: "Sarah", trip: "Kilimanjaro climb", travelDates: "July 2027", agent, company });
   const id = `fu-${rule.id}`;
 
   return (
     <li className={open ? "bg-[#FBFCFA]" : ""}>
-      <div className="grid grid-cols-[64px_minmax(0,1fr)_40px] items-center gap-x-3.5 px-4 py-3">
+      <div className="grid grid-cols-[64px_minmax(0,1fr)_auto] items-center gap-x-3.5 px-4 py-3">
         <span className={`flex h-11 flex-col items-center justify-center rounded-control ${rule.enabled ? "bg-[#E3F4EA] text-forest" : "bg-[#F1F2F4] text-slate"}`}>
+          <span className="text-[10px] uppercase tracking-[0.04em]">Day</span>
           <span className="text-base font-semibold leading-none">{rule.days}</span>
-          <span className="text-[11px]">{dayWord(rule.days)}</span>
         </span>
         <button type="button" onClick={onOpen} aria-expanded={open} aria-controls={id}
           className={`flex min-w-0 flex-col items-start gap-0.5 text-left ${rule.enabled ? "text-ink" : "text-slate"}`}>
           <span className="flex max-w-full items-center gap-2">
-            <span className="truncate font-semibold hover:underline">{rule.name}</span>
+            <span className="truncate font-semibold"><Tagged text={rule.subject} /></span>
             {own && <span className="shrink-0"><Badge tone="green">Yours</Badge></span>}
           </span>
-          <span className="max-w-full truncate text-xs text-slate">{rule.enabled ? "" : "Off · "}{rule.subject}</span>
+          <span className="max-w-full truncate text-xs text-slate">{rule.enabled ? "" : "Off · "}<Tagged text={bodyPreview(rule.body)} /></span>
         </button>
-        <Switch on={rule.enabled} label={(rule.enabled ? "Turn off: " : "Turn on: ") + rule.name} onChange={onToggle} disabled={pending} />
+        <span className="flex items-center gap-3">
+          <button type="button" onClick={onOpen} aria-expanded={open} className="hidden text-[13px] font-medium text-brand hover:underline sm:inline">{open ? "Close" : "Edit"}</button>
+          <Switch on={rule.enabled} label={(rule.enabled ? "Turn off: " : "Turn on: ") + rule.subject} onChange={onToggle} disabled={pending} />
+        </span>
       </div>
       {open && (
         <div id={id} className="flex flex-col gap-3 px-4 pb-4 sm:pl-[94px]">
           <div className="grid gap-2.5 sm:grid-cols-[minmax(0,1fr)_150px]">
             {own ? (
-              <label className="flex flex-col gap-1.5 text-[13px] font-medium">Name
-                <Input value={d.name} maxLength={80} onChange={(e) => setD({ ...d, name: e.target.value })} /></label>
+              <label className="flex flex-col gap-1.5 text-[13px] font-medium">When the inquiry is in
+                <Select value={d.stage} onChange={(e) => setD({ ...d, stage: e.target.value as FollowupStage })}>
+                  {FOLLOWUP_STAGES.map((s) => <option key={s} value={s}>{INQUIRY_LABEL[s]}</option>)}
+                </Select></label>
             ) : (
               <span className="flex flex-col gap-1.5 text-[13px] font-medium">Stage
                 <span className="flex h-10 items-center rounded-control border border-[#EEF0F2] bg-sidebar px-3 font-normal text-body">{INQUIRY_LABEL[rule.stage]}</span></span>
             )}
-            <label className="flex flex-col gap-1.5 text-[13px] font-medium">Send after
+            <label className="flex flex-col gap-1.5 text-[13px] font-medium">Send on
               <Select value={d.days} onChange={(e) => setD({ ...d, days: Number(e.target.value) })}>
-                {FOLLOWUP_DAYS.map((n) => <option key={n} value={n}>{n} {dayWord(n)}</option>)}
+                {FOLLOWUP_DAYS.map((n) => <option key={n} value={n}>Day {n}</option>)}
               </Select></label>
           </div>
-          {own && (
-            <label className="flex flex-col gap-1.5 text-[13px] font-medium">When the inquiry is in
-              <Select value={d.stage} onChange={(e) => setD({ ...d, stage: e.target.value as FollowupStage })}>
-                {FOLLOWUP_STAGES.map((s) => <option key={s} value={s}>{INQUIRY_LABEL[s]}</option>)}
-              </Select></label>
-          )}
           <label className="flex flex-col gap-1.5 text-[13px] font-medium">Subject
             <Input ref={subjectRef} value={d.subject} maxLength={150} onFocus={() => { last.current = "subject"; }} onChange={(e) => setD({ ...d, subject: e.target.value })} /></label>
           <label className="flex flex-col gap-1.5 text-[13px] font-medium">Message
@@ -391,15 +470,15 @@ function RuleRow({ rule, company, open, pending, onOpen, onToggle, onSave, onRes
                   className="h-6 rounded-[6px] border border-field bg-sidebar px-2 text-xs font-medium text-body hover:bg-white">{t.token}</button>
               ))}
             </div>
-            <span className="text-xs text-slate">Tags fill in for each guest: [First name] becomes Sarah, [Trip] becomes what they asked about (like Kilimanjaro climb), [Company name] becomes {company}.</span>
+            <span className="text-xs text-slate">Tags fill in for each guest. If something isn&apos;t known, a safe wording is used instead (hover a tag to see it). Your signature is added at the end automatically.</span>
           </div>
           <div className="flex flex-col gap-1 rounded-control border border-line-soft bg-sidebar px-3.5 py-3">
             <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-slate">Preview for Sarah, asking about a Kilimanjaro climb</span>
-            <span className="text-[13px] font-semibold">{fillTokens(d.subject, example)}</span>
-            <span className="line-clamp-4 whitespace-pre-line text-[13px] text-body">{fillTokens(d.body, example)}</span>
+            <span className="text-[13px] font-semibold">{preview.subject}</span>
+            <span className="whitespace-pre-line text-[13px] text-body">{preview.body}</span>
           </div>
           <div className="flex flex-wrap items-center gap-4">
-            <Button className="h-9" disabled={!changed || pending} onClick={() => onSave(own ? d : { days: d.days, subject: d.subject, body: d.body })}>Save</Button>
+            <Button className="h-9" disabled={!changed || pending} onClick={() => onSave(own ? { stage: d.stage, days: d.days, subject: d.subject, body: d.body } : { days: d.days, subject: d.subject, body: d.body })}>Save</Button>
             {changed && <button type="button" onClick={() => setD({ name: rule.name, stage: rule.stage, days: rule.days, subject: rule.subject, body: rule.body })} className="text-[13px] font-medium text-slate hover:text-ink">Cancel</button>}
             <span className="flex-1" />
             {edited && !changed && <button type="button" onClick={onReset} disabled={pending} className="text-[13px] font-medium text-brand">Use Safari Digital&apos;s text again</button>}

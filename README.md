@@ -44,3 +44,14 @@ cp .env.example .env.local   # fill in the two Supabase values
 npm install
 npm run dev
 ```
+
+## Follow-ups (automatic emails to guests)
+
+- Migrations: `0020`–`0023` (run in order). Tests: `npm test` (Vitest + PGlite, no real emails).
+- Sending: hourly cron `/api/cron/followups` (vercel.json). Each email goes Monday–Friday 9:00–17:00 in the guest's time zone
+  (from their country when it has one zone, otherwise the operator's setting).
+- Per client, Safari Digital verifies the client's domain in Resend, then enters the address under Admin › Client › Connections › Follow-up emails.
+- Bounces and spam complaints: add a Resend webhook to `https://<portal>/api/webhooks/resend` (events `email.bounced`,
+  `email.complained`, `email.delivered`) and put its signing secret in `RESEND_WEBHOOK_SECRET`.
+- Replies are **not** detected automatically (no inbox connection). Operators click "Guest replied" on the inquiry, or move the card.
+- Follow-ups only start once the operator confirms they sent the stage's message ("Yes, sent" after moving a card, or "I sent the quote" in the inquiry).

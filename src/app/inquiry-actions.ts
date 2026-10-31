@@ -59,3 +59,19 @@ export async function setInquiryFollowups(id: string, on: boolean): Promise<{ ok
   revalidatePath("/", "layout");
   return { ok: true };
 }
+
+// The follow-up section of the inquiry panel: status, next email, history.
+export async function getInquiryFollowups(id: string) {
+  const viewer = await getViewer();
+  if (!viewer) return null;
+  const supabase = await createClient();
+  const { data: q } = await supabase.from("inquiries")
+    .select("id, client_id, customer_name, email, phone, interested_in, travel_dates, country, status, followups_stopped_at").eq("id", id).maybeSingle();
+  if (!q) return null;
+  try {
+    const { inquiryFollowupView } = await import("@/lib/pipeline-followups");
+    return await inquiryFollowupView(supabase, q);
+  } catch {
+    return null; // follow-ups not set up yet (migration not run)
+  }
+}

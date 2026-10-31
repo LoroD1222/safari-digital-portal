@@ -38,7 +38,10 @@ export async function POST(req: NextRequest) {
   const t = req.nextUrl.searchParams.get("t") ?? "";
   if (!validUnsubscribe(i, t)) return page("Link not valid", "This unsubscribe link is incomplete. Reply to the email and ask to stop the reminders.");
   const admin = createAdminClient();
-  await admin.from("inquiries").update({ followups_stopped_at: new Date().toISOString() }).eq("id", i).is("followups_stopped_at", null);
+  const { data: q } = await admin.from("inquiries").select("client_id, email").eq("id", i).maybeSingle();
+  await admin.from("inquiries").update({ followups_stopped_at: new Date().toISOString(), followups_stop_reason: "Unsubscribed" }).eq("id", i).is("followups_stopped_at", null);
+  // The same address gets nothing more from this operator, on any inquiry.
+  if (q?.email) await admin.from("followup_suppressions").upsert({ client_id: q.client_id, email: String(q.email).trim().toLowerCase(), reason: "Unsubscribed" }, { onConflict: "client_id,email" });
   const name = await company(i);
   return page("You're unsubscribed", `${name} won't send you any more automatic reminders. You can still reply to their messages any time.`);
 }

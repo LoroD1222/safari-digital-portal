@@ -6,11 +6,15 @@ import { InquiryDialog, moveInquiry, stageColor, usd } from "./inquiry-dialog";
 import { INQUIRY_LABEL, STAGES, STALE_DAYS, type Inquiry, type InquiryStatus } from "@/lib/types";
 import type { FollowupBadge } from "@/lib/pipeline-followups";
 import { Icon, type IconName } from "./icons";
+import { confirmFollowupMessage } from "@/app/portal/followups/actions";
 
 const BADGE: Record<FollowupBadge["kind"], [IconName, string, string]> = {
   email: ["mail", "#F1F2F4", "#4A4F63"], whatsapp: ["whatsapp", "#F1F2F4", "#4A4F63"], due: ["whatsapp", "#E3F4EA", "#1A6647"],
   sent: ["check", "#E3F4EA", "#1A6647"], stopped: ["close", "#F1F2F4", "#8A8FA3"],
+  awaiting: ["send", "#FDF3E1", "#8A5A12"], paused: ["clock", "#F1F2F4", "#8A8FA3"], attention: ["help", "#FDF3E1", "#8A5A12"],
 };
+const FOLLOW_STAGES: InquiryStatus[] = ["contacted", "quoted", "negotiating"];
+const SENT_WHAT: Partial<Record<InquiryStatus, string>> = { contacted: "your first reply", quoted: "the quote", negotiating: "your latest message" };
 const today = () => new Date(Date.now() + 3 * 3600e3).toISOString().slice(0, 10); // Dar es Salaam
 const daysIn = (q: Inquiry) => Math.floor((Date.now() - new Date(q.stage_changed_at ?? q.received_at).getTime()) / 864e5);
 const next = (s: InquiryStatus): InquiryStatus | null => (s === "booked" || s === "closed" ? null : STAGES[STAGES.indexOf(s) + 1]);
@@ -28,6 +32,8 @@ export function PipelineBoard({ items, company, adminHref, followupsOn = false, 
   const [drag, setDrag] = useState<string | null>(null);
   const [over, setOver] = useState<InquiryStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // After a card moves into a follow-up stage: "Did you send it?" Follow-ups only count from a confirmed message.
+  const [ask, setAsk] = useState<{ id: string; name: string; stage: InquiryStatus } | null>(null);
   const [, start] = useTransition();
   // Columns run down to the bottom of the window, whatever sits above the board.
   const boardRef = useRef<HTMLDivElement>(null);
@@ -65,7 +71,10 @@ export function PipelineBoard({ items, company, adminHref, followupsOn = false, 
     start(async () => {
       const r = await moveInquiry(q, to);
       if (!r.ok) { patch(id, { status: before }); setError(`Couldn't move ${q.customer_name}. Try again.`); }
-      else router.refresh();
+      else {
+        if (followupsOn && !adminHref && FOLLOW_STAGES.includes(to) && !q.followups_stopped_at) setAsk({ id, name: q.customer_name, stage: to });
+        router.refresh();
+      }
     });
   }
 
@@ -76,7 +85,11 @@ export function PipelineBoard({ items, company, adminHref, followupsOn = false, 
       {error && <p role="alert" className="text-[13px] text-danger-text">{error}</p>}
       <p className="flex flex-wrap items-center gap-x-3.5 gap-y-1 text-xs text-slate">
         <span>Drag a card to another stage, or tap › to move it on. Open a card for details, the trip value and notes. Days in <span className="font-semibold text-[#9A4A12]">orange</span> mean it&apos;s been waiting too long.</span>
-        {followupsOn && <span className="inline-flex items-center gap-1.5"><span className="inline-flex size-4 items-center justify-center rounded-full bg-[#F1F2F4] text-[#4A4F63]"><Icon name="mail" size={9} /></span>Follow-up planned · hover for details</span>}
+        {followupsOn && <>
+          <span className="inline-flex items-center gap-1.5"><span className="inline-flex size-4 items-center justify-center rounded-full bg-[#F1F2F4] text-[#4A4F63]"><Icon name="mail" size={9} /></span>Next follow-up</span>
+          <span className="inline-flex items-center gap-1.5"><span className="inline-flex size-4 items-center justify-center rounded-full bg-[#FDF3E1] text-[#8A5A12]"><Icon name="send" size={9} /></span>Confirm you sent it</span>
+          <span>Hover an icon for details.</span>
+        </>}
       </p>
       <div ref={boardRef} className="-mx-4 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0">
         <ol className="flex w-max snap-x snap-mandatory gap-2.5 sm:w-full sm:min-w-[1100px]">
@@ -148,6 +161,19 @@ export function PipelineBoard({ items, company, adminHref, followupsOn = false, 
           })}
         </ol>
       </div>
+      {ask && (
+        <div role="dialog" aria-label="Start follow-ups" className="fixed inset-x-4 bottom-4 z-40 mx-auto flex max-w-[560px] flex-wrap items-center gap-3 rounded-card border border-line bg-white px-4 py-3 shadow-[0_12px_40px_rgba(0,3,33,0.18)]">
+          <span className="min-w-[220px] flex-1 text-[13px]">
+            <span className="font-semibold">Did you send {ask.name.split(" ")[0]} {SENT_WHAT[ask.stage]}?</span>
+            <span className="block text-slate">Follow-ups for this stage count from when you did.</span>
+          </span>
+          <button type="button" className="h-9 rounded-control px-3 text-[13px] font-medium text-slate hover:text-ink" onClick={() => setAsk(null)}>Not yet</button>
+          <button type="button" className="h-9 rounded-control bg-brand px-3.5 text-[13px] font-semibold text-white hover:bg-brand-hover"
+            onClick={() => { const a = ask; setAsk(null); start(async () => { const r = await confirmFollowupMessage(a.id); if (!r.ok) setError(r.error); router.refresh(); }); }}>
+            Yes, sent
+          </button>
+        </div>
+      )}
       {cur && open && (
         <InquiryDialog q={cur} company={company} intent={open.intent} followup={followupsOn ? followups[cur.id] ?? null : undefined} onClose={() => { setOpen(null); router.refresh(); }} onUpdate={(p) => patch(cur.id, p)} />
       )}

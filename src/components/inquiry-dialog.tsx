@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { getInquiryHistory, saveInquiryDeal, setInquiryFollowups, updateInquiryStatus, type HistoryRow } from "@/app/inquiry-actions";
+import { getInquiryHistory, saveInquiryDeal, updateInquiryStatus, type HistoryRow } from "@/app/inquiry-actions";
+import { InquiryFollowups } from "./inquiry-followups";
 import type { FollowupBadge } from "@/lib/pipeline-followups";
 import { Icon } from "./icons";
 import { TONES } from "./ui";
@@ -44,7 +45,7 @@ async function move(q: Inquiry, to: InquiryStatus, extra?: { trip_value?: number
 
 type Intent = "booked" | "closed" | null;
 
-export function InquiryDialog({ q, company, intent: startIntent = null, onClose, onUpdate, followup }: {
+export function InquiryDialog({ q, company, intent: startIntent = null, onClose, onUpdate }: {
   q: Inquiry; company: string; intent?: Intent; onClose: () => void; onUpdate: (patch: Partial<Inquiry>) => void;
   followup?: FollowupBadge | null; // undefined = follow-ups are off for this client, so the switch is hidden
 }) {
@@ -208,28 +209,7 @@ export function InquiryDialog({ q, company, intent: startIntent = null, onClose,
           </div>
         </section>
 
-        {followup !== undefined && ["contacted", "quoted", "negotiating"].includes(q.status) && (
-          <div className="flex items-center gap-3 rounded-card bg-sidebar px-4 py-3">
-            <span className="flex min-w-0 flex-1 flex-col">
-              <span className="text-[13px] font-semibold">Automatic follow-ups</span>
-              <span className="text-xs text-slate">
-                {q.followups_stopped_at ? "Stopped for this guest." : followup && followup.kind !== "stopped" ? followup.text + "." : "Nothing planned in this stage."}
-              </span>
-            </span>
-            <button type="button" role="switch" aria-checked={!q.followups_stopped_at} aria-label="Automatic follow-ups for this guest" disabled={pending}
-              onClick={() => {
-                const on = !!q.followups_stopped_at;
-                onUpdate({ followups_stopped_at: on ? null : new Date().toISOString() });
-                start(async () => {
-                  const r = await setInquiryFollowups(q.id, on);
-                  if (!r.ok) { onUpdate({ followups_stopped_at: q.followups_stopped_at ?? null }); setMsg({ ok: false, text: r.error ?? "Couldn't save." }); }
-                });
-              }}
-              className={"relative h-6 w-10 shrink-0 rounded-full transition-colors disabled:opacity-60 " + (q.followups_stopped_at ? "bg-[#C9CDD6]" : "bg-brand")}>
-              <span className={"absolute top-[3px] size-[18px] rounded-full bg-white shadow-[0_1px_2px_rgba(0,3,33,0.25)] transition-[left] " + (q.followups_stopped_at ? "left-[3px]" : "left-[19px]")} />
-            </button>
-          </div>
-        )}
+        <InquiryFollowups q={q} onUpdate={onUpdate} />
 
         <dl className="flex flex-col">
           {([

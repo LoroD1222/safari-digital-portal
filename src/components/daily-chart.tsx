@@ -62,3 +62,16 @@ export function perDay(monthStart: string, dates: string[], now = new Date()) {
     return { day: i + 1, label: date.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }), value: counts.get(key) ?? 0, future: key > today };
   });
 }
+
+// One bar per day from start for n days (e.g. the last 30 days).
+export function perRange(start: string, n: number, dates: string[]) {
+  const local = (iso: string) => new Date(new Date(iso).getTime() + 3 * 3600 * 1000).toISOString().slice(0, 10);
+  const counts = new Map<string, number>();
+  for (const d of dates) { const k = local(d); counts.set(k, (counts.get(k) ?? 0) + 1); }
+  const t0 = Date.parse(start + "T00:00:00Z");
+  return Array.from({ length: n }, (_, i) => {
+    const key = new Date(t0 + i * 86400000).toISOString().slice(0, 10);
+    const date = new Date(key + "T00:00:00Z");
+    return { day: date.getUTCDate(), label: date.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }), value: counts.get(key) ?? 0, future: false };
+  });
+}

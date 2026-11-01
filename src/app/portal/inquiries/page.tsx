@@ -2,11 +2,11 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getPortalContext } from "@/lib/portal";
 import { createClient } from "@/lib/supabase/server";
-import { monthBounds, money } from "@/lib/dates";
+import { last30Bounds, monthBounds, money } from "@/lib/dates";
 import type { Inquiry } from "@/lib/types";
 import { Stat } from "@/components/ui";
 import { InquiryTable } from "./inquiry-table";
-import { DailyChart, perDay } from "@/components/daily-chart";
+import { DailyChart, perDay, perRange } from "@/components/daily-chart";
 import { AddInquiry } from "./add-inquiry";
 import { AdChatsBanner } from "./ad-chats";
 import { adChats, type Campaign } from "@/lib/types";
@@ -17,14 +17,17 @@ export default async function InquiriesPage(props: PageProps<"/portal/inquiries"
   const { company } = await getPortalContext();
   if (!company) redirect("/portal");
   const sp = await props.searchParams;
-  const m = Number(sp.m);
-  const offset = Number.isInteger(m) && m <= 0 && m >= -11 ? m : 0;
-  const month = monthBounds(offset);
-  const label = offset === 0 ? `${month.label} (so far)` : month.label;
+  // Default: the last 30 days, so the start of a month isn't empty. Or a calendar month (m = 0, -1, …).
+  const m = sp.m === undefined || sp.m === "30" ? null : Number(sp.m);
+  const rolling = m === null || !Number.isInteger(m) || m > 0 || m < -11;
+  const offset = rolling ? 0 : m!;
+  const period = rolling ? last30Bounds() : monthBounds(offset);
+  const month = monthBounds(offset); // ad costs are reported per calendar month
+  const label = rolling ? "Last 30 days" : offset === 0 ? `${period.label} (so far)` : period.label;
 
   const supabase = await createClient();
   const [{ data }, { data: rep }] = await Promise.all([
-    supabase.from("inquiries").select("*").eq("client_id", company.id).gte("received_at", month.start).lt("received_at", month.next).order("received_at", { ascending: false }),
+    supabase.from("inquiries").select("*").eq("client_id", company.id).gte("received_at", period.start).lt("received_at", period.next).order("received_at", { ascending: false }),
     company.marketing_package
       ? supabase.from("ad_reports").select("meta_spend, meta_inquiries, campaigns").eq("client_id", company.id).eq("month", month.start).maybeSingle()
       : Promise.resolve({ data: null }),
@@ -35,7 +38,10 @@ export default async function InquiriesPage(props: PageProps<"/portal/inquiries"
   const metaN = rep?.meta_inquiries ?? 0;
   const monthName = month.label.split(" ")[0];
   const chats = rep ? adChats(rep.campaigns as Campaign[]) : null;
-  const logged = rows.filter((r) => r.source === "meta_ads" && r.channel !== "website_form").length;
+  const loggedIn = (list: Inquiry[]) => list.filter((r) => r.source === "meta_ads" && r.channel !== "website_form").length;
+  const logged = rolling
+    ? loggedIn(rows.filter((r) => r.received_at >= month.start && r.received_at < month.next))
+    : loggedIn(rows);
 
   return (
     <>
@@ -47,8 +53,9 @@ export default async function InquiriesPage(props: PageProps<"/portal/inquiries"
         <div className="flex flex-wrap items-center gap-2">
         <AddInquiry />
         <form className="flex items-center gap-2">
-          <label htmlFor="m" className="sr-only">Month</label>
-          <select id="m" name="m" defaultValue={String(offset)} className="h-[34px] rounded-control border border-field bg-white px-2 text-sm">
+          <label htmlFor="m" className="sr-only">Period</label>
+          <select id="m" name="m" defaultValue={rolling ? "30" : String(offset)} className="h-[34px] rounded-control border border-field bg-white px-2 text-sm">
+            <option value="30">Last 30 days</option>
             {[0, -1, -2, -3, -4, -5].map((o) => <option key={o} value={o}>{monthBounds(o).label}{o === 0 ? " (so far)" : ""}</option>)}
           </select>
           <button className="h-[34px] rounded-control border border-field px-3 text-[13px] font-medium hover:bg-[#F4F5F2]">Show</button>
@@ -62,16 +69,16 @@ export default async function InquiriesPage(props: PageProps<"/portal/inquiries"
         <Stat label="Confirmed bookings" value={booked} note={rows.length ? `${Math.round((booked / rows.length) * 100)}% of inquiries` : "—"} />
         {company.marketing_package && (
           <Stat label="Cost per Meta Ads inquiry" value={spend && metaN ? money(Math.round((spend / metaN) * 100) / 100) : "—"}
-            note={spend && metaN ? `${money(spend)} ad spend ÷ ${metaN} Meta Ads inquiries` : `Shown once ${monthName} ad spend is reported`} />
+            note={spend && metaN ? `${money(spend)} ad spend ÷ ${metaN} Meta Ads inquiries${rolling ? ` · ${monthName} so far (ads are reported per month)` : ""}` : `Shown once ${monthName} ad spend is reported`} />
         )}
       </section>
 
-      <DailyChart title={`Inquiries per day · ${label}`} days={perDay(month.start, rows.map((r) => r.received_at))}
+      <DailyChart title={`Inquiries per day · ${label}`} days={rolling ? perRange(period.start, 30, rows.map((r) => r.received_at)) : perDay(period.start, rows.map((r) => r.received_at))}
         note={`${rows.length} ${rows.length === 1 ? "inquiry" : "inquiries"} from all sources`} />
 
-      {chats !== null && chats > 0 && <AdChatsBanner chats={chats} added={logged} monthName={monthName} current={offset === 0} />}
+      {chats !== null && chats > 0 && <AdChatsBanner chats={chats} added={logged} monthName={monthName} current={rolling || offset === 0} />}
 
-      <InquiryTable key={`${month.start}-${rows.length}`} items={rows} company={company.name} openId={typeof sp.open === "string" ? sp.open : null} />
+      <InquiryTable key={`${period.start}-${rows.length}`} items={rows} company={company.name} openId={typeof sp.open === "string" ? sp.open : null} />
 
       <div className="flex items-start gap-3 rounded-card bg-sidebar px-4 py-3.5">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#565A7C" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="mt-0.5 flex-none"><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8h.01" /></svg>

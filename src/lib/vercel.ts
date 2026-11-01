@@ -67,6 +67,14 @@ export function monthRange(offset: number, now = new Date()): MonthRange {
   };
 }
 
+// The last 30 days including today (back = 1: the 30 days before that).
+export function last30Range(back = 0, now = new Date()): MonthRange {
+  const today = new Date(now.getTime() + 3 * 3600e3);
+  const end = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()) - back * 30 * 86400000;
+  const iso = (t: number) => new Date(t).toISOString().slice(0, 10);
+  return { since: iso(end - 29 * 86400000), until: iso(end), days: 30, label: back ? "Previous 30 days" : "Last 30 days" };
+}
+
 export type WebsiteStats = {
   visitors: number;
   pageviews: number;

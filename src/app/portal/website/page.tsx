@@ -3,7 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getPortalContext } from "@/lib/portal";
 import { createClient } from "@/lib/supabase/server";
-import { monthRange } from "@/lib/vercel";
+import { last30Range, monthRange } from "@/lib/vercel";
 import { clientWebsiteStats, statsSource } from "@/lib/site-stats";
 import type { Client } from "@/lib/types";
 import { EmptyState, buttonClass } from "@/components/ui";
@@ -20,8 +20,9 @@ export default async function WebsitePage(props: PageProps<"/portal/website">) {
   const sp = await props.searchParams;
   const live = !company.website_package || company.website_stage === "live";
   const tab = sp.tab === "training" || sp.tab === "manage" ? "training" : sp.tab === "performance" || sp.tab === "analytics" ? "performance" : live ? "performance" : "training";
-  const m = Number(sp.m === "last" ? -1 : sp.m);
-  const offset = Number.isInteger(m) && m <= 0 && m >= -11 ? m : 0;
+  // Default: the last 30 days. Or a calendar month (m = 0, -1, …; "last" = last month).
+  const m = sp.m === undefined || sp.m === "30" ? null : Number(sp.m === "last" ? -1 : sp.m);
+  const offset: number | null = m !== null && Number.isInteger(m) && m <= 0 && m >= -11 ? m : null;
 
   return (
     <>
@@ -61,7 +62,7 @@ async function TrainingTab() {
   );
 }
 
-async function Analytics({ company, live, offset }: { company: Client; live: boolean; offset: number }) {
+async function Analytics({ company, live, offset }: { company: Client; live: boolean; offset: number | null }) {
   if (!live) {
     return (
       <div className="rounded-card border border-dashed border-field px-6 py-9 text-center text-slate">
@@ -70,21 +71,22 @@ async function Analytics({ company, live, offset }: { company: Client; live: boo
       </div>
     );
   }
-  const range = monthRange(offset);
-  const prev = monthRange(offset - 1);
+  const range = offset === null ? last30Range() : monthRange(offset);
+  const prev = offset === null ? last30Range(1) : monthRange(offset - 1);
   const supabase = await createClient();
   const countInq = (r: typeof range) => supabase.from("inquiries").select("id", { count: "exact", head: true })
     .eq("client_id", company.id).eq("channel", "website_form").gte("received_at", r.since).lte("received_at", r.until + "T23:59:59Z");
   const [{ count: inq }, { count: inqPrev }] = await Promise.all([countInq(range), countInq(prev)]);
-  const prevName = prev.label.split(" ")[0];
+  const prevName = offset === null ? "the 30 days before" : prev.label.split(" ")[0];
   const inqDelta = inqPrev === null ? null : `${(inq ?? 0) - inqPrev >= 0 ? "+" : ""}${(inq ?? 0) - inqPrev} vs ${prevName}`;
 
   const picker = (
     <div className="flex flex-wrap items-center justify-between gap-3">
       <form className="flex items-center gap-2 text-[13px] text-slate">
         <input type="hidden" name="tab" value="analytics" />
-        <label htmlFor="m">Month</label>
-        <select id="m" name="m" defaultValue={String(offset)} className="h-9 rounded-control border border-field bg-white px-2 text-sm text-ink">
+        <label htmlFor="m">Period</label>
+        <select id="m" name="m" defaultValue={offset === null ? "30" : String(offset)} className="h-9 rounded-control border border-field bg-white px-2 text-sm text-ink">
+          <option value="30">Last 30 days</option>
           {[0, -1, -2, -3, -4, -5].map((o) => <option key={o} value={o}>{monthRange(o).label.replace(" (so far)", "")}</option>)}
         </select>
         <button className="h-9 rounded-control border border-field px-3 font-medium text-ink hover:bg-[#F4F5F2]">Show</button>

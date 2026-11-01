@@ -9,6 +9,15 @@ export function monthBounds(offset = 0, now = new Date()) {
   };
 }
 
+// The last 30 days including today (Tanzania date). Same shape as monthBounds.
+export function last30Bounds(now = new Date(), back = 0) {
+  const today = new Date(now.getTime() + 3 * 3600e3);
+  const end = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()) + 86400000 - back * 30 * 86400000;
+  const start = end - 30 * 86400000;
+  const iso = (t: number) => new Date(t).toISOString().slice(0, 10);
+  return { start: iso(start), next: iso(end), label: back ? "Previous 30 days" : "Last 30 days" };
+}
+
 export function fmtDate(iso: string | null | undefined, withYear = false) {
   if (!iso) return "";
   const d = new Date(iso.length === 10 ? iso + "T00:00:00Z" : iso);

@@ -505,41 +505,28 @@ export function Wizard(p: Props) {
                   </ol>
                   <a href="https://business.facebook.com/settings/ad-accounts" target="_blank" rel="noopener noreferrer" className={buttonClass("secondary", "h-9 self-start")}>Open Ad accounts ↗</a>
                 </Section>
-                <Section title="Step 3 · Add Safari Digital as a partner">
-                  <VideoEmbed url={p.metaAccessVideoUrl} title="How to add Safari Digital as a partner" />
+                <Section title="Step 3 · Add our team">
+                  <VideoEmbed url={p.metaAccessVideoUrl} title="How to add the Safari Digital team" />
                   <ol className="list-decimal space-y-2 pl-5 text-body">
-                    <li>Open <strong className="font-semibold text-ink">Meta Business Suite</strong> and go to <strong className="font-semibold text-ink">Settings → Partners → Add partner</strong>.</li>
+                    <li>In <strong className="font-semibold text-ink">Meta Business Suite</strong>, go to <strong className="font-semibold text-ink">Settings → People → Invite people</strong>.</li>
                     <li>
-                      Paste Safari Digital&apos;s Business ID:{" "}
-                      {p.metaBusinessId
-                        ? <span className="ml-1 inline-flex items-center gap-2 rounded-badge border border-line bg-sidebar py-0.5 pl-2.5 pr-1 font-mono text-ink">{p.metaBusinessId}<CopyButton text={p.metaBusinessId} /></span>
-                        : <strong className="font-semibold text-ink">we&apos;ll send it to you on WhatsApp</strong>}
-                    </li>
-                    <li>Tick your <strong className="font-semibold text-ink">Facebook page, Instagram account and ad account</strong>, and give full control.</li>
-                  </ol>
-                  <div className="flex flex-wrap items-center gap-4">
-                    <a href="https://business.facebook.com/settings/partners" target="_blank" rel="noopener noreferrer" className={buttonClass("secondary", "h-9")}>Open Meta Business Suite ↗</a>
-                    <span className="text-[13px] text-slate">We never ask for your password.</span>
-                  </div>
-                </Section>
-                {p.metaAdEmails.length > 0 && (
-                  <Section title="Step 4 · Add our team to your ad account">
-                    <ol className="list-decimal space-y-2 pl-5 text-body">
-                      <li>In <strong className="font-semibold text-ink">Meta Business Suite</strong>, go to <strong className="font-semibold text-ink">Settings → People → Invite people</strong>.</li>
-                      <li>
-                        Add {p.metaAdEmails.length === 1 ? "this email" : "these emails"}:
+                      {p.metaAdEmails.length > 0 ? <>Add {p.metaAdEmails.length === 1 ? "this email" : "these emails"}:</> : <>Add the emails <strong className="font-semibold text-ink">we&apos;ll send you on WhatsApp</strong>.</>}
+                      {p.metaAdEmails.length > 0 && (
                         <span className="mt-1.5 flex flex-wrap gap-2">
                           {p.metaAdEmails.map((e) => (
                             <span key={e} className="inline-flex items-center gap-2 rounded-badge border border-line bg-sidebar py-0.5 pl-2.5 pr-1 font-mono text-[13px] text-ink">{e}<CopyButton text={e} /></span>
                           ))}
                         </span>
-                      </li>
-                      <li>Give them access to your <strong className="font-semibold text-ink">ad account</strong> with <strong className="font-semibold text-ink">full control</strong> (Manage ad account), then send the invite.</li>
-                    </ol>
-                    <a href="https://business.facebook.com/settings/people" target="_blank" rel="noopener noreferrer" className={buttonClass("secondary", "h-9 self-start")}>Open People settings ↗</a>
-                  </Section>
-                )}
-                <Section title={`Step ${p.metaAdEmails.length > 0 ? 5 : 4} · Add a payment method to your ad account`}>
+                      )}
+                    </li>
+                    <li>Give them <strong className="font-semibold text-ink">full control</strong> of your <strong className="font-semibold text-ink">Facebook page</strong>, <strong className="font-semibold text-ink">Instagram account</strong> and <strong className="font-semibold text-ink">ad account</strong>, then send the invite.</li>
+                  </ol>
+                  <div className="flex flex-wrap items-center gap-4">
+                    <a href="https://business.facebook.com/settings/people" target="_blank" rel="noopener noreferrer" className={buttonClass("secondary", "h-9")}>Open People settings ↗</a>
+                    <span className="text-[13px] text-slate">We never ask for your password.</span>
+                  </div>
+                </Section>
+                <Section title="Step 4 · Add a payment method to your ad account">
                   <VideoEmbed url={p.paymentVideoUrl} title="How to add a payment method to your ad account" />
                   <p className="text-body">Ads are paid to Meta directly with your card. Meta charges it as the ads run, never Safari Digital.</p>
                   <ol className="list-decimal space-y-2 pl-5 text-body">
@@ -549,14 +536,11 @@ export function Wizard(p: Props) {
                   </ol>
                   <a href="https://business.facebook.com/billing_hub/payment_settings" target="_blank" rel="noopener noreferrer" className={buttonClass("secondary", "h-9 self-start")}>Open Billing &amp; payments ↗</a>
                 </Section>
-                <Section title={p.metaAdEmails.length > 0 ? "Step 6 · Confirm" : "Step 5 · Confirm"}>
-                  <Check checked={m.invite_sent} onChange={(v) => update("marketing", { invite_sent: v })}>I&apos;ve sent the partner request to Safari Digital</Check>
-                  {p.metaAdEmails.length > 0 && (
-                    <Check checked={!!m.people_added} onChange={(v) => update("marketing", { people_added: v })}>I&apos;ve added the Safari Digital team to our ad account</Check>
-                  )}
+                <Section title="Step 5 · Confirm">
+                  <Check checked={!!m.people_added} onChange={(v) => update("marketing", { people_added: v })}>I&apos;ve invited the Safari Digital team to our page, Instagram and ad account</Check>
                   <Check checked={!!m.payment_added} onChange={(v) => update("marketing", { payment_added: v })}>I&apos;ve added a payment method to our ad account</Check>
                   <span className="text-xs text-slate">
-                    {p.metaConfirmed ? "Confirmed. We can see your pages." : "We'll accept it and confirm here, usually the same day."}
+                    {p.metaConfirmed ? "Confirmed. We can see your pages." : "We'll accept the invite and confirm here, usually the same day."}
                   </span>
                 </Section>
               </>

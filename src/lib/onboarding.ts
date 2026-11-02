@@ -86,7 +86,8 @@ export function isDriveLink(v?: string) {
 
 // An access task only counts once the client has confirmed they did it.
 export function canFinish(key: TaskKey, a: Answers) {
-  if (key === "meta") return !!a.marketing?.invite_sent;
+  // Team invited by email (older onboardings may have sent a partner request instead).
+  if (key === "meta") return !!a.marketing?.people_added || !!a.marketing?.invite_sent;
   if (key === "photos") return isDriveLink(a.files?.drive_link) && !!a.files?.drive_shared;
   return true;
 }
@@ -102,7 +103,7 @@ export function inferDone(a: Answers): Answers["done"] {
     business: !!(b.contact_name?.trim() && b.whatsapp?.trim()),
     ads: !!(m.budget?.trim() || m.promote?.trim()),
     website: !!(w.current_site?.trim() || w.domain?.trim() || w.wanted_domain?.trim() || w.likes?.trim()),
-    meta: !!m.invite_sent,
+    meta: !!m.people_added || !!m.invite_sent,
     photos: canFinish("photos", a),
   };
 }

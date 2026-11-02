@@ -11,7 +11,7 @@ const ENV_FALLBACK: Record<SettingKey, string | undefined> = {
   drive_video_url: process.env.DRIVE_TUTORIAL_VIDEO_URL,
   payment_video_url: process.env.PAYMENT_METHOD_VIDEO_URL,
   meta_business_id: process.env.NEXT_PUBLIC_META_BUSINESS_ID,
-  meta_ad_emails: "lovrokrizzz1@gmail.com, rodrissjames@gmail.com",
+  meta_ad_emails: "lovro0943@gmail.com, rodrissjames@gmail.com",
   drive_share_email: process.env.NEXT_PUBLIC_DRIVE_SHARE_EMAIL,
   support_whatsapp: process.env.SUPPORT_WHATSAPP,
   staff_email: process.env.STAFF_EMAIL,

@@ -26,6 +26,7 @@ type Props = {
   metaAdEmails: string[];
   driveShareEmail: string | null;
   metaAccessVideoUrl: string | null;
+  paymentVideoUrl: string | null;
   driveTutorialVideoUrl: string | null;
   note?: string | null;
 };
@@ -527,11 +528,22 @@ export function Wizard(p: Props) {
                     <a href="https://business.facebook.com/settings/people" target="_blank" rel="noopener noreferrer" className={buttonClass("secondary", "h-9 self-start")}>Open People settings ↗</a>
                   </Section>
                 )}
-                <Section title={p.metaAdEmails.length > 0 ? "Step 4 · Confirm" : "Step 3 · Confirm"}>
+                <Section title={`Step ${p.metaAdEmails.length > 0 ? 4 : 3} · Add a payment method to your ad account`}>
+                  <VideoEmbed url={p.paymentVideoUrl} title="How to add a payment method to your ad account" />
+                  <p className="text-body">Ads are paid to Meta directly with your card. Meta charges it as the ads run, never Safari Digital.</p>
+                  <ol className="list-decimal space-y-2 pl-5 text-body">
+                    <li>Open <strong className="font-semibold text-ink">Billing &amp; payments</strong> in Meta Business Suite and choose your <strong className="font-semibold text-ink">ad account</strong>.</li>
+                    <li>Click <strong className="font-semibold text-ink">Payment methods → Add payment method</strong>.</li>
+                    <li>Add a <strong className="font-semibold text-ink">Visa or Mastercard</strong> (debit cards work too) and save.</li>
+                  </ol>
+                  <a href="https://business.facebook.com/billing_hub/payment_settings" target="_blank" rel="noopener noreferrer" className={buttonClass("secondary", "h-9 self-start")}>Open Billing &amp; payments ↗</a>
+                </Section>
+                <Section title={p.metaAdEmails.length > 0 ? "Step 5 · Confirm" : "Step 4 · Confirm"}>
                   <Check checked={m.invite_sent} onChange={(v) => update("marketing", { invite_sent: v })}>I&apos;ve sent the partner request to Safari Digital</Check>
                   {p.metaAdEmails.length > 0 && (
                     <Check checked={!!m.people_added} onChange={(v) => update("marketing", { people_added: v })}>I&apos;ve added the Safari Digital team to our ad account</Check>
                   )}
+                  <Check checked={!!m.payment_added} onChange={(v) => update("marketing", { payment_added: v })}>I&apos;ve added a payment method to our ad account</Check>
                   <span className="text-xs text-slate">
                     {p.metaConfirmed ? "Confirmed. We can see your pages." : "We'll accept it and confirm here, usually the same day."}
                   </span>
@@ -623,7 +635,7 @@ export function Wizard(p: Props) {
           )}
 
           {group("g-ask", "1. Tell us about your business", "Short questions. Rough answers are fine, we'll ask if anything is unclear.", tasks.filter((t) => t.group === "ask"))}
-          {group("g-access", "2. Give us access", `Done in Meta and Google Drive.${p.metaAccessVideoUrl || p.driveTutorialVideoUrl ? " Each task has a short video." : ""} We never ask for your passwords.`, tasks.filter((t) => t.group === "access"))}
+          {group("g-access", "2. Give us access", `Done in Meta and Google Drive.${p.metaAccessVideoUrl || p.driveTutorialVideoUrl || p.paymentVideoUrl ? " Each task has a short video." : ""} We never ask for your passwords.`, tasks.filter((t) => t.group === "access"))}
 
           <div className="flex flex-col gap-3 rounded-card border border-line bg-white p-[18px] sm:flex-row sm:items-center sm:gap-4">
             <div className="flex-1">

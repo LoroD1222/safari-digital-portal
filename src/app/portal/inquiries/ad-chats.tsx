@@ -11,13 +11,13 @@ const WHERE: { value: AdChatRow["where"]; label: string }[] = [
 const blank = (where: AdChatRow["where"] = "whatsapp_ad"): AdChatRow => ({ name: "", where, phone: "", asked: "" });
 
 // The banner under the stats: how many chats the ads started, how many are in the list, and a quick way to add the rest.
-export function AdChatsBanner({ chats, added, monthName, current }: { chats: number; added: number; monthName: string; current: boolean }) {
+export function AdChatsBanner({ chats, added, period, current }: { chats: number; added: number; period: string; current: boolean }) {
   const missing = Math.max(0, chats - added);
   return (
     <div className={"flex flex-wrap items-center gap-x-4 gap-y-2 rounded-card border px-4 py-3 " + (missing ? "border-[#F1E2C3] bg-[#FFFAF0]" : "border-line")}>
       <span className="flex size-9 flex-none items-center justify-center rounded-full bg-[#E3F4EA] text-brand"><Icon name="chat" size={18} /></span>
       <span className="min-w-[220px] flex-1 text-[13px] text-body">
-        <span className="font-semibold text-ink">{chats} {chats === 1 ? "chat" : "chats"} started from your ads</span> in {monthName}, on WhatsApp, Instagram and Messenger.
+        <span className="font-semibold text-ink">{chats} {chats === 1 ? "chat" : "chats"} started from your ads</span> {period}, on WhatsApp, Instagram and Messenger.
         {" "}{missing
           ? <><span className="font-semibold text-[#8A5A12]">{added} {added === 1 ? "is" : "are"} in your list, {missing} still to add.</span> Meta only shares the number, not who they are, so add their names here to follow them up and count bookings.</>
           : "All of them are in your list."}

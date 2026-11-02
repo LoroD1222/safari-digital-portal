@@ -11,6 +11,8 @@ import { PipelineBoard } from "@/components/pipeline-board";
 import { pipelineFollowups } from "@/lib/pipeline-followups";
 import { AdChatsBanner } from "../inquiries/ad-chats";
 import { adChats, type Campaign } from "@/lib/types";
+import { chatsBetween, metaConfigured } from "@/lib/meta";
+import { last30Bounds } from "@/lib/dates";
 
 export const metadata: Metadata = { title: "Pipeline" };
 
@@ -30,9 +32,14 @@ export default async function PipelinePage() {
       ? supabase.from("ad_reports").select("campaigns").eq("client_id", company.id).eq("month", month.start).maybeSingle()
       : Promise.resolve({ data: null }),
     supabase.from("inquiries").select("id", { count: "exact", head: true }).eq("client_id", company.id).eq("source", "meta_ads")
-      .neq("channel", "website_form").gte("received_at", month.start).lt("received_at", month.next),
+      .neq("channel", "website_form").gte("received_at", last30Bounds().start).lt("received_at", last30Bounds().next),
   ]);
-  const chats = rep.data ? adChats(rep.data.campaigns as Campaign[]) : null;
+  // Chats from ads in the last 30 days (straight from Meta); without Meta, this month's report.
+  const p30 = last30Bounds();
+  const live30 = company.marketing_package && company.meta_ad_account_id && metaConfigured()
+    ? await chatsBetween(company.meta_ad_account_id, p30.start, new Date(Date.parse(p30.next) - 86400000).toISOString().slice(0, 10))
+    : null;
+  const chats = live30 ?? (rep.data ? adChats(rep.data.campaigns as Campaign[]) : null);
   const rows = (board.data ?? []) as Inquiry[];
   const fu = await pipelineFollowups(supabase, company.id, rows).catch(() => ({ on: false, badges: {} }));
   const open = rows.filter((r) => OPEN_STAGES.includes(r.status));
@@ -57,7 +64,7 @@ export default async function PipelinePage() {
             <Stat label="Quotes out" value={quoted.length} note="Quote sent or negotiating" />
             <Stat label={`Booked in ${monthName}`} value={money(won.value)} note={`${won.count} ${won.count === 1 ? "booking" : "bookings"}${won.adsValue > 0 ? ` · ${money(won.adsValue)} from ads` : ""}`} />
           </section>
-          {chats !== null && chats > (logged.count ?? 0) && <AdChatsBanner chats={chats} added={logged.count ?? 0} monthName={monthName} current />}
+          {chats !== null && chats > (logged.count ?? 0) && <AdChatsBanner chats={chats} added={logged.count ?? 0} period={live30 !== null ? "in the last 30 days" : `in ${monthName}`} current />}
           <PipelineBoard items={rows} company={company.name} followupsOn={fu.on} followups={fu.badges} />
         </>
       )}

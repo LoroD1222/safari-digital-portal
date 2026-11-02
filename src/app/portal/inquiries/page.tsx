@@ -10,6 +10,7 @@ import { DailyChart, perDay, perRange } from "@/components/daily-chart";
 import { AddInquiry } from "./add-inquiry";
 import { AdChatsBanner } from "./ad-chats";
 import { adChats, type Campaign } from "@/lib/types";
+import { chatsBetween, metaConfigured } from "@/lib/meta";
 
 export const metadata: Metadata = { title: "Inquiries" };
 
@@ -37,9 +38,13 @@ export default async function InquiriesPage(props: PageProps<"/portal/inquiries"
   const spend = rep ? Number(rep.meta_spend) : 0;
   const metaN = rep?.meta_inquiries ?? 0;
   const monthName = month.label.split(" ")[0];
-  const chats = rep ? adChats(rep.campaigns as Campaign[]) : null;
+  // Last 30 days: ask Meta for exactly that period; a month: the synced monthly report.
+  const live30 = rolling && company.marketing_package && company.meta_ad_account_id && metaConfigured()
+    ? await chatsBetween(company.meta_ad_account_id, period.start, new Date(Date.parse(period.next) - 86400000).toISOString().slice(0, 10))
+    : null;
+  const chats = live30 ?? (rep ? adChats(rep.campaigns as Campaign[]) : null);
   const loggedIn = (list: Inquiry[]) => list.filter((r) => r.source === "meta_ads" && r.channel !== "website_form").length;
-  const logged = rolling
+  const logged = rolling && live30 === null
     ? loggedIn(rows.filter((r) => r.received_at >= month.start && r.received_at < month.next))
     : loggedIn(rows);
 
@@ -76,7 +81,7 @@ export default async function InquiriesPage(props: PageProps<"/portal/inquiries"
       <DailyChart title={`Inquiries per day · ${label}`} days={rolling ? perRange(period.start, 30, rows.map((r) => r.received_at)) : perDay(period.start, rows.map((r) => r.received_at))}
         note={`${rows.length} ${rows.length === 1 ? "inquiry" : "inquiries"} from all sources`} />
 
-      {chats !== null && chats > 0 && <AdChatsBanner chats={chats} added={logged} monthName={monthName} current={rolling || offset === 0} />}
+      {chats !== null && chats > 0 && <AdChatsBanner chats={chats} added={logged} period={live30 !== null ? "in the last 30 days" : `in ${monthName}`} current={rolling || offset === 0} />}
 
       <InquiryTable key={`${period.start}-${rows.length}`} items={rows} company={company.name} openId={typeof sp.open === "string" ? sp.open : null} />
 

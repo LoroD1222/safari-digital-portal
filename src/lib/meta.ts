@@ -58,6 +58,13 @@ export function resultsFrom(actions: Action[] | undefined) {
   return { leads, chats, inquiries: leads + chats };
 }
 
+// Chats started from ads between two dates (YYYY-MM-DD, inclusive), for the "last 30 days" views.
+export async function chatsBetween(accountId: string, since: string, until: string): Promise<number | null> {
+  const r = await get<{ data: InsightRow[] }>(`/${accountId}/insights`, { level: "account", fields: "actions", time_range: JSON.stringify({ since, until }) });
+  if (!r.ok) return null;
+  return r.data.data.reduce((n, row) => n + resultsFrom(row.actions).chats, 0);
+}
+
 export async function monthResults(accountId: string, offset = 0): Promise<Result<{ month: string; spend: number; inquiries: number; campaigns: Campaign[] }>> {
   const m = monthBounds(offset);
   const lastDay = new Date(new Date(m.next + "T00:00:00Z").getTime() - 86400000).toISOString().slice(0, 10);

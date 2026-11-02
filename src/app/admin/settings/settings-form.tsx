@@ -68,6 +68,7 @@ export function SettingsForm({ initial }: { initial: Settings }) {
           <p className="text-[13px] text-slate">Short how-to videos clients see while onboarding. Paste a link, or upload a video up to 50 MB. YouTube set to <em>Unlisted</em> works well for longer videos.</p>
         </div>
         <VideoSetting name="meta_video_url" label="How to give Safari Digital access in Meta" where="Facebook & Instagram step, above the access instructions" initial={v("meta_video_url")} />
+        <VideoSetting name="ad_account_video_url" label="How to create a Facebook ad account (Ads Manager)" where="Facebook & Instagram step, for clients without an ad account" initial={v("ad_account_video_url")} />
         <VideoSetting name="payment_video_url" label="How to add a payment method to the ad account" where="Facebook & Instagram step, under adding the payment method" initial={v("payment_video_url")} />
         <VideoSetting name="drive_video_url" label="How to share a Google Drive folder" where="Photos & brand files step" initial={v("drive_video_url")} />
       </section>

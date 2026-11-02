@@ -11,7 +11,7 @@ export async function saveSettings(_: SettingsState, form: FormData): Promise<Se
   const values: Record<string, string> = {};
   for (const k of SETTING_KEYS) values[k] = String(form.get(k) ?? "").trim();
 
-  for (const k of ["meta_video_url", "drive_video_url", "payment_video_url"]) {
+  for (const k of ["meta_video_url", "drive_video_url", "payment_video_url", "ad_account_video_url"]) {
     if (values[k] && !/^https:\/\//.test(values[k])) return { error: "Video links must start with https://", values };
   }
   if (values.drive_share_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.drive_share_email)) {

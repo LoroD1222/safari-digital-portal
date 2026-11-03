@@ -43,10 +43,13 @@ export function unsubscribeUrl(inquiryId: string) {
 export async function checkSenderDomain(email: string): Promise<{ ready: boolean; message: string }> {
   const domain = email.split("@")[1]?.toLowerCase();
   if (!domain) return { ready: false, message: "Enter a full email address." };
-  if (!process.env.RESEND_API_KEY) return { ready: false, message: "RESEND_API_KEY isn't set in Vercel, so nothing can be sent yet." };
+  // Listing domains needs a Full access key. RESEND_DOMAINS_KEY lets the sending key stay "Sending access" only.
+  const key = process.env.RESEND_DOMAINS_KEY ?? process.env.RESEND_API_KEY;
+  if (!key) return { ready: false, message: "RESEND_API_KEY isn't set in Vercel, so nothing can be sent yet." };
   try {
-    const res = await fetch("https://api.resend.com/domains", { headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}` }, cache: "no-store" });
-    if (!res.ok) return { ready: false, message: `Couldn't reach Resend (${res.status}). Check the API key has full access.` };
+    const res = await fetch("https://api.resend.com/domains", { headers: { Authorization: `Bearer ${key}` }, cache: "no-store" });
+    if (res.status === 401 || res.status === 403) return { ready: false, message: "Resend didn't allow checking domains: the API key only has Sending access. In Resend → API Keys, create a key with Full access, add it in Vercel as RESEND_DOMAINS_KEY, redeploy, then check again." };
+    if (!res.ok) return { ready: false, message: `Couldn't reach Resend (${res.status}). Try again in a minute.` };
     const list = ((await res.json()) as { data?: { name: string; status: string }[] }).data ?? [];
     const d = list.find((x) => x.name.toLowerCase() === domain);
     if (!d) return { ready: false, message: `${domain} isn't in Resend yet. Add it under Domains in Resend, then add the DNS records to the client's domain.` };

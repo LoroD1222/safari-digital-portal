@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { InquiryDialog, moveInquiry, stageColor, usd } from "./inquiry-dialog";
-import { STAGES, STALE_DAYS, type Inquiry, type InquiryStatus } from "@/lib/types";
+import { STALE_DAYS, type Inquiry, type InquiryStatus } from "@/lib/types";
 import type { FollowupBadge } from "@/lib/pipeline-followups";
 import { Icon, type IconName } from "./icons";
 import { useStageWords } from "./stage-labels";
@@ -18,14 +18,14 @@ const FOLLOW_STAGES: InquiryStatus[] = ["contacted", "quoted", "negotiating"];
 const SENT_WHAT: Partial<Record<InquiryStatus, string>> = { contacted: "your first reply", quoted: "the quote", negotiating: "your latest message" };
 const today = () => new Date(Date.now() + 3 * 3600e3).toISOString().slice(0, 10); // Dar es Salaam
 const daysIn = (q: Inquiry) => Math.floor((Date.now() - new Date(q.stage_changed_at ?? q.received_at).getTime()) / 864e5);
-const next = (s: InquiryStatus): InquiryStatus | null => (s === "booked" || s === "closed" ? null : STAGES[STAGES.indexOf(s) + 1]);
 
 // Drag cards between stages (desktop), or tap the arrow / open a card to move it (phones).
 export function PipelineBoard({ items, company, adminHref, followupsOn = false, followups = {} }: {
   items: Inquiry[]; company: string; adminHref?: string; followupsOn?: boolean; followups?: Record<string, FollowupBadge>;
 }) {
   const router = useRouter();
-  const { label: L, value: valueWord, quote: quoteWord } = useStageWords();
+  const { label: L, value: valueWord, quote: quoteWord, stages: STAGES, next: NEXT } = useStageWords();
+  const next = (s: InquiryStatus): InquiryStatus | null => NEXT[s] ?? null;
   const [rows, setRows] = useState(items);
   // New data from the server (live updates, another tab): take it, keep local edits otherwise.
   const [seen, setSeen] = useState(items);

@@ -7,7 +7,7 @@ import type { FollowupBadge } from "@/lib/pipeline-followups";
 import { Icon } from "./icons";
 import { TONES } from "./ui";
 import { INQUIRY_TONE } from "@/lib/status-tone";
-import { CHANNEL_LABEL, LOST_REASONS, SOURCE_LABEL, STAGES, type Inquiry, type InquiryStatus } from "@/lib/types";
+import { CHANNEL_LABEL, LOST_REASONS, SOURCE_LABEL, type Inquiry, type InquiryStatus } from "@/lib/types";
 
 export const stageColor = (s: InquiryStatus) => TONES[INQUIRY_TONE[s]];
 export const usd = (n: number) => "$" + n.toLocaleString("en-US", { maximumFractionDigits: n % 1 ? 2 : 0 });
@@ -51,7 +51,7 @@ export function InquiryDialog({ q, company, intent: startIntent = null, onClose,
   q: Inquiry; company: string; intent?: Intent; onClose: () => void; onUpdate: (patch: Partial<Inquiry>) => void;
   followup?: FollowupBadge | null; // undefined = follow-ups are off for this client, so the switch is hidden
 }) {
-  const { label: L, value: valueWord, valueHelp, booked: bookedWord } = useStageWords();
+  const { label: L, value: valueWord, valueHelp, booked: bookedWord, stages: STAGES } = useStageWords();
   const [intent, setIntent] = useState<Intent>(startIntent);
   const [value, setValue] = useState(q.trip_value != null ? String(q.trip_value) : "");
   const [follow, setFollow] = useState(q.follow_up_on ?? "");

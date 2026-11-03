@@ -17,7 +17,7 @@ import {
 export type WhatsappDue = { inquiryId: string; ruleId: string; guest: string; trip: string; stage: string; days: number; ruleName: string; url: string };
 export type RecentSend = { id: string; guest: string; name: string; channel: "email" | "whatsapp"; status: string; at: string };
 
-const STAGE_DOT: Record<FollowupStage, string> = { contacted: "#E0A458", quoted: "#8B6FE0", negotiating: "#E07B3A" };
+const STAGE_DOT: Record<FollowupStage, string> = { no_show: "#C2413B", contacted: "#E0A458", quoted: "#8B6FE0", negotiating: "#E07B3A" };
 const dayWord = (n: number) => (n === 1 ? "day" : "days");
 const TAG_LABEL: Record<string, string> = Object.fromEntries(TOKENS.map((t) => [t.token, t.label]));
 
@@ -399,7 +399,7 @@ function RuleRow({ rule, company, agent, open, pending, onOpen, onToggle, onSave
   rule: FollowupRule; company: string; agent: string; open: boolean; pending: boolean;
   onOpen: () => void; onToggle: () => void; onSave: (p: RulePatch) => void; onReset: () => void; onDelete: () => void;
 }) {
-  const { label: L } = useStageWords();
+  const { label: L, internal } = useStageWords();
   const own = !rule.preset;
   const preset = presetByKey(rule.preset);
   const [d, setD] = useState({ name: rule.name, stage: rule.stage, days: rule.days, subject: rule.subject, body: rule.body });
@@ -450,7 +450,7 @@ function RuleRow({ rule, company, agent, open, pending, onOpen, onToggle, onSave
             {own ? (
               <label className="flex flex-col gap-1.5 text-[13px] font-medium">When the inquiry is in
                 <Select value={d.stage} onChange={(e) => setD({ ...d, stage: e.target.value as FollowupStage })}>
-                  {FOLLOWUP_STAGES.map((s) => <option key={s} value={s}>{L[s]}</option>)}
+                  {FOLLOWUP_STAGES.filter((s) => s !== "no_show" || internal).map((s) => <option key={s} value={s}>{L[s]}</option>)}
                 </Select></label>
             ) : (
               <span className="flex flex-col gap-1.5 text-[13px] font-medium">Stage

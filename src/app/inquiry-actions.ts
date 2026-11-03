@@ -4,9 +4,9 @@ import { after } from "next/server";
 import { STATUS_EVENT, sendInquiryEvent } from "@/lib/meta-events";
 import { getViewer } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { STAGES, type InquiryStatus } from "@/lib/types";
+import { ALL_STAGES, type InquiryStatus } from "@/lib/types";
 
-const STATUSES: InquiryStatus[] = STAGES;
+const STATUSES: InquiryStatus[] = ALL_STAGES;
 
 // Clients (their own) and admins (any) can move an inquiry along.
 export async function updateInquiryStatus(id: string, status: InquiryStatus): Promise<{ ok: boolean }> {

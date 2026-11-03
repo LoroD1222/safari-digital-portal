@@ -151,3 +151,17 @@ describe("11. suppressed addresses", () => {
     await as(null);
   });
 });
+
+describe("No show (internal pipeline)", () => {
+  it("starts follow-ups at once, without waiting for confirmation", async () => {
+    await as(null);
+    const id = await newInquiry("Mika");
+    await as(UA);
+    await db.exec(`select public.set_inquiry_status('${id}', 'meeting')`);
+    expect(await q(`select * from public.followup_cycles where inquiry_id = '${id}' and status <> 'ended'`)).toHaveLength(0);
+    await db.exec(`select public.set_inquiry_status('${id}', 'no_show')`);
+    await as(null);
+    const [c] = await q<{ stage: string; status: string; confirmed: boolean }>(`select stage, status, confirmed_at is not null as confirmed from public.followup_cycles where inquiry_id = '${id}' and status <> 'ended'`);
+    expect(c).toEqual({ stage: "no_show", status: "active", confirmed: true });
+  });
+});

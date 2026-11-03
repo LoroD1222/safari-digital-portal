@@ -25,10 +25,12 @@ export default async function AdminOverview() {
     supabase.from("activity").select("id, client_id, message, created_at, admin_link, actor_role").order("created_at", { ascending: false }).limit(8),
     supabase.from("client_private").select("*"),
   ]);
-  const clients = (cs ?? []) as Client[];
+  // Our own business (internal) isn't a client: out of counts and income.
+  const everyone = (cs ?? []) as Client[];
+  const clients = everyone.filter((c) => !c.is_internal);
   const items = (content ?? []) as ContentItem[];
   const requests = (reqs ?? []) as SupportRequest[];
-  const name = Object.fromEntries(clients.map((c) => [c.id, c.name]));
+  const name = Object.fromEntries(everyone.map((c) => [c.id, c.name]));
   const revenue = mrr(clients, (bills ?? []) as ClientPrivate[]);
   const totals = (Object.entries(revenue.totals) as [Currency, number][]).filter(([, v]) => v > 0);
   const activeCount = clients.filter((c) => c.account_status !== "paused").length;

@@ -6,7 +6,7 @@ import { Icon, type IconName } from "./icons";
 import { Alert, Badge, Button, Input, Select, Textarea } from "./ui";
 import { ConfirmDialog } from "./confirm-dialog";
 import {
-  FOLLOWUP_DAYS, FOLLOWUP_STAGES, TEMPLATES, TEMPLATE_KEYS, TOKENS, composeEmail, presetByKey,
+  FOLLOWUP_DAYS, FOLLOWUP_STAGES, INTERNAL_TEMPLATE_KEYS, TEMPLATES, TEMPLATE_KEYS, TOKENS, composeEmail, presetByKey,
   type FollowupRule, type FollowupStage, type TemplateKey,
 } from "@/lib/followup-presets";
 import { INQUIRY_LABEL } from "@/lib/types";
@@ -63,7 +63,7 @@ function Switch({ on, label, onChange, disabled, size = "md" }: { on: boolean; l
 export type FollowupPrefs = { agent_name: string; timezone: string; quote_valid_days: number | null };
 
 export function FollowupsManager(p: {
-  company: string; enabled: boolean; template: TemplateKey; senderReady: boolean; fromEmail: string | null; prefs: FollowupPrefs;
+  company: string; internal?: boolean; enabled: boolean; template: TemplateKey; senderReady: boolean; fromEmail: string | null; prefs: FollowupPrefs;
   rules: FollowupRule[]; whatsapp: WhatsappDue[]; recent: RecentSend[]; scheduled: number; awaiting: number;
 }) {
   const router = useRouter();
@@ -209,7 +209,7 @@ export function FollowupsManager(p: {
                 <span className="text-xs text-slate">Written by Safari Digital. You can still edit every email, and your own follow-ups stay.</span>
               </div>
               <div role="radiogroup" aria-label="Templates" className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
-                {TEMPLATE_KEYS.map((k) => {
+                {(p.internal ? INTERNAL_TEMPLATE_KEYS : TEMPLATE_KEYS).map((k) => {
                   const sel = pick === k;
                   return (
                     <button key={k} type="button" role="radio" aria-checked={sel} onClick={() => setPick(k)}

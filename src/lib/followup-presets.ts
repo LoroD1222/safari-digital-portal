@@ -2,7 +2,7 @@
 // Pure functions only: this file is used in the browser, on the server and in tests.
 
 export type FollowupStage = "contacted" | "quoted" | "negotiating";
-export type TemplateKey = "standard" | "gentle" | "persistent" | "blank";
+export type TemplateKey = "standard" | "gentle" | "persistent" | "blank" | "agency";
 
 export const FOLLOWUP_STAGES: FollowupStage[] = ["contacted", "quoted", "negotiating"];
 export const FOLLOWUP_DAYS = [1, 2, 3, 4, 5, 6, 7, 9, 10, 12, 14, 15, 17, 21, 22, 25, 28, 30, 42, 45, 60];
@@ -279,7 +279,78 @@ If you'd like to move forward, we're happy to guide you through the next steps. 
 Just let us know what works best for you. We'll be happy to help whenever you're ready.`),
 ];
 
+// For Safari Digital's own business: selling marketing and websites to tour operators.
+const AGENCY: Preset[] = [
+  p("agency", "A1", "contacted", 2, "Following up on your message to Safari Digital", `
+Hi {{first_name}},
+
+Thanks again for reaching out to Safari Digital.
+
+I wanted to follow up and see how we can help your tour company get more bookings, whether that's a new website, ads on Facebook and Instagram, or both.
+
+Would a short call this week work for you?`),
+  p("agency", "A2", "contacted", 6, "More safari bookings for your tour company", `
+Hi {{first_name}},
+
+We work only with safari and Kilimanjaro operators, so we know what brings in serious inquiries from travelers in Europe and the US.
+
+If you tell me a little about your company and your goals for this season, I'll suggest what would make the biggest difference.
+
+What would you most like to improve right now?`),
+  p("agency", "A3", "quoted", 2, "Did you receive our proposal?", `
+Hi {{first_name}},
+
+Just checking that you received the proposal we sent.
+
+I'm happy to walk you through it on a quick call and answer any questions.
+
+Have you had a chance to look at it?`),
+  p("agency", "A4", "quoted", 5, "Any questions about the proposal?", `
+Hi {{first_name}},
+
+I wanted to see if anything in the proposal needs more explanation, such as what's included, the timeline, or how the monthly reports work.
+
+You'll also see every inquiry and booking in your own portal, so you always know what your marketing brings in.
+
+Is there anything you'd like me to clarify?`),
+  p("agency", "A5", "quoted", 10, "We can adjust the proposal", `
+Hi {{first_name}},
+
+Every tour company is different, so we can adjust the proposal to fit your budget and the season you're planning for.
+
+For example, we can start with ads only, or with a website first and add marketing later.
+
+Would you like us to adapt it?`),
+  p("agency", "A6", "quoted", 20, "One last check-in from Safari Digital", `
+Hi {{first_name}},
+
+I haven't heard back, so I'll leave this with you for now.
+
+Whenever you're ready to grow your bookings, just reply to this email and we'll pick up where we left off.`),
+  p("agency", "A7", "negotiating", 3, "Anything we can clarify before you decide?", `
+Hi {{first_name}},
+
+I wanted to follow up on what we discussed.
+
+If there's anything still open, whether it's the price, the timeline, or what's included, I'm happy to help.
+
+Is there anything holding you back?`),
+  p("agency", "A8", "negotiating", 9, "Shall we get started?", `
+Hi {{first_name}},
+
+I wanted to check where things stand.
+
+If you're happy with the plan, we can send the onboarding link and start straight away. And if you'd like to change anything first, just let me know.
+
+Would you like to move forward?`),
+];
+
 export const TEMPLATES: Record<TemplateKey, { title: string; note: string; presets: Preset[] }> = {
+  agency: {
+    title: "Safari Digital",
+    note: "For our own business: follow-ups to tour operators who asked about websites or marketing.",
+    presets: AGENCY,
+  },
   gentle: {
     title: "Gentle",
     note: "Warm and respectful, with longer gaps. For guests who like to take their time.",
@@ -302,12 +373,14 @@ export const TEMPLATES: Record<TemplateKey, { title: string; note: string; prese
   },
 };
 
-// Shown lightest to strongest, then empty.
+// Shown lightest to strongest, then empty. Our own (internal) business gets its own template instead.
 export const TEMPLATE_KEYS: TemplateKey[] = ["gentle", "standard", "persistent", "blank"];
+export const INTERNAL_TEMPLATE_KEYS: TemplateKey[] = ["agency", "blank"];
+export const ALL_TEMPLATE_KEYS: TemplateKey[] = [...TEMPLATE_KEYS, "agency"];
 
 export function presetByKey(key: string | null) {
   if (!key) return null;
-  for (const t of TEMPLATE_KEYS) {
+  for (const t of ALL_TEMPLATE_KEYS) {
     const found = TEMPLATES[t].presets.find((x) => x.key === key);
     if (found) return found;
   }

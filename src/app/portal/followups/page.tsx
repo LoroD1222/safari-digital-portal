@@ -38,7 +38,7 @@ export default async function FollowupsPage() {
 
   // First visit: Standard template, switched off. Clients on older template copy get the current emails (their own stay).
   if (!settings || (settings.template_version ?? 1) < TEMPLATE_VERSION) {
-    const template = (settings?.template ?? "standard") as TemplateKey;
+    const template = (settings?.template ?? (company.is_internal ? "agency" : "standard")) as TemplateKey;
     if (!settings) await supabase.rpc("set_followups", { p_client_id: company.id, p_enabled: false, p_template: template });
     await installTemplate(supabase, company.id, template);
     await supabase.rpc("set_followup_template_version", { p_client_id: company.id, p_version: TEMPLATE_VERSION });
@@ -67,6 +67,7 @@ export default async function FollowupsPage() {
   return (
     <FollowupsManager
       company={company.name}
+      internal={!!company.is_internal}
       enabled={enabled}
       template={(settings?.template ?? "standard") as TemplateKey}
       senderReady={!!settings?.sender_ready && !!settings?.from_email}

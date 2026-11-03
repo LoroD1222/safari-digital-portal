@@ -61,9 +61,10 @@ export async function createMonthlyDrafts(now = new Date()) {
   const db = createAdminClient();
   const period = monthBounds(0, now).start;
   const today = todayTz(now);
-  const { data: clients } = await db.from("clients").select("id, name").neq("account_status", "paused").not("marketing_package", "is", null);
+  const { data: all } = await db.from("clients").select("*").neq("account_status", "paused").not("marketing_package", "is", null);
+  const clients = (all ?? []).filter((c) => !c.is_internal); // never invoice our own business
   const made: string[] = [];
-  for (const c of clients ?? []) {
+  for (const c of clients) {
     const { data: existing, error } = await db.from("invoices").select("id").eq("client_id", c.id).eq("kind", "monthly").eq("period_month", period).neq("status", "cancelled").maybeSingle();
     if (error) return { made, error: "Run 0012_invoices.sql in Supabase." };
     if (existing) continue;

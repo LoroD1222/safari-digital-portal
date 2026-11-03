@@ -2,7 +2,7 @@
 import { revalidatePath } from "next/cache";
 import { getPortalContext } from "@/lib/portal";
 import { createClient } from "@/lib/supabase/server";
-import { FOLLOWUP_DAYS, FOLLOWUP_STAGES, TEMPLATE_KEYS, TEMPLATE_VERSION, presetByKey, type FollowupStage, type TemplateKey } from "@/lib/followup-presets";
+import { FOLLOWUP_DAYS, FOLLOWUP_STAGES, ALL_TEMPLATE_KEYS, TEMPLATE_VERSION, presetByKey, type FollowupStage, type TemplateKey } from "@/lib/followup-presets";
 import { installTemplate } from "@/lib/followups";
 
 type Result = { ok: true } | { ok: false; error: string };
@@ -25,7 +25,7 @@ function done(): Result {
 
 export async function setFollowupsEnabled(enabled: boolean, template: TemplateKey): Promise<Result> {
   const { clientId, supabase } = await ctx();
-  if (!TEMPLATE_KEYS.includes(template)) return { ok: false, error: "Unknown template." };
+  if (!ALL_TEMPLATE_KEYS.includes(template)) return { ok: false, error: "Unknown template." };
   const { error } = await supabase.rpc("set_followups", { p_client_id: clientId, p_enabled: enabled, p_template: template });
   return error ? fail(error.message) : done();
 }
@@ -34,7 +34,7 @@ export async function setFollowupsEnabled(enabled: boolean, template: TemplateKe
 // so any step that would already be due is skipped rather than sent late (no backlog).
 export async function chooseTemplate(template: TemplateKey, enabled: boolean): Promise<Result> {
   const { clientId, supabase } = await ctx();
-  if (!TEMPLATE_KEYS.includes(template)) return { ok: false, error: "Unknown template." };
+  if (!ALL_TEMPLATE_KEYS.includes(template)) return { ok: false, error: "Unknown template." };
   const err = await installTemplate(supabase, clientId, template);
   if (err) return fail(err.message);
   const { error } = await supabase.rpc("set_followups", { p_client_id: clientId, p_enabled: enabled, p_template: template });

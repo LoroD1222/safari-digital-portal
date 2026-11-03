@@ -263,7 +263,7 @@ describe("personalisation", () => {
   });
 
   it("every one of the 30 emails renders cleanly with nothing known", () => {
-    for (const t of ["gentle", "standard", "persistent"] as const) {
+    for (const t of ["gentle", "standard", "persistent", "agency"] as const) {
       for (const p of TEMPLATES[t].presets) {
         const m = composeEmail(p, { firstName: null, trip: null, travelDates: null, agent: null, company: "Golden Trips" });
         expect(m.body).not.toMatch(/\{\{|\}\}|undefined|null/);

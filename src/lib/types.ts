@@ -19,6 +19,7 @@ export type Client = {
   vercel_project_id?: string | null;
   vercel_project_name?: string | null;
   meta_ad_account_id?: string | null;
+  is_internal?: boolean;                // Safari Digital's own business (0025): left out of counts, income and invoices
   meta_dataset_id?: string | null;
   tracking_since?: string | null;
   meta_page_id?: string | null;
@@ -213,7 +214,7 @@ export function formatMoney(amount: number, currency: Currency) {
 
 // Clients we bill: everyone except paused accounts. "Invited" clients pay too,
 // they just haven't logged in yet.
-const billable = (c: Pick<Client, "account_status">) => c.account_status !== "paused";
+const billable = (c: Pick<Client, "account_status" | "is_internal">) => c.account_status !== "paused" && !c.is_internal;
 
 function startOf(b: ClientPrivate, c: Pick<Client, "created_at">) {
   return b.billing_start ?? c.created_at.slice(0, 10);
@@ -221,7 +222,7 @@ function startOf(b: ClientPrivate, c: Pick<Client, "created_at">) {
 
 // Monthly recurring revenue today, one total per currency. Prices with a
 // start date in the future count as "upcoming", not MRR yet.
-export function mrr(clients: Pick<Client, "id" | "account_status" | "created_at">[], billing: ClientPrivate[], now = new Date()) {
+export function mrr(clients: Pick<Client, "id" | "account_status" | "created_at" | "is_internal">[], billing: ClientPrivate[], now = new Date()) {
   const live = new Map(clients.filter(billable).map((c) => [c.id, c]));
   const today = now.toISOString().slice(0, 10);
   const totals: Partial<Record<Currency, number>> = {};
@@ -241,7 +242,7 @@ export function mrr(clients: Pick<Client, "id" | "account_status" | "created_at"
 // MRR per month for the last `months` months: each client's price counts from
 // the month they started paying (or were added), unless they're paused now.
 export function mrrHistory(
-  clients: Pick<Client, "id" | "account_status" | "created_at">[], billing: ClientPrivate[], currency: Currency, months = 12, now = new Date(),
+  clients: Pick<Client, "id" | "account_status" | "created_at" | "is_internal">[], billing: ClientPrivate[], currency: Currency, months = 12, now = new Date(),
 ) {
   const live = new Map(clients.filter(billable).map((c) => [c.id, c]));
   const today = now.toISOString().slice(0, 10);

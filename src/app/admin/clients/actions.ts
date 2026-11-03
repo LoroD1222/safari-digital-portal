@@ -129,6 +129,16 @@ export async function createClientRecord(_: ClientFormState, form: FormData): Pr
   redirect(`/admin/clients/${data.id}?created=1${invite}`);
 }
 
+// Internal = Safari Digital's own business: out of client counts, income and invoices.
+export async function setClientInternal(id: string, internal: boolean): Promise<{ ok: boolean; error?: string }> {
+  await requireAdmin();
+  const supabase = await createClient();
+  const { error } = await supabase.from("clients").update({ is_internal: internal }).eq("id", id);
+  if (error) return { ok: false, error: /is_internal/.test(error.message) ? "Run 0025_internal_client.sql in Supabase first." : error.message };
+  revalidatePath("/admin", "layout");
+  return { ok: true };
+}
+
 export async function updateClientRecord(id: string, _: ClientFormState, form: FormData): Promise<ClientFormState> {
   await requireAdmin();
   const { values, fieldErrors } = readClient(form);

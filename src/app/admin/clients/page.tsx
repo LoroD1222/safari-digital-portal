@@ -18,7 +18,8 @@ export default async function ClientsPage(props: PageProps<"/admin/clients">) {
   let req = supabase.from("clients").select("*").order("name");
   if (query) req = req.or(`name.ilike.%${query.replace(/[%,()]/g, "")}%,contact_name.ilike.%${query.replace(/[%,()]/g, "")}%`);
   const { data, error } = await req;
-  const clients = (data ?? []) as Client[];
+  // Our own business (internal) goes at the end.
+  const clients = ((data ?? []) as Client[]).sort((a, b) => Number(!!a.is_internal) - Number(!!b.is_internal));
   const { data: bills } = await supabase.from("client_private").select("client_id, monthly_fee, currency, billing_start");
   const billing = (bills ?? []) as ClientPrivate[];
   const price = Object.fromEntries(billing.filter((b) => b.monthly_fee).map((b) => [b.client_id, formatMoney(Number(b.monthly_fee), b.currency)]));
@@ -56,7 +57,7 @@ export default async function ClientsPage(props: PageProps<"/admin/clients">) {
               <li key={c.id} className={i ? "border-t border-line-soft" : ""}>
                 <Link href={`/admin/clients/${c.id}`} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 text-ink no-underline hover:bg-[#FAFAF8]">
                   <span className="flex min-w-0 flex-[1_1_220px] flex-col">
-                    <span className="font-medium">{c.name}</span>
+                    <span className="flex items-center gap-2 font-medium">{c.name}{c.is_internal && <span className="rounded-badge bg-[#E8EEFB] px-1.5 py-px text-[11px] font-semibold text-[#3450A6]">Internal</span>}</span>
                     <span className="truncate text-xs text-slate">{c.contact_name ?? c.contact_email ?? "No contact yet"}</span>
                   </span>
                   <span className="flex flex-[1_1_220px] flex-col text-[13px] text-body"><span>{packageSummary(c)}</span>{price[c.id] && <span className="text-xs text-slate">{price[c.id]} / month</span>}</span>

@@ -18,6 +18,7 @@ import { PortalAccess } from "../portal-access";
 import { OnboardingSummary } from "../onboarding-summary";
 import { DataSection } from "../data-section";
 import { DangerZone } from "../danger-zone";
+import { InternalSwitch } from "../internal-switch";
 import { startViewAs } from "@/app/view-as-actions";
 import { Icon } from "@/components/icons";
 import { MetaAdsGrid } from "@/components/meta-ads";
@@ -132,6 +133,7 @@ async function OverviewTab({ client }: { client: Client }) {
       <div className="border-t border-line-soft pt-6">
         <ClientForm action={updateClientRecord.bind(null, client.id)} client={client} billing={billing as ClientPrivate | null} submitLabel="Save changes" cancelHref="/admin/clients" />
       </div>
+      <InternalSwitch clientId={client.id} internal={!!client.is_internal} />
       <DangerZone clientId={client.id} name={client.name} logins={members.length} />
     </>
   );

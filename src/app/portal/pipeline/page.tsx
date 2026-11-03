@@ -62,7 +62,7 @@ export default async function PipelinePage() {
           <section aria-label="Summary" className="grid grid-cols-[repeat(auto-fit,minmax(190px,1fr))] gap-3.5">
             <Stat label="Open inquiries" value={open.length} note={openValue > 0 ? `${money(openValue)} in quotes and deals` : "Not booked or lost yet"} />
             <Stat label="Quotes out" value={quoted.length} note="Quote sent or negotiating" />
-            <Stat label={`Booked in ${monthName}`} value={money(won.value)} note={`${won.count} ${won.count === 1 ? "booking" : "bookings"}${won.adsValue > 0 ? ` · ${money(won.adsValue)} from ads` : ""}`} />
+            <Stat label={`${company.is_internal ? "Signed" : "Booked"} in ${monthName}`} value={money(won.value)} note={`${won.count} ${won.count === 1 ? "booking" : "bookings"}${won.adsValue > 0 ? ` · ${money(won.adsValue)} from ads` : ""}`} />
           </section>
           {chats !== null && chats > (logged.count ?? 0) && <AdChatsBanner chats={chats} added={logged.count ?? 0} period={live30 !== null ? "in the last 30 days" : `in ${monthName}`} current />}
           <PipelineBoard items={rows} company={company.name} followupsOn={fu.on} followups={fu.badges} />

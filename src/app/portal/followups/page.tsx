@@ -10,7 +10,7 @@ import {
 } from "@/lib/followup-presets";
 import { installTemplate, planFor, type InquiryLite } from "@/lib/followups";
 import { loadFollowups, whatsappDueFor } from "@/lib/pipeline-followups";
-import { INQUIRY_LABEL } from "@/lib/types";
+import { stageWords } from "@/lib/stage-words";
 
 export const metadata: Metadata = { title: "Follow-ups" };
 
@@ -50,7 +50,7 @@ export default async function FollowupsPage() {
     rules = (r2.data ?? []) as FollowupRule[];
   }
   const enabled = !!settings?.enabled;
-  const status = await overview(supabase, company.id, company.name, settings, rules);
+  const status = await overview(supabase, company.id, company.name, settings, rules, !!company.is_internal);
 
   const { data: recentData } = await supabase.from("followup_sends")
     .select("id, subject, channel, status, error, created_at, sent_at, inquiries(customer_name)")
@@ -83,7 +83,7 @@ export default async function FollowupsPage() {
 }
 
 // Counts for the status bar, and the WhatsApp list (guests with a phone number whose follow-up is due).
-async function overview(supabase: Supabase, clientId: string, companyName: string, settings: FollowupSettings | null, rules: FollowupRule[]) {
+async function overview(supabase: Supabase, clientId: string, companyName: string, settings: FollowupSettings | null, rules: FollowupRule[], internal = false) {
   const now = Date.now();
   const { data: inq } = await supabase.from("inquiries")
     .select("id, client_id, customer_name, email, phone, interested_in, travel_dates, country, status, followups_stopped_at")
@@ -106,7 +106,7 @@ async function overview(supabase: Supabase, clientId: string, companyName: strin
     const days = Math.floor((now - new Date(cycle.confirmed_at).getTime()) / 86_400_000);
     whatsapp.push({
       inquiryId: q.id, ruleId: rule.id, guest: q.customer_name, trip: tripLabel(q.interested_in) ?? "Tanzania safari",
-      stage: INQUIRY_LABEL[q.status as keyof typeof INQUIRY_LABEL], days, ruleName: rule.subject,
+      stage: stageWords(internal).label[q.status as keyof ReturnType<typeof stageWords>["label"]], days, ruleName: rule.subject,
       url: `https://wa.me/${number}?text=${encodeURIComponent(mail.body)}`,
     });
   }

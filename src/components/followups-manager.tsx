@@ -9,7 +9,7 @@ import {
   FOLLOWUP_DAYS, FOLLOWUP_STAGES, INTERNAL_TEMPLATE_KEYS, TEMPLATES, TEMPLATE_KEYS, TOKENS, composeEmail, presetByKey,
   type FollowupRule, type FollowupStage, type TemplateKey,
 } from "@/lib/followup-presets";
-import { INQUIRY_LABEL } from "@/lib/types";
+import { useStageWords } from "./stage-labels";
 import {
   addRule, chooseTemplate, deleteRule, logWhatsappFollowup, resetRule, saveFollowupPrefs, saveRule, setFollowupsEnabled, type RulePatch,
 } from "@/app/portal/followups/actions";
@@ -67,6 +67,7 @@ export function FollowupsManager(p: {
   rules: FollowupRule[]; whatsapp: WhatsappDue[]; recent: RecentSend[]; scheduled: number; awaiting: number;
 }) {
   const router = useRouter();
+  const { label: L, booked: bookedWord } = useStageWords();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [enabled, setEnabled] = useState(p.enabled);
@@ -247,7 +248,7 @@ export function FollowupsManager(p: {
               {(["all", ...stagesWithRules] as const).map((s) => (
                 <button key={s} type="button" aria-pressed={stage === s} onClick={() => setStage(s)}
                   className={`h-8 whitespace-nowrap rounded-full border px-3 text-[13px] font-medium ${stage === s ? "border-forest bg-forest text-white" : "border-field bg-white text-body"}`}>
-                  {s === "all" ? "All stages" : INQUIRY_LABEL[s]}
+                  {s === "all" ? "All stages" : L[s]}
                 </button>
               ))}
             </div>
@@ -264,7 +265,7 @@ export function FollowupsManager(p: {
             <div key={g.stage} className="overflow-hidden rounded-card border border-line bg-white">
               <div className="flex items-center gap-2 border-b border-[#EEF0F2] bg-sidebar px-4 py-2.5">
                 <span className="size-2 rounded-full" style={{ background: STAGE_DOT[g.stage] }} />
-                <h2 className="text-[13px] font-semibold">While in {INQUIRY_LABEL[g.stage]}</h2>
+                <h2 className="text-[13px] font-semibold">While in {L[g.stage]}</h2>
                 <span className="ml-auto text-xs text-slate">{g.rules.filter((r) => r.enabled).length} of {g.rules.length} on</span>
               </div>
               <ul className="divide-y divide-[#EEF0F2]">
@@ -298,7 +299,7 @@ export function FollowupsManager(p: {
               {([
                 ["send", "You send the message", "Move the card on the Pipeline (for example to Quote sent) and confirm you sent it. Nothing starts before that."],
                 ["clock", "The days pass", "Each email goes once, on its day, Monday to Friday 9:00–17:00 in the guest's time zone. Never two at once."],
-                ["inbox", "It stops by itself", "When you move the card, mark Booked or Lost, or click Guest replied. Replies go straight to your inbox."],
+                ["inbox", "It stops by itself", `When you move the card, mark ${bookedWord} or Lost, or click Guest replied. Replies go straight to your inbox.`],
               ] as [IconName, string, string][]).map(([icon, t, d], i) => (
                 <li key={t} className="flex flex-col items-start gap-2">
                   <span className="flex size-8 items-center justify-center rounded-control bg-white text-brand shadow-[0_0_0_1px_#E6E8EC]"><Icon name={icon} size={17} /></span>
@@ -398,6 +399,7 @@ function RuleRow({ rule, company, agent, open, pending, onOpen, onToggle, onSave
   rule: FollowupRule; company: string; agent: string; open: boolean; pending: boolean;
   onOpen: () => void; onToggle: () => void; onSave: (p: RulePatch) => void; onReset: () => void; onDelete: () => void;
 }) {
+  const { label: L } = useStageWords();
   const own = !rule.preset;
   const preset = presetByKey(rule.preset);
   const [d, setD] = useState({ name: rule.name, stage: rule.stage, days: rule.days, subject: rule.subject, body: rule.body });
@@ -448,11 +450,11 @@ function RuleRow({ rule, company, agent, open, pending, onOpen, onToggle, onSave
             {own ? (
               <label className="flex flex-col gap-1.5 text-[13px] font-medium">When the inquiry is in
                 <Select value={d.stage} onChange={(e) => setD({ ...d, stage: e.target.value as FollowupStage })}>
-                  {FOLLOWUP_STAGES.map((s) => <option key={s} value={s}>{INQUIRY_LABEL[s]}</option>)}
+                  {FOLLOWUP_STAGES.map((s) => <option key={s} value={s}>{L[s]}</option>)}
                 </Select></label>
             ) : (
               <span className="flex flex-col gap-1.5 text-[13px] font-medium">Stage
-                <span className="flex h-10 items-center rounded-control border border-[#EEF0F2] bg-sidebar px-3 font-normal text-body">{INQUIRY_LABEL[rule.stage]}</span></span>
+                <span className="flex h-10 items-center rounded-control border border-[#EEF0F2] bg-sidebar px-3 font-normal text-body">{L[rule.stage]}</span></span>
             )}
             <label className="flex flex-col gap-1.5 text-[13px] font-medium">Send on
               <Select value={d.days} onChange={(e) => setD({ ...d, days: Number(e.target.value) })}>

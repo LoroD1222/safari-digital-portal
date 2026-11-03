@@ -2,11 +2,12 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { getInquiryHistory, saveInquiryDeal, updateInquiryStatus, type HistoryRow } from "@/app/inquiry-actions";
 import { InquiryFollowups } from "./inquiry-followups";
+import { useStageWords } from "./stage-labels";
 import type { FollowupBadge } from "@/lib/pipeline-followups";
 import { Icon } from "./icons";
 import { TONES } from "./ui";
 import { INQUIRY_TONE } from "@/lib/status-tone";
-import { CHANNEL_LABEL, INQUIRY_LABEL, LOST_REASONS, SOURCE_LABEL, STAGES, type Inquiry, type InquiryStatus } from "@/lib/types";
+import { CHANNEL_LABEL, LOST_REASONS, SOURCE_LABEL, STAGES, type Inquiry, type InquiryStatus } from "@/lib/types";
 
 export const stageColor = (s: InquiryStatus) => TONES[INQUIRY_TONE[s]];
 export const usd = (n: number) => "$" + n.toLocaleString("en-US", { maximumFractionDigits: n % 1 ? 2 : 0 });
@@ -16,10 +17,11 @@ function when(iso: string) {
 }
 
 export function StageBadge({ s }: { s: InquiryStatus }) {
+  const { label: L } = useStageWords();
   const [bg, fg, dot] = stageColor(s);
   return (
     <span className="inline-flex h-[22px] items-center gap-1.5 whitespace-nowrap rounded-badge px-2 text-xs font-medium" style={{ background: bg, color: fg }}>
-      <span className="size-1.5 rounded-full" style={{ background: dot }} />{INQUIRY_LABEL[s]}
+      <span className="size-1.5 rounded-full" style={{ background: dot }} />{L[s]}
     </span>
   );
 }
@@ -49,6 +51,7 @@ export function InquiryDialog({ q, company, intent: startIntent = null, onClose,
   q: Inquiry; company: string; intent?: Intent; onClose: () => void; onUpdate: (patch: Partial<Inquiry>) => void;
   followup?: FollowupBadge | null; // undefined = follow-ups are off for this client, so the switch is hidden
 }) {
+  const { label: L, value: valueWord, valueHelp, booked: bookedWord } = useStageWords();
   const [intent, setIntent] = useState<Intent>(startIntent);
   const [value, setValue] = useState(q.trip_value != null ? String(q.trip_value) : "");
   const [follow, setFollow] = useState(q.follow_up_on ?? "");
@@ -89,10 +92,10 @@ export function InquiryDialog({ q, company, intent: startIntent = null, onClose,
     });
   }
   function confirmBooked() {
-    if (parsed === null || badValue || parsed === 0) { setMsg({ ok: false, text: "Add the trip value in US dollars, e.g. 4200." }); valueRef.current?.focus(); return; }
+    if (parsed === null || badValue || parsed === 0) { setMsg({ ok: false, text: `Add the ${valueWord.toLowerCase()} in US dollars, e.g. 4200.` }); valueRef.current?.focus(); return; }
     start(async () => {
       const r = await moveInquiry(q, "booked", { trip_value: parsed });
-      if (r.ok) { onUpdate({ status: "booked", trip_value: parsed, follow_up_on: null, lost_reason: null, stage_changed_at: new Date().toISOString() }); setIntent(null); setFollow(""); setMsg({ ok: true, text: `Booked for ${usd(parsed)}. 🎉` }); }
+      if (r.ok) { onUpdate({ status: "booked", trip_value: parsed, follow_up_on: null, lost_reason: null, stage_changed_at: new Date().toISOString() }); setIntent(null); setFollow(""); setMsg({ ok: true, text: `${bookedWord} for ${usd(parsed)}. 🎉` }); }
       else setMsg({ ok: false, text: r.error ?? "Couldn't save." });
     });
   }
@@ -104,7 +107,7 @@ export function InquiryDialog({ q, company, intent: startIntent = null, onClose,
     });
   }
   function saveDetails() {
-    if (badValue) { setMsg({ ok: false, text: "Enter the trip value as a number of US dollars." }); return; }
+    if (badValue) { setMsg({ ok: false, text: `Enter the ${valueWord.toLowerCase()} as a number of US dollars.` }); return; }
     start(async () => {
       const r = await saveInquiryDeal(q.id, { trip_value: parsed, follow_up_on: follow || null, notes: notes.trim() || null, lost_reason: q.lost_reason ?? null })
         .catch(() => ({ ok: false, error: "Couldn't reach the portal. Check your connection and try again." }));
@@ -144,24 +147,24 @@ export function InquiryDialog({ q, company, intent: startIntent = null, onClose,
               return (
                 <button key={s} type="button" aria-pressed={on} disabled={pending} onClick={() => pick(s)}
                   className={"inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[13px] font-medium " + (on ? "border-forest bg-forest text-white" : "border-field bg-white text-body hover:bg-[#F4F5F2]")}>
-                  <span className="size-1.5 rounded-full" style={{ background: on ? "#fff" : dot }} />{INQUIRY_LABEL[s]}
+                  <span className="size-1.5 rounded-full" style={{ background: on ? "#fff" : dot }} />{L[s]}
                 </button>
               );
             })}
           </div>
           {intent === "booked" && (
             <div className="mt-1 flex flex-col gap-2 rounded-control border border-[#BFE3CF] bg-[#F1FAF6] p-3.5">
-              <label htmlFor="iq-book" className="font-medium text-forest">What&apos;s the trip worth? (USD)</label>
+              <label htmlFor="iq-book" className="font-medium text-forest">{bookedWord === "Signed" ? "What's the deal worth? (USD)" : "What's the trip worth? (USD)"}</label>
               <div className="flex flex-wrap gap-2">
                 <div className="relative min-w-[160px] flex-1">
                   <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate">$</span>
                   <input id="iq-book" ref={valueRef} inputMode="decimal" value={value} onChange={(e) => setValue(e.target.value)} placeholder="4200"
                     onKeyDown={(e) => { if (e.key === "Enter") confirmBooked(); }} aria-invalid={badValue} className={input + " pl-7"} />
                 </div>
-                <button type="button" onClick={confirmBooked} disabled={pending} className="h-10 rounded-control bg-brand px-4 font-semibold text-white hover:bg-brand-hover disabled:opacity-60">{pending ? "Saving…" : "Mark as booked"}</button>
+                <button type="button" onClick={confirmBooked} disabled={pending} className="h-10 rounded-control bg-brand px-4 font-semibold text-white hover:bg-brand-hover disabled:opacity-60">{pending ? "Saving…" : `Mark as ${bookedWord.toLowerCase()}`}</button>
                 <button type="button" onClick={() => setIntent(null)} className="h-10 px-2 text-[13px] font-medium text-slate hover:text-ink">Cancel</button>
               </div>
-              <span className="text-xs text-slate">The total the guest pays. It shows your booked revenue and teaches your Meta ads which inquiries are worth the most.</span>
+              <span className="text-xs text-slate">{valueHelp}</span>
             </div>
           )}
           {intent === "closed" && (
@@ -185,7 +188,7 @@ export function InquiryDialog({ q, company, intent: startIntent = null, onClose,
         <section aria-labelledby="iq-deal" className="flex flex-col gap-3">
           <h3 id="iq-deal" className="text-[13px] font-semibold text-slate">Deal</h3>
           <div className="grid gap-3 sm:grid-cols-2">
-            <label className="flex flex-col gap-1.5 text-[13px] font-medium">Trip value (USD)
+            <label className="flex flex-col gap-1.5 text-[13px] font-medium">{valueWord} (USD)
               <span className="relative">
                 <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 font-normal text-slate">$</span>
                 <input inputMode="decimal" value={value} onChange={(e) => setValue(e.target.value)} placeholder="Add when you send the quote" aria-invalid={badValue} className={input + " pl-7 font-normal"} />
@@ -236,7 +239,7 @@ export function InquiryDialog({ q, company, intent: startIntent = null, onClose,
               {history.map((h, i) => (
                 <li key={i} className="flex flex-wrap items-center gap-x-2 text-body">
                   <span className="size-1.5 rounded-full" style={{ background: stageColor(h.status)[2] }} />
-                  <span>{i === history.length - 1 && h.status === "new" ? "Inquiry received" : `Moved to ${INQUIRY_LABEL[h.status]}`}</span>
+                  <span>{i === history.length - 1 && h.status === "new" ? "Inquiry received" : `Moved to ${L[h.status]}`}</span>
                   <span className="text-slate">· {when(h.at)}{h.by_role === "admin" ? " · by Safari Digital" : ""}</span>
                 </li>
               ))}

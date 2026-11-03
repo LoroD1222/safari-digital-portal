@@ -83,6 +83,8 @@ export async function inquiryFollowupView(supabase: Supabase, q: InquiryLite, no
   const f = await loadFollowups(supabase, q.client_id, [q.id]);
   const tz = f.settings?.send_timezone || "Africa/Dar_es_Salaam";
   const cycle = f.cycles[0] ?? null;
+  const { data: cl } = await supabase.from("clients").select("*").eq("id", q.client_id).maybeSingle();
+  const message = cl?.is_internal && cycle?.stage === "quoted" ? "the proposal" : STAGE_MESSAGE[cycle?.stage ?? ""] ?? "the message";
   const plan = planFor({ now, settings: f.settings, rules: f.rules, cycle, sends: f.sends, inquiry: q, suppressed: !!q.email && f.suppressed.has(q.email.trim().toLowerCase()) });
   const sent = f.sends.filter((x) => x.status === "sent");
   const anchor = cycle?.confirmed_at ? new Date(cycle.confirmed_at).getTime() : null;
@@ -91,7 +93,7 @@ export async function inquiryFollowupView(supabase: Supabase, q: InquiryLite, no
   const label = (s: string) => ({ sent: "Sent", sending: "Sending", failed: "Failed", canceled: "Canceled", skipped: "Skipped", scheduled: "Scheduled" })[s] ?? s;
   return {
     on: !!f.settings?.enabled, template: TEMPLATES[f.settings?.template ?? "standard"]?.title ?? "Standard",
-    state: plan.state, label: plan.label, stage: cycle?.stage ?? null, stageMessage: STAGE_MESSAGE[cycle?.stage ?? ""] ?? "the message",
+    state: plan.state, label: plan.label, stage: cycle?.stage ?? null, stageMessage: message,
     confirmed: !!cycle?.confirmed_at,
     canPause: cycle?.status === "active" || cycle?.status === "awaiting",
     canResume: cycle?.status === "paused" || cycle?.status === "replied",

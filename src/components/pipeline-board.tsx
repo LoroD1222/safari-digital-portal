@@ -3,9 +3,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { InquiryDialog, moveInquiry, stageColor, usd } from "./inquiry-dialog";
-import { INQUIRY_LABEL, STAGES, STALE_DAYS, type Inquiry, type InquiryStatus } from "@/lib/types";
+import { STAGES, STALE_DAYS, type Inquiry, type InquiryStatus } from "@/lib/types";
 import type { FollowupBadge } from "@/lib/pipeline-followups";
 import { Icon, type IconName } from "./icons";
+import { useStageWords } from "./stage-labels";
 import { confirmFollowupMessage } from "@/app/portal/followups/actions";
 
 const BADGE: Record<FollowupBadge["kind"], [IconName, string, string]> = {
@@ -24,6 +25,7 @@ export function PipelineBoard({ items, company, adminHref, followupsOn = false, 
   items: Inquiry[]; company: string; adminHref?: string; followupsOn?: boolean; followups?: Record<string, FollowupBadge>;
 }) {
   const router = useRouter();
+  const { label: L, value: valueWord, quote: quoteWord } = useStageWords();
   const [rows, setRows] = useState(items);
   // New data from the server (live updates, another tab): take it, keep local edits otherwise.
   const [seen, setSeen] = useState(items);
@@ -84,7 +86,7 @@ export function PipelineBoard({ items, company, adminHref, followupsOn = false, 
     <section aria-label="Pipeline" data-wide className="flex flex-col gap-2">
       {error && <p role="alert" className="text-[13px] text-danger-text">{error}</p>}
       <p className="flex flex-wrap items-center gap-x-3.5 gap-y-1 text-xs text-slate">
-        <span>Drag a card to another stage, or tap › to move it on. Open a card for details, the trip value and notes. Days in <span className="font-semibold text-[#9A4A12]">orange</span> mean it&apos;s been waiting too long.</span>
+        <span>Drag a card to another stage, or tap › to move it on. Open a card for details, the {valueWord.toLowerCase()} and notes. Days in <span className="font-semibold text-[#9A4A12]">orange</span> mean it&apos;s been waiting too long.</span>
         {followupsOn && <>
           <span className="inline-flex items-center gap-1.5"><span className="inline-flex size-4 items-center justify-center rounded-full bg-[#F1F2F4] text-[#4A4F63]"><Icon name="mail" size={9} /></span>Next follow-up</span>
           <span className="inline-flex items-center gap-1.5"><span className="inline-flex size-4 items-center justify-center rounded-full bg-[#FDF3E1] text-[#8A5A12]"><Icon name="send" size={9} /></span>Confirm you sent it</span>
@@ -105,7 +107,7 @@ export function PipelineBoard({ items, company, adminHref, followupsOn = false, 
                   className={"flex flex-1 flex-col gap-2 rounded-card p-2 transition-colors " + (over === s ? "bg-[#E3F4EA] outline-2 outline-dashed outline-brand" : "bg-sidebar")}>
                   <div className="flex flex-col gap-0.5 px-1.5 pb-1 pt-0.5">
                     <span className="flex items-center gap-2 font-semibold" style={{ color: s === "closed" ? undefined : fg }}>
-                      <span className="size-2 rounded-full" style={{ background: dot }} aria-hidden />{INQUIRY_LABEL[s]}
+                      <span className="size-2 rounded-full" style={{ background: dot }} aria-hidden />{L[s]}
                     </span>
                     <span className="text-xs text-slate">
                       {value > 0 && <span className="font-semibold text-ink">{usd(value)}</span>}{value > 0 && " · "}
@@ -126,7 +128,7 @@ export function PipelineBoard({ items, company, adminHref, followupsOn = false, 
                           {q.trip_value ? <><span className="font-semibold tabular-nums text-ink">{usd(Number(q.trip_value))}</span>{(!done || q.lost_reason) && <span aria-hidden>·</span>}</> : null}
                           {done ? (s === "closed" && q.lost_reason ? <span className="truncate">{q.lost_reason}</span> : null)
                             : overdue ? <span className="truncate font-semibold text-[#8A5A12]">Follow up {q.follow_up_on! < now ? "(overdue)" : "today"}</span>
-                            : <span title={`${days} ${days === 1 ? "day" : "days"} in ${INQUIRY_LABEL[q.status]}`} className={"truncate " + (stale ? "font-semibold text-[#9A4A12]" : "")}>{days === 0 ? "Today" : `${days} ${days === 1 ? "day" : "days"}`}</span>}
+                            : <span title={`${days} ${days === 1 ? "day" : "days"} in ${L[q.status]}`} className={"truncate " + (stale ? "font-semibold text-[#9A4A12]" : "")}>{days === 0 ? "Today" : `${days} ${days === 1 ? "day" : "days"}`}</span>}
                           {fu && (
                             <span role="img" aria-label={fu.text} title={fu.text} className="ml-auto inline-flex size-[22px] shrink-0 items-center justify-center rounded-full" style={{ background: BADGE[fu.kind][1], color: BADGE[fu.kind][2] }}>
                               <Icon name={BADGE[fu.kind][0]} size={12} />
@@ -142,7 +144,7 @@ export function PipelineBoard({ items, company, adminHref, followupsOn = false, 
                           ? <Link href={`${adminHref}/${q.id}`} className="flex flex-col gap-0.5 px-3 py-2.5 text-ink no-underline hover:bg-[#FAFAF8]">{body}</Link>
                           : <button type="button" onClick={() => setOpen({ id: q.id, intent: null })} className="flex w-full min-w-0 cursor-grab flex-col gap-0.5 rounded-control px-3 py-2.5 text-left hover:bg-[#FAFAF8] active:cursor-grabbing">{body}</button>}
                         {n && (
-                          <button type="button" onClick={() => move(q.id, n)} aria-label={`Move ${q.customer_name} to ${INQUIRY_LABEL[n]}`} title={`Move to ${INQUIRY_LABEL[n]}`}
+                          <button type="button" onClick={() => move(q.id, n)} aria-label={`Move ${q.customer_name} to ${L[n]}`} title={`Move to ${L[n]}`}
                             className="absolute right-1.5 top-2 inline-flex size-6 items-center justify-center rounded-control text-[#8A8FA3] hover:bg-[#E3F4EA] hover:text-brand">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M9 18l6-6-6-6" /></svg>
                           </button>
@@ -164,7 +166,7 @@ export function PipelineBoard({ items, company, adminHref, followupsOn = false, 
       {ask && (
         <div role="dialog" aria-label="Start follow-ups" className="fixed inset-x-4 bottom-4 z-40 mx-auto flex max-w-[560px] flex-wrap items-center gap-3 rounded-card border border-line bg-white px-4 py-3 shadow-[0_12px_40px_rgba(0,3,33,0.18)]">
           <span className="min-w-[220px] flex-1 text-[13px]">
-            <span className="font-semibold">Did you send {ask.name.split(" ")[0]} {SENT_WHAT[ask.stage]}?</span>
+            <span className="font-semibold">Did you send {ask.name.split(" ")[0]} {ask.stage === "quoted" ? quoteWord : SENT_WHAT[ask.stage]}?</span>
             <span className="block text-slate">Follow-ups for this stage count from when you did.</span>
           </span>
           <button type="button" className="h-9 rounded-control px-3 text-[13px] font-medium text-slate hover:text-ink" onClick={() => setAsk(null)}>Not yet</button>

@@ -3,6 +3,7 @@ import { AccountFooter } from "@/components/account-footer";
 import { HelpButton } from "@/components/help-panel";
 import type { NavItem } from "@/components/sidebar-nav";
 import { LiveInquiries } from "@/components/live-inquiries";
+import { StageLabels } from "@/components/stage-labels";
 import { getPortalContext } from "@/lib/portal";
 import { stopViewAs } from "@/app/view-as-actions";
 
@@ -43,7 +44,7 @@ export default async function PortalLayout({ children }: LayoutProps<"/portal">)
     <AppShell navLabel="Main" nav={nav} bottom={help}
       footer={<AccountFooter name={company?.name ?? viewer.email} sub={company ? viewer.email : undefined} href="/portal/account" />}>
       {viewingAs && company && <ViewAsBanner name={company.name} />}
-      {children}
+      <StageLabels internal={!!company?.is_internal}>{children}</StageLabels>
       {company && <LiveInquiries clientId={company.id} href="/portal/inquiries" />}
     </AppShell>
   );

@@ -98,7 +98,8 @@ export function InquiryTable({ items, company, openId }: { items: Inquiry[]; com
         )}
       </div>
 
-      {q && <InquiryDialog q={q} company={company} onClose={() => setSel(null)} onUpdate={(p) => setRows((rs) => rs.map((r) => (r.id === q.id ? { ...r, ...p } : r)))} />}
+      {q && <InquiryDialog q={q} company={company} onClose={() => setSel(null)} onUpdate={(p) => setRows((rs) => rs.map((r) => (r.id === q.id ? { ...r, ...p } : r)))}
+        onDeleted={() => { const id = q.id; setSel(null); setRows((rs) => rs.filter((r) => r.id !== id)); }} />}
     </section>
   );
 }

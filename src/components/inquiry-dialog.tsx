@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { getInquiryHistory, saveInquiryDeal, updateInquiryStatus, type HistoryRow } from "@/app/inquiry-actions";
+import { deleteMyInquiry, getInquiryHistory, saveInquiryDeal, updateInquiryStatus, type HistoryRow } from "@/app/inquiry-actions";
+import { ConfirmDialog } from "./confirm-dialog";
 import { InquiryFollowups } from "./inquiry-followups";
 import { useStageWords } from "./stage-labels";
 import type { FollowupBadge } from "@/lib/pipeline-followups";
@@ -47,12 +48,14 @@ async function move(q: Inquiry, to: InquiryStatus, extra?: { trip_value?: number
 
 type Intent = "booked" | "closed" | null;
 
-export function InquiryDialog({ q, company, intent: startIntent = null, onClose, onUpdate }: {
-  q: Inquiry; company: string; intent?: Intent; onClose: () => void; onUpdate: (patch: Partial<Inquiry>) => void;
+export function InquiryDialog({ q, company, intent: startIntent = null, onClose, onUpdate, onDeleted }: {
+  q: Inquiry; company: string; intent?: Intent; onClose: () => void; onUpdate: (patch: Partial<Inquiry>) => void; onDeleted?: () => void;
   followup?: FollowupBadge | null; // undefined = follow-ups are off for this client, so the switch is hidden
 }) {
   const { label: L, value: valueWord, valueHelp, booked: bookedWord, stages: STAGES } = useStageWords();
   const [intent, setIntent] = useState<Intent>(startIntent);
+  const [removing, setRemoving] = useState(false);
+  const [removeError, setRemoveError] = useState<string | null>(null);
   const [value, setValue] = useState(q.trip_value != null ? String(q.trip_value) : "");
   const [follow, setFollow] = useState(q.follow_up_on ?? "");
   const [notes, setNotes] = useState(q.notes ?? "");
@@ -246,8 +249,25 @@ export function InquiryDialog({ q, company, intent: startIntent = null, onClose,
             </ul>
           </section>
         )}
-        <span className="text-xs text-slate">Only {company} and Safari Digital can see this inquiry.</span>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line-soft pt-3">
+          <span className="text-xs text-slate">Only {company} and Safari Digital can see this inquiry.</span>
+          {onDeleted && (
+            <button type="button" onClick={() => { setRemoveError(null); setRemoving(true); }} className="text-[13px] font-medium text-danger-text hover:underline">Delete inquiry</button>
+          )}
+        </div>
       </div>
+      {removing && (
+        <ConfirmDialog title={`Delete ${q.customer_name}?`} confirmLabel="Delete" pending={pending} error={removeError}
+          onClose={() => setRemoving(false)}
+          onConfirm={() => start(async () => {
+            const r = await deleteMyInquiry(q.id);
+            if (!r.ok) { setRemoveError(r.error ?? "Couldn't delete it."); return; }
+            setRemoving(false);
+            onDeleted?.();
+          })}>
+          This removes the inquiry, its notes, history and any planned follow-ups for good. Use it for spam, tests or duplicates. For a real guest who didn&apos;t book, move it to Lost instead, so your numbers stay right.
+        </ConfirmDialog>
+      )}
     </div>
   );
 }

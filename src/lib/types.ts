@@ -131,8 +131,8 @@ export const PLATFORM_LABEL: Record<Platform, string> = { instagram: "Instagram"
 
 // ───────────── Inquiries ─────────────
 export type InquirySource = "meta_ads" | "meta_organic" | "website" | "direct" | "unknown";
-// meeting / no_show (0026) are only used on Safari Digital's own (internal) pipeline.
-export type InquiryStatus = "new" | "contacted" | "meeting" | "no_show" | "quoted" | "negotiating" | "booked" | "closed";
+// no_answer (0027), meeting / no_show (0026) are only used on Safari Digital's own (internal) pipeline.
+export type InquiryStatus = "new" | "contacted" | "no_answer" | "meeting" | "no_show" | "quoted" | "negotiating" | "booked" | "closed";
 export type Inquiry = {
   id: string; client_id: string; customer_name: string; email: string | null; phone: string | null; country: string | null;
   interested_in: string | null; travel_dates: string | null; travellers: string | null; message: string | null;
@@ -142,16 +142,16 @@ export type Inquiry = {
 };
 // Pipeline order. "closed" is shown as Lost.
 export const STAGES: InquiryStatus[] = ["new", "contacted", "quoted", "negotiating", "booked", "closed"];
-export const AGENCY_STAGES: InquiryStatus[] = ["new", "contacted", "meeting", "no_show", "quoted", "negotiating", "booked", "closed"];
+export const AGENCY_STAGES: InquiryStatus[] = ["new", "contacted", "no_answer", "meeting", "no_show", "quoted", "negotiating", "booked", "closed"];
 export const ALL_STAGES: InquiryStatus[] = AGENCY_STAGES;
-export const OPEN_STAGES: InquiryStatus[] = ["new", "contacted", "meeting", "no_show", "quoted", "negotiating"];
+export const OPEN_STAGES: InquiryStatus[] = ["new", "contacted", "no_answer", "meeting", "no_show", "quoted", "negotiating"];
 export const LOST_REASONS = ["Price too high", "Dates didn't work", "No reply", "Chose another operator", "Changed plans", "Other"];
 // After this many days in one stage, a card is flagged as waiting too long.
-export const STALE_DAYS: Partial<Record<InquiryStatus, number>> = { new: 1, contacted: 3, no_show: 3, quoted: 5, negotiating: 7 };
+export const STALE_DAYS: Partial<Record<InquiryStatus, number>> = { new: 1, contacted: 3, no_answer: 3, no_show: 3, quoted: 5, negotiating: 7 };
 export const SOURCE_LABEL: Record<InquirySource, string> = {
   meta_ads: "Facebook & Instagram Ads", meta_organic: "Facebook & Instagram Organic", website: "Website", direct: "WhatsApp / Direct", unknown: "Other / Unknown",
 };
-export const INQUIRY_LABEL: Record<InquiryStatus, string> = { new: "New", contacted: "Contacted", meeting: "Meeting booked", no_show: "No show", quoted: "Quote sent", negotiating: "Negotiating", booked: "Booked", closed: "Lost" };
+export const INQUIRY_LABEL: Record<InquiryStatus, string> = { new: "New", contacted: "Contacted", no_answer: "No answer", meeting: "Meeting booked", no_show: "No show", quoted: "Quote sent", negotiating: "Negotiating", booked: "Booked", closed: "Lost" };
 export const CHANNEL_LABEL: Record<string, string> = {
   website_form: "Website form", meta_lead_form: "Meta lead form", whatsapp: "WhatsApp", facebook_message: "Facebook message",
   instagram_message: "Instagram message", email: "Email", phone: "Phone", other: "Other",

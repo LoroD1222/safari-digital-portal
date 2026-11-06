@@ -164,4 +164,14 @@ describe("No show (internal pipeline)", () => {
     const [c] = await q<{ stage: string; status: string; confirmed: boolean }>(`select stage, status, confirmed_at is not null as confirmed from public.followup_cycles where inquiry_id = '${id}' and status <> 'ended'`);
     expect(c).toEqual({ stage: "no_show", status: "active", confirmed: true });
   });
+
+  it("No answer starts follow-ups at once too", async () => {
+    await as(null);
+    const id = await newInquiry("Juma");
+    await as(UA);
+    await db.exec(`select public.set_inquiry_status('${id}', 'no_answer')`);
+    await as(null);
+    const [c] = await q<{ stage: string; status: string }>(`select stage, status from public.followup_cycles where inquiry_id = '${id}' and status <> 'ended'`);
+    expect(c).toEqual({ stage: "no_answer", status: "active" });
+  });
 });

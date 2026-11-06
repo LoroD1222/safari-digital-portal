@@ -1,10 +1,10 @@
 // Follow-up templates written by Safari Digital, and the personalisation shared by the page and the sender.
 // Pure functions only: this file is used in the browser, on the server and in tests.
 
-export type FollowupStage = "contacted" | "quoted" | "negotiating" | "no_show"; // no_show: internal account only
+export type FollowupStage = "contacted" | "quoted" | "negotiating" | "no_show" | "no_answer"; // no_show, no_answer: internal account only
 export type TemplateKey = "standard" | "gentle" | "persistent" | "blank" | "agency";
 
-export const FOLLOWUP_STAGES: FollowupStage[] = ["contacted", "no_show", "quoted", "negotiating"];
+export const FOLLOWUP_STAGES: FollowupStage[] = ["contacted", "no_answer", "no_show", "quoted", "negotiating"];
 export const FOLLOWUP_DAYS = [1, 2, 3, 4, 5, 6, 7, 9, 10, 12, 14, 15, 17, 21, 22, 25, 28, 30, 42, 45, 60];
 
 // Bump when the template copy changes: clients still on older copy get the new emails (their own stay).
@@ -297,6 +297,18 @@ We work only with safari and Kilimanjaro operators, so we know what brings in se
 If you tell me a little about your company and your goals for this season, I'll suggest what would make the biggest difference.
 
 What would you most like to improve right now?`),
+  p("agency", "A11", "no_answer", 1, "Tried to reach you", `
+Hi {{first_name}},
+
+I tried to reach you about your message to Safari Digital but couldn't get through.
+
+When's a good time for a quick call? Or if you prefer, just reply here with what you're looking for, and I'll send you some ideas.`),
+  p("agency", "A12", "no_answer", 4, "Still interested in more safari bookings?", `
+Hi {{first_name}},
+
+I wanted to follow up once more. We help safari and Kilimanjaro operators get more inquiries with websites and Facebook and Instagram ads.
+
+If it's still of interest, reply with a day and time that works for you and I'll call you then.`),
   p("agency", "A9", "no_show", 1, "Sorry we missed you", `
 Hi {{first_name}},
 

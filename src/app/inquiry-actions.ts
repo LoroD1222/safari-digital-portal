@@ -75,3 +75,19 @@ export async function getInquiryFollowups(id: string) {
     return null; // follow-ups not set up yet (migration not run)
   }
 }
+
+// Remove an inquiry for good (spam, test, duplicate). Clients only their own; admins any.
+export async function deleteMyInquiry(id: string): Promise<{ ok: boolean; error?: string }> {
+  const viewer = await getViewer();
+  if (!viewer) return { ok: false, error: "Please sign in again." };
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return { ok: false, error: "Inquiry not found." };
+  const supabase = await createClient();
+  // Reading through the signed-in user's access proves it's theirs (or that they're Safari Digital).
+  const { data: q } = await supabase.from("inquiries").select("id, client_id, customer_name").eq("id", id).maybeSingle();
+  if (!q || (viewer.role !== "admin" && q.client_id !== viewer.clientId)) return { ok: false, error: "Inquiry not found." };
+  const { createAdminClient } = await import("@/lib/supabase/admin");
+  const { error } = await createAdminClient().from("inquiries").delete().eq("id", id).eq("client_id", q.client_id);
+  if (error) return { ok: false, error: "Couldn't delete it. Please try again." };
+  revalidatePath("/", "layout");
+  return { ok: true };
+}

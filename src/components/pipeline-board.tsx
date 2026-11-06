@@ -177,7 +177,8 @@ export function PipelineBoard({ items, company, adminHref, followupsOn = false, 
         </div>
       )}
       {cur && open && (
-        <InquiryDialog q={cur} company={company} intent={open.intent} followup={followupsOn ? followups[cur.id] ?? null : undefined} onClose={() => { setOpen(null); router.refresh(); }} onUpdate={(p) => patch(cur.id, p)} />
+        <InquiryDialog q={cur} company={company} intent={open.intent} followup={followupsOn ? followups[cur.id] ?? null : undefined} onClose={() => { setOpen(null); router.refresh(); }} onUpdate={(p) => patch(cur.id, p)}
+          onDeleted={() => { const id = cur.id; setOpen(null); setRows((rs) => rs.filter((r) => r.id !== id)); router.refresh(); }} />
       )}
     </section>
   );

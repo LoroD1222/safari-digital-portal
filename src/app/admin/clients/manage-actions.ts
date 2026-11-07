@@ -205,7 +205,11 @@ export async function saveFollowupSender(clientId: string, _: FormState, form: F
   const email = str(form, "from_email").toLowerCase();
   const name = str(form, "from_name").slice(0, 80);
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: "Enter a full email address, e.g. bookings@theircompany.com" };
-  const check = email ? await checkSenderDomain(email) : { ready: false, message: "Removed. No follow-up emails will be sent for this client." };
+  let check: { ready: boolean; message: string; blocked?: boolean } = email ? await checkSenderDomain(email) : { ready: false, message: "Removed. No follow-up emails will be sent for this client." };
+  // The key can't list domains, but the admin checked Resend by hand: trust that.
+  if (email && !check.ready && check.blocked && form.get("manual_ok") === "on") {
+    check = { ready: true, message: `Marked ready by hand. Follow-ups will go from ${email}; if the domain isn't really verified, Resend refuses them and they show as Failed.` };
+  }
   const supabase = await createClient();
   const { error } = await supabase.from("followup_settings").upsert({
     client_id: clientId, from_email: email || null, from_name: name || null,

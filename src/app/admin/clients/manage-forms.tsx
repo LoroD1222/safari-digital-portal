@@ -237,6 +237,10 @@ export function FollowupSenderForm({ clientId, email, name, clientName }: { clie
           <Input id="fu_from_name" name="from_name" autoComplete="off" defaultValue={name ?? ""} placeholder={clientName} maxLength={80} />
         </Field>
       </div>
+      <label className="flex items-start gap-2 text-[13px] text-body">
+        <input type="checkbox" name="manual_ok" className="mt-0.5 size-4 accent-[#1A6647]" />
+        <span>I&apos;ve checked in Resend → Domains that this domain shows <strong className="font-semibold text-ink">Verified</strong>. Use this only if the automatic check can&apos;t reach Resend (key with Sending access only).</span>
+      </label>
       <div className="flex justify-end"><SubmitButton variant="secondary">Save and check domain</SubmitButton></div>
       <Feedback state={state} />
     </form>

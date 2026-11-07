@@ -11,7 +11,7 @@ import {
 } from "@/lib/followup-presets";
 import { useStageWords } from "./stage-labels";
 import {
-  addRule, chooseTemplate, deleteRule, logWhatsappFollowup, resetRule, saveFollowupPrefs, saveRule, setFollowupsEnabled, type RulePatch,
+  addRule, chooseTemplate, deleteRule, logWhatsappFollowup, resetRule, saveAutoReply, saveFollowupPrefs, saveRule, sendAutoReplyTest, setFollowupsEnabled, type RulePatch,
 } from "@/app/portal/followups/actions";
 
 export type WhatsappDue = { inquiryId: string; ruleId: string; guest: string; trip: string; stage: string; days: number; ruleName: string; url: string };
@@ -65,6 +65,7 @@ export type FollowupPrefs = { agent_name: string; timezone: string; quote_valid_
 export function FollowupsManager(p: {
   company: string; internal?: boolean; enabled: boolean; template: TemplateKey; senderReady: boolean; fromEmail: string | null; prefs: FollowupPrefs;
   rules: FollowupRule[]; whatsapp: WhatsappDue[]; recent: RecentSend[]; scheduled: number; awaiting: number;
+  autoreply: AutoReply;
 }) {
   const router = useRouter();
   const { label: L, booked: bookedWord } = useStageWords();
@@ -162,6 +163,8 @@ export function FollowupsManager(p: {
           </div>
         )}
       </section>
+
+      <AutoReplyCard a={p.autoreply} senderReady={p.senderReady} fromEmail={p.fromEmail} company={p.company} agent={p.prefs.agent_name} />
 
       {error && <Alert>{error}</Alert>}
 
@@ -354,6 +357,99 @@ export function FollowupsManager(p: {
         </ConfirmDialog>
       )}
     </div>
+  );
+}
+
+export type AutoReply = { enabled: boolean; subject: string; body: string; defaultSubject: string; defaultBody: string };
+
+// An email to the guest the moment they send an inquiry from the website. Separate from the follow-ups switch.
+function AutoReplyCard({ a, senderReady, fromEmail, company, agent }: { a: AutoReply; senderReady: boolean; fromEmail: string | null; company: string; agent: string }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [on, setOn] = useState(a.enabled);
+  const [open, setOpen] = useState(false);
+  const saved = { subject: a.subject || a.defaultSubject, body: a.body || a.defaultBody };
+  const [d, setD] = useState(saved);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const changed = d.subject !== saved.subject || d.body !== saved.body;
+  const isDefault = d.subject === a.defaultSubject && d.body === a.defaultBody;
+  const subjectRef = useRef<HTMLInputElement>(null);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const last = useRef<"subject" | "body">("body");
+  const insert = (t: string) => {
+    const field = last.current;
+    const el = field === "subject" ? subjectRef.current : bodyRef.current;
+    const text = d[field];
+    const s0 = el?.selectionStart ?? text.length, s1 = el?.selectionEnd ?? text.length;
+    setD({ ...d, [field]: text.slice(0, s0) + t + text.slice(s1) });
+    requestAnimationFrame(() => { el?.focus(); el?.setSelectionRange(s0 + t.length, s0 + t.length); });
+  };
+  // Saved as empty when it's Safari Digital's wording, so later improvements reach the client.
+  const payload = (enabled: boolean) => ({ enabled, subject: isDefault ? "" : d.subject, body: isDefault ? "" : d.body });
+  const save = (enabled: boolean, done?: string) => start(async () => {
+    setMsg(null);
+    const r = await saveAutoReply(payload(enabled));
+    if (!r.ok) { setOn(a.enabled); setMsg({ ok: false, text: r.error }); }
+    else { if (done) setMsg({ ok: true, text: done }); router.refresh(); }
+  });
+  const toggle = () => { const next = !on; setOn(next); save(next); };
+  const test = () => start(async () => {
+    setMsg(null);
+    const r = await sendAutoReplyTest(d);
+    setMsg(r.ok ? { ok: true, text: `Test sent to ${r.to}. Check your inbox (and spam).` } : { ok: false, text: r.error });
+  });
+  const preview = composeEmail(d, { firstName: "Sarah", trip: "Kilimanjaro climb", travelDates: "July 2027", agent, company });
+
+  return (
+    <section aria-label="Instant reply to new inquiries" className={`flex flex-col overflow-hidden rounded-card border ${on ? "border-[#BFE3CF]" : "border-line"} bg-white`}>
+      <div className="flex items-center gap-4 px-5 py-4">
+        <span className={`flex size-10 shrink-0 items-center justify-center rounded-control ${on ? "bg-[#E3F4EA] text-brand" : "bg-sidebar text-slate"}`}><Icon name="send" size={19} /></span>
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className="text-[15px] font-semibold">Instant reply to new inquiries {on && <span className="ml-1 align-[1px]"><Badge tone="green">On</Badge></span>}</span>
+          <span className="text-[13px] text-slate">
+            {!senderReady ? "Works once your email address is connected."
+              : on ? <>Every guest who sends an inquiry from your website gets this email within a minute, from <span className="font-medium text-ink">{fromEmail}</span>. You still reply to them personally.</>
+                : "Thank guests the moment they inquire, so they know you got it. Separate from the follow-ups above."}
+          </span>
+        </span>
+        <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="hidden text-[13px] font-medium text-brand hover:underline sm:inline">{open ? "Close" : "Edit message"}</button>
+        <Switch size="lg" on={on} label={on ? "Turn instant reply off" : "Turn instant reply on"} onChange={toggle} disabled={pending || (!senderReady && !on)} />
+      </div>
+      {!open && (
+        <button type="button" onClick={() => setOpen(true)} className="flex min-w-0 flex-col items-start gap-0.5 border-t border-line-soft bg-sidebar px-5 py-2.5 text-left">
+          <span className="max-w-full truncate text-[13px] font-semibold"><Tagged text={saved.subject} /></span>
+          <span className="max-w-full truncate text-xs text-slate"><Tagged text={bodyPreview(saved.body)} /></span>
+          <span className="text-xs font-medium text-brand sm:hidden">Edit message</span>
+        </button>
+      )}
+      {open && (
+        <div className="flex flex-col gap-3 border-t border-line-soft px-5 py-4">
+          <label className="flex flex-col gap-1.5 text-[13px] font-medium">Subject
+            <Input ref={subjectRef} value={d.subject} maxLength={150} onFocus={() => { last.current = "subject"; }} onChange={(e) => setD({ ...d, subject: e.target.value })} /></label>
+          <label className="flex flex-col gap-1.5 text-[13px] font-medium">Message
+            <Textarea ref={bodyRef} rows={8} value={d.body} maxLength={4000} onFocus={() => { last.current = "body"; }} onChange={(e) => setD({ ...d, body: e.target.value })} className="leading-[1.55]" /></label>
+          <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate">Add a tag:
+            {TOKENS.map((t) => (
+              <button key={t.token} type="button" title={t.help} onMouseDown={(e) => e.preventDefault()} onClick={() => insert(t.token)}
+                className="h-6 rounded-[6px] border border-field bg-sidebar px-2 text-xs font-medium text-body hover:bg-white">{t.token}</button>
+            ))}
+          </div>
+          <div className="flex flex-col gap-1 rounded-control border border-line-soft bg-sidebar px-3.5 py-3">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-slate">Preview for Sarah, asking about a Kilimanjaro climb</span>
+            <span className="text-[13px] font-semibold">{preview.subject}</span>
+            <span className="whitespace-pre-line text-[13px] text-body">{preview.body}</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <Button className="h-9" disabled={!changed || pending} onClick={() => save(on, "Saved.")}>Save</Button>
+            <Button variant="secondary" className="h-9" disabled={pending || !senderReady} onClick={test}>Send a test to me</Button>
+            {changed && <button type="button" onClick={() => setD(saved)} className="text-[13px] font-medium text-slate hover:text-ink">Cancel</button>}
+            <span className="flex-1" />
+            {!isDefault && <button type="button" onClick={() => setD({ subject: a.defaultSubject, body: a.defaultBody })} className="text-[13px] font-medium text-brand">Use Safari Digital&apos;s wording</button>}
+          </div>
+        </div>
+      )}
+      {msg && <p role="status" className={`border-t border-line-soft px-5 py-2 text-[13px] ${msg.ok ? "text-forest" : "text-danger-text"}`}>{msg.text}</p>}
+    </section>
   );
 }
 

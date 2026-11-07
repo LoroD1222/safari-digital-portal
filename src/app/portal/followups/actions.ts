@@ -2,8 +2,9 @@
 import { revalidatePath } from "next/cache";
 import { getPortalContext } from "@/lib/portal";
 import { createClient } from "@/lib/supabase/server";
-import { FOLLOWUP_DAYS, FOLLOWUP_STAGES, ALL_TEMPLATE_KEYS, TEMPLATE_VERSION, presetByKey, type FollowupStage, type TemplateKey } from "@/lib/followup-presets";
+import { FOLLOWUP_DAYS, FOLLOWUP_STAGES, ALL_TEMPLATE_KEYS, TEMPLATE_VERSION, autoreplyDefault, composeEmail, presetByKey, type FollowupStage, type TemplateKey } from "@/lib/followup-presets";
 import { installTemplate } from "@/lib/followups";
+import { sendViaResend } from "@/lib/followup-mail";
 
 type Result = { ok: true } | { ok: false; error: string };
 
@@ -137,4 +138,35 @@ export async function setFollowupState(inquiryId: string, state: "paused" | "rep
   const { error } = await supabase.rpc("set_followup_cycle_state", { p_inquiry_id: inquiryId, p_state: state });
   revalidatePath("/", "layout");
   return error ? fail(error.message) : { ok: true };
+}
+
+// The instant reply to new website inquiries. Empty subject or message = Safari Digital's wording.
+export async function saveAutoReply(p: { enabled: boolean; subject: string; body: string }): Promise<Result> {
+  const { clientId, supabase } = await ctx();
+  const subject = String(p.subject ?? "").trim();
+  const body = String(p.body ?? "").trim();
+  if (subject.length > 150) return { ok: false, error: "That subject is too long." };
+  if (body.length > 4000) return { ok: false, error: "That message is too long." };
+  const { error } = await supabase.rpc("set_followup_autoreply", { p_client_id: clientId, p_enabled: !!p.enabled, p_subject: subject, p_body: body });
+  return error ? fail(/set_followup_autoreply|autoreply/.test(error.message) ? "followup " + error.message : error.message) : done();
+}
+
+// Sends the instant reply, as a guest called Sarah would get it, to the person signed in.
+export async function sendAutoReplyTest(p: { subject: string; body: string }): Promise<Result & { to?: string }> {
+  const { viewer, company } = await getPortalContext();
+  if (!company) return { ok: false, error: "No company." };
+  const supabase = await createClient();
+  const { data: s } = await supabase.from("followup_settings").select("*").eq("client_id", company.id).maybeSingle();
+  if (!s?.sender_ready || !s?.from_email) return { ok: false, error: "Your email address isn't connected yet, so nothing can be sent. Ask Safari Digital to connect it." };
+  const to = viewer.email;
+  if (!to) return { ok: false, error: "Your login has no email address." };
+  const base = autoreplyDefault(!!company.is_internal);
+  const name = (s.from_name as string | null)?.trim() || company.name.replace(/\s*\(internal\)\s*$/i, "");
+  const mail = composeEmail({ subject: p.subject.trim() || base.subject, body: p.body.trim() || base.body },
+    { firstName: "Sarah", trip: "Kilimanjaro climb", travelDates: "July 2027", agent: s.agent_name as string | null, company: name });
+  const res = await sendViaResend({
+    fromEmail: s.from_email as string, fromName: name, to, subject: `[Test] ${mail.subject}`, body: mail.body, inquiryId: "test",
+    unsubscribeUrl: "https://example.com", idempotencyKey: `autoreply-test-${company.id}-${Date.now()}`, threadId: `<test-${Date.now()}@${String(s.from_email).split("@")[1]}>`, kind: "autoreply",
+  }, process.env.RESEND_API_KEY);
+  return res.ok ? { ok: true, to } : { ok: false, error: `Resend didn't send it. ${res.error}` };
 }

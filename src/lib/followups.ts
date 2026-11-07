@@ -3,7 +3,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { createAdminClient } from "./supabase/admin";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
-  TEMPLATES, TEMPLATE_VERSION, composeEmail, firstName, travelDatesLabel, tripLabel,
+  TEMPLATES, TEMPLATE_VERSION, autoreplyDefault, composeEmail, firstName, travelDatesLabel, tripLabel,
   type FollowupRule, type FollowupSettings, type TemplateKey,
 } from "./followup-presets";
 import { MAX_ATTEMPTS, planFollowups, type Cycle, type Plan, type SendRow } from "./followup-plan";
@@ -214,7 +214,17 @@ export async function handleResendEvent(event: Parameters<typeof webhookAction>[
   if (action.kind === "ignore") return { ok: true, action: "ignored" };
   const db = createAdminClient();
   const { data: send } = await db.from("followup_sends").select("id, client_id, inquiry_id, to_address").eq("provider_id", action.providerId).maybeSingle();
-  if (!send) return { ok: true, action: "not a follow-up" };
+  if (!send) {
+    // An instant reply that bounced: don't send follow-ups to that address either.
+    const { data: ar } = await db.from("inquiries").select("id, client_id, email").eq("autoreply_provider_id", action.providerId).maybeSingle();
+    if (!ar) return { ok: true, action: "not a follow-up" };
+    if (action.kind === "delivered") return { ok: true, action: "delivered" };
+    const email = (action.email || String(ar.email ?? "")).toLowerCase();
+    if (email) await db.from("followup_suppressions").upsert({ client_id: ar.client_id, email, reason: action.reason }, { onConflict: "client_id,email" });
+    await db.from("inquiries").update({ autoreply_status: "failed", autoreply_error: action.reason, followups_stopped_at: new Date().toISOString(), followups_stop_reason: action.reason })
+      .eq("id", ar.id);
+    return { ok: true, action: "suppressed" };
+  }
   if (action.kind === "delivered") return { ok: true, action: "delivered" };
   const email = (action.email || String(send.to_address)).toLowerCase();
   await db.from("followup_suppressions").upsert({ client_id: send.client_id, email, reason: action.reason }, { onConflict: "client_id,email" });
@@ -222,4 +232,55 @@ export async function handleResendEvent(event: Parameters<typeof webhookAction>[
   await db.from("inquiries").update({ followups_stopped_at: new Date().toISOString(), followups_stop_reason: action.reason })
     .eq("client_id", send.client_id).ilike("email", email).is("followups_stopped_at", null);
   return { ok: true, action: "suppressed" };
+}
+
+// ───────────── Instant reply to a new website inquiry ─────────────
+
+// Sends the operator's instant reply to the guest, once. Call inside after(). Never throws.
+export async function sendAutoReply(inquiryId: string): Promise<{ status: "sent" | "failed" | "skipped"; note?: string }> {
+  try {
+    const db = createAdminClient();
+    const { data: q } = await db.from("inquiries").select("id, client_id, customer_name, email, interested_in, travel_dates, autoreply_status").eq("id", inquiryId).maybeSingle();
+    if (!q) return { status: "skipped", note: "No inquiry" };
+    const email = String(q.email ?? "").trim();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { status: "skipped", note: "No email address" };
+    if (q.autoreply_status) return { status: "skipped", note: "Already sent" };
+    const [{ data: s }, { data: client }, { data: supp }] = await Promise.all([
+      db.from("followup_settings").select("*").eq("client_id", q.client_id).maybeSingle(),
+      db.from("clients").select("name, account_status, is_internal").eq("id", q.client_id).maybeSingle(),
+      db.from("followup_suppressions").select("email").eq("client_id", q.client_id).ilike("email", email).maybeSingle(),
+    ]);
+    const settings = s as FollowupSettings | null;
+    if (!settings?.autoreply_enabled) return { status: "skipped", note: "Instant reply is off" };
+    if (!settings.sender_ready || !settings.from_email) return { status: "skipped", note: "Email address not connected" };
+    if (!client || client.account_status === "paused") return { status: "skipped", note: "Account paused" };
+    if (supp) return { status: "skipped", note: "Address suppressed" };
+    if (email.toLowerCase() === settings.from_email.toLowerCase()) return { status: "skipped", note: "Same as the sender" };
+
+    // Claim it first, so a retry or a second call never sends twice.
+    const { data: claimed } = await db.from("inquiries").update({ autoreply_status: "sending", autoreply_at: new Date().toISOString() })
+      .eq("id", q.id).is("autoreply_status", null).select("id").maybeSingle();
+    if (!claimed) return { status: "skipped", note: "Already sent" };
+
+    const company = settings.from_name?.trim() || String(client.name).replace(/\s*\(internal\)\s*$/i, "");
+    const base = autoreplyDefault(!!client.is_internal);
+    const mail = composeEmail(
+      { subject: settings.autoreply_subject || base.subject, body: settings.autoreply_body || base.body },
+      { firstName: firstName(q.customer_name), trip: tripLabel(q.interested_in), travelDates: travelDatesLabel(q.travel_dates), agent: settings.agent_name, company },
+    );
+    const domain = settings.from_email.split("@")[1] ?? "followups";
+    const res = await sendViaResend({
+      fromEmail: settings.from_email, fromName: company, to: email, subject: mail.subject, body: mail.body, inquiryId: q.id,
+      unsubscribeUrl: unsubscribeUrl(q.id), idempotencyKey: `autoreply-${q.id}`, threadId: `<inquiry-${q.id}@${domain}>`, kind: "autoreply",
+    }, process.env.RESEND_API_KEY);
+    if (res.ok) {
+      await db.from("inquiries").update({ autoreply_status: "sent", autoreply_at: new Date().toISOString(), autoreply_provider_id: res.id, autoreply_error: null }).eq("id", q.id);
+      return { status: "sent" };
+    }
+    await db.from("inquiries").update({ autoreply_status: "failed", autoreply_error: res.error.slice(0, 300) }).eq("id", q.id);
+    return { status: "failed", note: res.error };
+  } catch (e) {
+    console.error("Instant reply failed", e);
+    return { status: "failed", note: e instanceof Error ? e.message : "Error" };
+  }
 }

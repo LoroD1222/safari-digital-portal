@@ -19,7 +19,33 @@ export type FollowupSettings = {
   client_id: string; enabled: boolean; template: TemplateKey; enabled_at: string | null;
   from_email: string | null; from_name: string | null; sender_ready: boolean; sender_checked_at: string | null;
   agent_name: string | null; send_timezone: string; quote_valid_days: number | null; template_version: number;
+  autoreply_enabled?: boolean; autoreply_subject?: string | null; autoreply_body?: string | null;
 };
+
+// ───────────── Instant reply to a new website inquiry ─────────────
+// Sets expectations only: the operator still replies personally (and then marks the card Contacted).
+
+export const AUTOREPLY_SAFARI = {
+  subject: "Thank you for your inquiry · {{company_name}}",
+  body: `Hi {{first_name}},
+
+Thank you for contacting us about your {{trip_name}}. We've received your inquiry and one of our safari experts will reply to you personally within 24 hours, usually much sooner.
+
+In the meantime, feel free to reply to this email with anything else we should know: who's travelling, your budget, or anything you'd love to see.`,
+};
+
+export const AUTOREPLY_AGENCY = {
+  subject: "Thanks for getting in touch · {{company_name}}",
+  body: `Hi {{first_name}},
+
+Thanks for reaching out to Safari Digital. We've received your message and will get back to you personally within one working day.
+
+If it helps, reply with your website address and what you'd like more of: inquiries, bookings or a new website. We'll come prepared.`,
+};
+
+export function autoreplyDefault(internal: boolean) {
+  return internal ? AUTOREPLY_AGENCY : AUTOREPLY_SAFARI;
+}
 
 export type Preset = { key: string; step: string; stage: FollowupStage; days: number; subject: string; body: string };
 

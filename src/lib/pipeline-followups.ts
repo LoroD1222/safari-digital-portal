@@ -90,6 +90,14 @@ export async function inquiryFollowupView(supabase: Supabase, q: InquiryLite, no
   const anchor = cycle?.confirmed_at ? new Date(cycle.confirmed_at).getTime() : null;
   const done = (id: string) => f.sends.some((x) => x.cycle_id === cycle?.id && x.step_key === id && x.channel === "email" && x.status !== "failed");
   const upcoming = cycle ? f.rules.filter((r) => r.enabled && r.stage === cycle.stage && !done(r.id)).sort((a, b) => a.days - b.days).map((r) => ({ subject: r.subject, day: r.days })) : [];
+  // The instant reply (if any) shows in the history too.
+  const { data: ar } = await supabase.from("inquiries").select("autoreply_status, autoreply_at, autoreply_error").eq("id", q.id).maybeSingle();
+  const instant = ar?.autoreply_status && ar.autoreply_at ? [{
+    id: "instant", subject: "Instant reply", channel: "email",
+    status: ar.autoreply_status === "sent" ? "Sent" : ar.autoreply_status === "failed" ? "Failed" : "Sending",
+    when: whenText(new Date(ar.autoreply_at).getTime(), tz), note: ar.autoreply_status === "failed" ? (ar.autoreply_error as string | null) : null,
+    at: new Date(ar.autoreply_at).getTime(),
+  }] : [];
   const label = (s: string) => ({ sent: "Sent", sending: "Sending", failed: "Failed", canceled: "Canceled", skipped: "Skipped", scheduled: "Scheduled" })[s] ?? s;
   return {
     on: !!f.settings?.enabled, template: TEMPLATES[f.settings?.template ?? "standard"]?.title ?? "Standard",
@@ -101,10 +109,11 @@ export async function inquiryFollowupView(supabase: Supabase, q: InquiryLite, no
     next: plan.next ? { subject: plan.next.rule.subject, when: whenText(plan.next.dueAt, tz) } : null,
     remaining: plan.remaining,
     lastSent: sent[0] ? { subject: sent[0].subject, when: whenText(new Date(sent[0].sent_at ?? sent[0].created_at).getTime(), tz) } : null,
-    history: f.sends.slice(0, 30).map((x, i) => ({
+    history: [...f.sends.slice(0, 30).map((x, i) => ({
       id: `${i}`, subject: x.subject, status: label(x.status), channel: x.channel,
       when: whenText(new Date(x.sent_at ?? x.created_at).getTime(), tz), note: x.status === "sent" ? null : x.error,
-    })),
+      at: new Date(x.sent_at ?? x.created_at).getTime(),
+    })), ...instant].sort((a, b) => b.at - a.at).map(({ at: _at, ...h }) => h),
     upcoming: anchor ? upcoming : upcoming,
   };
 }

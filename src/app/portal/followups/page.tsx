@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { EmptyState } from "@/components/ui";
 import { FollowupsManager, type WhatsappDue, type RecentSend } from "@/components/followups-manager";
 import {
-  FOLLOWUP_STAGES, TEMPLATE_VERSION, composeEmail, firstName, travelDatesLabel, tripLabel, waNumber,
+  FOLLOWUP_STAGES, TEMPLATE_VERSION, autoreplyDefault, composeEmail, firstName, travelDatesLabel, tripLabel, waNumber,
   type FollowupRule, type FollowupSettings, type TemplateKey,
 } from "@/lib/followup-presets";
 import { installTemplate, planFor, type InquiryLite } from "@/lib/followups";
@@ -55,7 +55,10 @@ export default async function FollowupsPage() {
   const { data: recentData } = await supabase.from("followup_sends")
     .select("id, subject, channel, status, error, created_at, sent_at, inquiries(customer_name)")
     .eq("client_id", company.id).in("status", ["sent", "failed"]).order("created_at", { ascending: false }).limit(12);
-  const recent: RecentSend[] = (recentData ?? []).map((r) => {
+  const { data: autoData } = await supabase.from("inquiries")
+    .select("id, customer_name, autoreply_status, autoreply_at")
+    .eq("client_id", company.id).in("autoreply_status", ["sent", "failed"]).order("autoreply_at", { ascending: false }).limit(12);
+  const recentFollowups: RecentSend[] = (recentData ?? []).map((r) => {
     const q = r.inquiries as { customer_name?: string } | { customer_name?: string }[] | null;
     return {
       id: String(r.id), guest: (Array.isArray(q) ? q[0]?.customer_name : q?.customer_name) ?? "Guest",
@@ -63,6 +66,11 @@ export default async function FollowupsPage() {
       at: (r.sent_at ?? r.created_at) as string,
     };
   });
+  const recent = [
+    ...recentFollowups,
+    ...(autoData ?? []).map((r) => ({ id: `ar-${r.id}`, guest: String(r.customer_name), name: "Instant reply", channel: "email" as const, status: String(r.autoreply_status), at: String(r.autoreply_at) })),
+  ].sort((a, b) => b.at.localeCompare(a.at)).slice(0, 12);
+  const autoBase = autoreplyDefault(!!company.is_internal);
 
   return (
     <FollowupsManager
@@ -78,6 +86,11 @@ export default async function FollowupsPage() {
       scheduled={status.scheduled}
       awaiting={status.awaiting}
       recent={recent}
+      autoreply={{
+        enabled: !!settings?.autoreply_enabled,
+        subject: settings?.autoreply_subject ?? "", body: settings?.autoreply_body ?? "",
+        defaultSubject: autoBase.subject, defaultBody: autoBase.body,
+      }}
     />
   );
 }

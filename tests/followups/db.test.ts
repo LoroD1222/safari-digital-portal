@@ -175,3 +175,19 @@ describe("No show (internal pipeline)", () => {
     expect(c).toEqual({ stage: "no_answer", status: "active" });
   });
 });
+
+describe("Instant reply", () => {
+  it("operators save their own instant reply, not another's; each inquiry is claimed once", async () => {
+    await as(UA);
+    await db.exec(`select public.set_followup_autoreply('${A}', true, 'Thanks {{first_name}}', '')`);
+    await expect(db.exec(`select public.set_followup_autoreply('${B}', true, 'x', 'x')`)).rejects.toThrow(/not allowed/i);
+    await as(null);
+    const [s] = await q<{ autoreply_enabled: boolean; autoreply_subject: string; autoreply_body: string | null }>(`select autoreply_enabled, autoreply_subject, autoreply_body from public.followup_settings where client_id = '${A}'`);
+    expect(s).toEqual({ autoreply_enabled: true, autoreply_subject: "Thanks {{first_name}}", autoreply_body: null });
+    const id = await newInquiry("Anna");
+    const claim = `update public.inquiries set autoreply_status = 'sending', autoreply_at = now() where id = '${id}' and autoreply_status is null returning id`;
+    expect(await q(claim)).toHaveLength(1);
+    expect(await q(claim)).toHaveLength(0);
+    await expect(db.exec(`update public.inquiries set autoreply_status = 'bogus' where id = '${id}'`)).rejects.toThrow(/autoreply_status/);
+  });
+});

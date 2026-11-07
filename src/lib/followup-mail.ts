@@ -18,6 +18,7 @@ export function renderFollowup(body: string) {
 export type FollowupEmail = {
   fromEmail: string; fromName: string; to: string; subject: string; body: string;
   inquiryId: string; unsubscribeUrl: string; idempotencyKey: string; threadId: string;
+  kind?: "followup" | "autoreply";
 };
 
 // The Resend request. Every follow-up for one inquiry carries the same References header,
@@ -35,7 +36,7 @@ export function resendRequest(e: FollowupEmail) {
         "List-Unsubscribe": `<${e.unsubscribeUrl}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
         References: e.threadId, "In-Reply-To": e.threadId,
       },
-      tags: [{ name: "kind", value: "followup" }, { name: "inquiry", value: e.inquiryId.replace(/[^a-zA-Z0-9_-]/g, "") }],
+      tags: [{ name: "kind", value: e.kind ?? "followup" }, { name: "inquiry", value: e.inquiryId.replace(/[^a-zA-Z0-9_-]/g, "") }],
     },
   };
 }

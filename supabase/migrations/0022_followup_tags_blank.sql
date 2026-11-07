@@ -4,7 +4,7 @@
 
 alter table public.followup_settings drop constraint if exists followup_settings_template;
 alter table public.followup_settings add constraint followup_settings_template
-  check (template in ('standard', 'gentle', 'persistent', 'blank'));
+  check (template in ('standard', 'gentle', 'persistent', 'blank', 'agency'));
 
 create or replace function public.set_followups(p_client_id uuid, p_enabled boolean, p_template text)
 returns void
@@ -13,7 +13,7 @@ begin
   if not (public.is_admin() or p_client_id = public.my_client_id()) then
     raise exception 'Not allowed';
   end if;
-  if p_template not in ('standard', 'gentle', 'persistent', 'blank') then
+  if p_template not in ('standard', 'gentle', 'persistent', 'blank', 'agency') then
     raise exception 'Unknown template';
   end if;
   insert into public.followup_settings (client_id, enabled, template, enabled_at)

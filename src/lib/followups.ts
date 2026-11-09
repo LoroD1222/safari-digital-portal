@@ -8,6 +8,7 @@ import {
 } from "./followup-presets";
 import { MAX_ATTEMPTS, planFollowups, type Cycle, type Plan, type SendRow } from "./followup-plan";
 import { sendViaResend, webhookAction } from "./followup-mail";
+import { sendingKey } from "./resend-keys";
 
 // Sends the automatic follow-up emails. Runs every hour from /api/cron/followups; each email goes
 // inside Monday–Friday 9:00–17:00 in the guest's time zone. See followup-plan.ts for the rules.
@@ -30,7 +31,7 @@ export function validUnsubscribe(inquiryId: string, token: string) {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-function portalUrl() {
+export function portalUrl() {
   const u = process.env.PORTAL_URL ?? (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "");
   return u.replace(/\/$/, "");
 }
@@ -40,26 +41,27 @@ export function unsubscribeUrl(inquiryId: string) {
 }
 
 // Is the domain of this address verified in Resend? Then follow-ups can go from it.
-export async function checkSenderDomain(email: string): Promise<{ ready: boolean; message: string; blocked?: boolean }> {
+export async function checkSenderDomain(email: string, clientKey?: string | null): Promise<{ ready: boolean; message: string; blocked?: boolean }> {
   const domain = email.split("@")[1]?.toLowerCase();
   if (!domain) return { ready: false, message: "Enter a full email address." };
   // Listing domains needs a Full access key. RESEND_DOMAINS_KEY lets the sending key stay "Sending access" only.
   // Trim spaces, line breaks and quotes that often come along when a key is pasted into Vercel.
   const clean = (v: string | undefined) => (v ?? "").trim().replace(/^["']|["']$/g, "").trim();
+  const own = clean(clientKey ?? "");
   const domainsKey = clean(process.env.RESEND_DOMAINS_KEY);
-  const key = domainsKey || clean(process.env.RESEND_API_KEY);
-  const which = domainsKey ? `RESEND_DOMAINS_KEY (${domainsKey.slice(0, 7)}…)` : "RESEND_API_KEY, because RESEND_DOMAINS_KEY isn't set in this deployment";
+  const key = own || domainsKey || clean(process.env.RESEND_API_KEY);
+  const which = own ? `the client's own Resend key (…${own.slice(-4)})` : domainsKey ? `RESEND_DOMAINS_KEY (${domainsKey.slice(0, 7)}…)` : "RESEND_API_KEY, because RESEND_DOMAINS_KEY isn't set in this deployment";
   if (!key) return { ready: false, message: "RESEND_API_KEY isn't set in Vercel, so nothing can be sent yet." };
   try {
     const res = await fetch("https://api.resend.com/domains", { headers: { Authorization: `Bearer ${key}` }, cache: "no-store" });
     if (res.status === 401 || res.status === 403) {
       const detail = (await res.text().catch(() => "")).slice(0, 160);
-      return { ready: false, blocked: true, message: `Resend refused the domain check (${res.status}) with ${which}. ${detail ? `Resend says: ${detail}. ` : ""}The key needs Full access. In Vercel, check RESEND_DOMAINS_KEY is set for Production, then redeploy.` };
+      return { ready: false, blocked: true, message: `Resend refused the domain check (${res.status}) with ${which}. ${detail ? `Resend says: ${detail}. ` : ""}${own ? "Make a new key in the client's Resend account with Full access and save it here." : "The key needs Full access. In Vercel, check RESEND_DOMAINS_KEY is set for Production, then redeploy."}` };
     }
     if (!res.ok) return { ready: false, message: `Couldn't reach Resend (${res.status}). Try again in a minute.` };
     const list = ((await res.json()) as { data?: { name: string; status: string }[] }).data ?? [];
     const d = list.find((x) => x.name.toLowerCase() === domain);
-    if (!d) return { ready: false, message: `${domain} isn't in Resend yet. Add it under Domains in Resend, then add the DNS records to the client's domain.` };
+    if (!d) return { ready: false, message: `${domain} isn't in ${own ? "the client's" : "Safari Digital's"} Resend account yet. Add it under Domains in Resend, then add the DNS records to the client's domain.` };
     if (d.status !== "verified") return { ready: false, message: `${domain} is in Resend but not verified yet (${d.status}). DNS changes can take a few hours.` };
     return { ready: true, message: `${domain} is verified. Follow-ups can be sent from ${email}.` };
   } catch {
@@ -131,6 +133,7 @@ export async function runFollowups(now = Date.now()) {
   for (const s of settingsList) {
     if (total >= MAX_PER_RUN) break;
     if (!s.sender_ready || !s.from_email) continue;
+    const key = await sendingKey(s.client_id);
     const [{ data: rulesData }, { data: client }, { data: cyclesData }, { data: supp }] = await Promise.all([
       db.from("followup_rules").select("*").eq("client_id", s.client_id),
       db.from("clients").select("name, account_status").eq("id", s.client_id).maybeSingle(),
@@ -191,7 +194,7 @@ export async function runFollowups(now = Date.now()) {
       const res = await sendViaResend({
         fromEmail: s.from_email, fromName: company, to: q.email.trim(), subject: mail.subject, body: mail.body, inquiryId: q.id,
         unsubscribeUrl: unsubscribeUrl(q.id), idempotencyKey: `followup-${c.id}-${rule.id}`, threadId: `<inquiry-${q.id}@${domain}>`,
-      }, process.env.RESEND_API_KEY);
+      }, key);
       if (res.ok) {
         await db.from("followup_sends").update({ status: "sent", sent_at: new Date().toISOString(), provider_id: res.id, error: null }).eq("id", claimId);
         tally.sent++;
@@ -209,14 +212,19 @@ export async function runFollowups(now = Date.now()) {
 
 // ───────────── Resend webhook: bounces and spam complaints stop follow-ups ─────────────
 
-export async function handleResendEvent(event: Parameters<typeof webhookAction>[0]) {
+export async function handleResendEvent(event: Parameters<typeof webhookAction>[0], clientId?: string) {
   const action = webhookAction(event);
   if (action.kind === "ignore") return { ok: true, action: "ignored" };
   const db = createAdminClient();
-  const { data: send } = await db.from("followup_sends").select("id, client_id, inquiry_id, to_address").eq("provider_id", action.providerId).maybeSingle();
+  // A client's own webhook only touches that client's emails.
+  let sendQ = db.from("followup_sends").select("id, client_id, inquiry_id, to_address").eq("provider_id", action.providerId);
+  if (clientId) sendQ = sendQ.eq("client_id", clientId);
+  const { data: send } = await sendQ.maybeSingle();
   if (!send) {
     // An instant reply that bounced: don't send follow-ups to that address either.
-    const { data: ar } = await db.from("inquiries").select("id, client_id, email").eq("autoreply_provider_id", action.providerId).maybeSingle();
+    let arQ = db.from("inquiries").select("id, client_id, email").eq("autoreply_provider_id", action.providerId);
+    if (clientId) arQ = arQ.eq("client_id", clientId);
+    const { data: ar } = await arQ.maybeSingle();
     if (!ar) return { ok: true, action: "not a follow-up" };
     if (action.kind === "delivered") return { ok: true, action: "delivered" };
     const email = (action.email || String(ar.email ?? "")).toLowerCase();
@@ -272,7 +280,7 @@ export async function sendAutoReply(inquiryId: string): Promise<{ status: "sent"
     const res = await sendViaResend({
       fromEmail: settings.from_email, fromName: company, to: email, subject: mail.subject, body: mail.body, inquiryId: q.id,
       unsubscribeUrl: unsubscribeUrl(q.id), idempotencyKey: `autoreply-${q.id}`, threadId: `<inquiry-${q.id}@${domain}>`, kind: "autoreply",
-    }, process.env.RESEND_API_KEY);
+    }, await sendingKey(q.client_id));
     if (res.ok) {
       await db.from("inquiries").update({ autoreply_status: "sent", autoreply_at: new Date().toISOString(), autoreply_provider_id: res.id, autoreply_error: null }).eq("id", q.id);
       return { status: "sent" };

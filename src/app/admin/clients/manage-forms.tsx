@@ -225,10 +225,37 @@ export function MetaEventsForm({ clientId, datasetId, hasToken }: { clientId: st
   );
 }
 
-export function FollowupSenderForm({ clientId, email, name, clientName }: { clientId: string; email: string | null; name: string | null; clientName: string }) {
+export function FollowupSenderForm({ clientId, email, name, clientName, own, webhookUrl }: {
+  clientId: string; email: string | null; name: string | null; clientName: string;
+  own: { hasKey: boolean; keyEnd: string; hasWebhook: boolean }; webhookUrl: string;
+}) {
   const [state, action] = useActionState<FormState, FormData>(saveFollowupSender.bind(null, clientId), {});
   return (
     <form action={action} autoComplete="off" data-1p-ignore data-lpignore="true" data-form-type="other" className="flex flex-col gap-3">
+      <fieldset className="flex flex-col gap-3 rounded-control border border-line-soft bg-sidebar px-3.5 py-3">
+        <legend className="px-1 text-[13px] font-semibold">Client&apos;s own Resend account</legend>
+        <p className="-mt-1 text-xs text-slate">
+          {own.hasKey ? <>Saved key ending <span className="font-mono text-ink">…{own.keyEnd}</span>. Follow-ups go through the client&apos;s Resend account. Leave the fields empty to keep it.</>
+            : "Not set: follow-ups go through Safari Digital's Resend account. Paste a key from the client's account (API Keys → Create, Full access)."}
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Resend API key" htmlFor="fu_key" optional hint="Starts with re_. Stored on the server only; never shown again.">
+            <Input id="fu_key" name="resend_key" type="password" autoComplete="new-password" data-1p-ignore data-lpignore="true" placeholder={own.hasKey ? `Saved (…${own.keyEnd})` : "re_…"} />
+          </Field>
+          <Field label="Webhook signing secret" htmlFor="fu_whsec" optional hint={own.hasWebhook ? "Saved. Paste a new one only to replace it." : "Starts with whsec_. Lets bounced addresses stop automatically."}>
+            <Input id="fu_whsec" name="webhook_secret" type="password" autoComplete="new-password" data-1p-ignore data-lpignore="true" placeholder={own.hasWebhook ? "Saved" : "whsec_…"} />
+          </Field>
+        </div>
+        <div className="flex flex-col gap-1 text-xs text-slate">
+          <span>Webhook endpoint for the client&apos;s Resend (Webhooks → Add endpoint, events: email.bounced, email.complained, email.delivered):</span>
+          <code className="select-all break-all rounded-[6px] border border-line bg-white px-2 py-1.5 font-mono text-[12px] text-ink">{webhookUrl}</code>
+        </div>
+        {own.hasKey && (
+          <label className="flex items-center gap-2 text-[13px] text-body">
+            <input type="checkbox" name="remove_key" className="size-4 accent-[#1A6647]" />Remove the client&apos;s key and use Safari Digital&apos;s Resend again
+          </label>
+        )}
+      </fieldset>
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Send from" htmlFor="fu_from_email" hint="An address on the client's own domain, e.g. bookings@theircompany.com. Replies go here too.">
           <Input id="fu_from_email" name="from_email" type="text" inputMode="email" autoComplete="off" data-1p-ignore data-lpignore="true" defaultValue={email ?? ""} placeholder="bookings@theircompany.com" />

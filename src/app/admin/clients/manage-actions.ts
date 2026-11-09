@@ -9,6 +9,8 @@ import type { Campaign, OnboardingStatus, WebsiteStage } from "@/lib/types";
 import { syncClient } from "@/lib/meta";
 import { sendTestEvent } from "@/lib/meta-events";
 import { checkSenderDomain } from "@/lib/followups";
+import { clientResend, cleanKey } from "@/lib/resend-keys";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export type FormState = { error?: string; saved?: boolean; message?: string };
 
@@ -205,7 +207,24 @@ export async function saveFollowupSender(clientId: string, _: FormState, form: F
   const email = str(form, "from_email").toLowerCase();
   const name = str(form, "from_name").slice(0, 80);
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: "Enter a full email address, e.g. bookings@theircompany.com" };
-  let check: { ready: boolean; message: string; blocked?: boolean } = email ? await checkSenderDomain(email) : { ready: false, message: "Removed. No follow-up emails will be sent for this client." };
+  // The client's own Resend account: empty fields keep what's saved.
+  const newKey = cleanKey(str(form, "resend_key"));
+  const newSecret = cleanKey(str(form, "webhook_secret"));
+  const admin = createAdminClient();
+  if (form.get("remove_key") === "on") {
+    await admin.from("client_resend").delete().eq("client_id", clientId);
+  } else if (newKey || newSecret) {
+    if (newKey && !/^re_[A-Za-z0-9_]{10,}$/.test(newKey)) return { error: "That doesn't look like a Resend API key. They start with re_." };
+    if (newSecret && !/^whsec_/.test(newSecret)) return { error: "That doesn't look like a Resend webhook signing secret. They start with whsec_." };
+    const current = await clientResend(clientId);
+    if (!newKey && !current) return { error: "Add the client's Resend API key first." };
+    const { error: kErr } = await admin.from("client_resend").upsert({
+      client_id: clientId, api_key: newKey || current!.apiKey, webhook_secret: newSecret || current?.webhookSecret || null, updated_at: new Date().toISOString(),
+    }, { onConflict: "client_id" });
+    if (kErr) return { error: /client_resend|schema cache/.test(kErr.message) ? "Run 0029_client_resend.sql in Supabase first." : kErr.message };
+  }
+  const own = await clientResend(clientId);
+  let check: { ready: boolean; message: string; blocked?: boolean } = email ? await checkSenderDomain(email, own?.apiKey) : { ready: false, message: "Removed. No follow-up emails will be sent for this client." };
   // The key can't list domains, but the admin checked Resend by hand: trust that.
   if (email && !check.ready && check.blocked && form.get("manual_ok") === "on") {
     check = { ready: true, message: `Marked ready by hand. Follow-ups will go from ${email}; if the domain isn't really verified, Resend refuses them and they show as Failed.` };

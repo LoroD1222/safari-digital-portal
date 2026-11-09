@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { FOLLOWUP_DAYS, FOLLOWUP_STAGES, ALL_TEMPLATE_KEYS, TEMPLATE_VERSION, autoreplyDefault, composeEmail, presetByKey, type FollowupStage, type TemplateKey } from "@/lib/followup-presets";
 import { installTemplate } from "@/lib/followups";
 import { sendViaResend } from "@/lib/followup-mail";
+import { sendingKey } from "@/lib/resend-keys";
 
 type Result = { ok: true } | { ok: false; error: string };
 
@@ -167,6 +168,6 @@ export async function sendAutoReplyTest(p: { subject: string; body: string }): P
   const res = await sendViaResend({
     fromEmail: s.from_email as string, fromName: name, to, subject: `[Test] ${mail.subject}`, body: mail.body, inquiryId: "test",
     unsubscribeUrl: "https://example.com", idempotencyKey: `autoreply-test-${company.id}-${Date.now()}`, threadId: `<test-${Date.now()}@${String(s.from_email).split("@")[1]}>`, kind: "autoreply",
-  }, process.env.RESEND_API_KEY);
+  }, await sendingKey(company.id));
   return res.ok ? { ok: true, to } : { ok: false, error: `Resend didn't send it. ${res.error}` };
 }

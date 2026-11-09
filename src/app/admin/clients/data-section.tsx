@@ -4,6 +4,8 @@ import type { Client } from "@/lib/types";
 import { VercelProjectPicker } from "./data-connections";
 import { FollowupSenderForm, MetaEventsForm, MetaForm } from "./manage-forms";
 import { createClient } from "@/lib/supabase/server";
+import { clientResendSummary } from "@/lib/resend-keys";
+import { portalUrl } from "@/lib/followups";
 import { fmtDateTime } from "@/lib/dates";
 import { createInquiryKey } from "./manage-actions";
 import { CopyButton } from "@/components/copy-button";
@@ -239,6 +241,7 @@ async function FollowupCard({ client }: { client: Client }) {
     supabase.from("followup_sends").select("id", { count: "exact", head: true }).eq("client_id", client.id).eq("status", "sent"),
   ]);
   const ready = !!fs?.sender_ready && !!fs?.from_email;
+  const own = await clientResendSummary(client.id);
   return (
     <Card title="Follow-up emails" what="Automatic reminders to guests who haven't replied, sent from the client's own address"
       status={error ? <Badge tone="amber">Run 0020_followups.sql</Badge> : ready ? <Badge tone="green">Sender ready</Badge> : fs?.from_email ? <Badge tone="amber">Domain not verified</Badge> : <Badge>Not set up</Badge>}>
@@ -247,9 +250,10 @@ async function FollowupCard({ client }: { client: Client }) {
           <p className="text-[13px] text-body">
             The client has follow-ups <span className="font-medium text-ink">{fs?.enabled ? "on" : "off"}</span>
             {fs?.enabled ? ` · ${onRules ?? 0} switched on` : ""} · {sent ?? 0} sent so far.
-            {" "}To set up: add the client&apos;s domain in Resend (Domains), give them the DNS records, then enter the address here once it shows Verified.
+            {" "}To set up: in the client&apos;s Resend account, add their domain (Domains) and its DNS records, paste a Full access API key below, then enter the address once the domain shows Verified.
           </p>
-          <FollowupSenderForm clientId={client.id} email={fs?.from_email ?? null} name={fs?.from_name ?? null} clientName={client.name} />
+          <FollowupSenderForm clientId={client.id} email={fs?.from_email ?? null} name={fs?.from_name ?? null} clientName={client.name}
+            own={own} webhookUrl={`${portalUrl()}/api/webhooks/resend?c=${client.id}`} />
         </>
       )}
     </Card>

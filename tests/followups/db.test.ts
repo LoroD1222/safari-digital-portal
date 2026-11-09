@@ -191,3 +191,15 @@ describe("Instant reply", () => {
     await expect(db.exec(`update public.inquiries set autoreply_status = 'bogus' where id = '${id}'`)).rejects.toThrow(/autoreply_status/);
   });
 });
+
+describe("Client Resend keys", () => {
+  it("no signed-in user can read or write them", async () => {
+    await as(null);
+    await db.exec(`insert into public.client_resend (client_id, api_key) values ('${A}', 're_secret_key_123456')`);
+    await as(UA);
+    // (The test setup grants every table back to signed-in users; row security alone still hides them.)
+    expect(await q(`select * from public.client_resend`)).toHaveLength(0);
+    await expect(db.exec(`insert into public.client_resend (client_id, api_key) values ('${B}', 're_x')`)).rejects.toThrow(/row-level security/);
+    await as(null);
+  });
+});

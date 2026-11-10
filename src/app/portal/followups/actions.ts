@@ -2,7 +2,7 @@
 import { revalidatePath } from "next/cache";
 import { getPortalContext } from "@/lib/portal";
 import { createClient } from "@/lib/supabase/server";
-import { FOLLOWUP_DAYS, FOLLOWUP_STAGES, ALL_TEMPLATE_KEYS, TEMPLATE_VERSION, autoreplyDefault, composeEmail, presetByKey, type FollowupStage, type TemplateKey } from "@/lib/followup-presets";
+import { FOLLOWUP_DAYS, FOLLOWUP_STAGES, ALL_TEMPLATE_KEYS, TEMPLATE_VERSION, autoreplyDefault, toDelay, type DelayUnit, composeEmail, presetByKey, type FollowupStage, type TemplateKey } from "@/lib/followup-presets";
 import { installTemplate } from "@/lib/followups";
 import { sendViaResend } from "@/lib/followup-mail";
 import { sendingKey } from "@/lib/resend-keys";
@@ -57,18 +57,25 @@ export async function saveFollowupPrefs(p: { agent_name: string; timezone: strin
   return error ? fail(error.message) : done();
 }
 
-export type RulePatch = { enabled?: boolean; days?: number; subject?: string; body?: string; name?: string; stage?: FollowupStage };
+export type RulePatch = { enabled?: boolean; days?: number; delay?: { value: number; unit: DelayUnit }; subject?: string; body?: string; name?: string; stage?: FollowupStage };
 
 export async function saveRule(id: string, patch: RulePatch): Promise<Result> {
   const { clientId, supabase } = await ctx();
   const now = new Date().toISOString();
   const p: Record<string, unknown> = { updated_at: now };
   // Changing when an email goes (or switching it on) never sends an already-due step late.
-  if (patch.enabled !== undefined || patch.days !== undefined || patch.stage !== undefined) p.timing_changed_at = now;
+  if (patch.enabled !== undefined || patch.days !== undefined || patch.delay !== undefined || patch.stage !== undefined) p.timing_changed_at = now;
   if (patch.enabled !== undefined) p.enabled = !!patch.enabled;
   if (patch.days !== undefined) {
     if (!FOLLOWUP_DAYS.includes(Number(patch.days))) return { ok: false, error: "Pick how many days to wait." };
     p.days = Number(patch.days);
+    p.delay_minutes = null;
+  }
+  if (patch.delay !== undefined) {
+    const d = toDelay(Number(patch.delay.value), patch.delay.unit);
+    if ("error" in d) return { ok: false, error: d.error };
+    p.days = d.days;
+    p.delay_minutes = d.delay_minutes;
   }
   if (patch.stage !== undefined) {
     if (!FOLLOWUP_STAGES.includes(patch.stage)) return { ok: false, error: "Pick a stage." };
@@ -82,17 +89,18 @@ export async function saveRule(id: string, patch: RulePatch): Promise<Result> {
     p[k] = v;
   }
   const { error } = await supabase.from("followup_rules").update(p).eq("id", id).eq("client_id", clientId);
+  if (error && /delay_minutes|followup_rules_days/.test(error.message)) return { ok: false, error: "Minutes and hours need an update: Safari Digital has to run 0030_followup_delay_minutes.sql." };
   return error ? fail(error.message) : done();
 }
 
 // Put a template email back to Safari Digital's wording.
 export async function resetRule(id: string): Promise<Result> {
   const { clientId, supabase } = await ctx();
-  const { data } = await supabase.from("followup_rules").select("preset").eq("id", id).eq("client_id", clientId).maybeSingle();
+  const { data } = await supabase.from("followup_rules").select("*").eq("id", id).eq("client_id", clientId).maybeSingle();
   const preset = presetByKey(data?.preset ?? null);
   if (!preset) return { ok: false, error: "This follow-up isn't from a template." };
   const { error } = await supabase.from("followup_rules")
-    .update({ name: preset.step, subject: preset.subject, body: preset.body, days: preset.days, updated_at: new Date().toISOString(), timing_changed_at: new Date().toISOString() })
+    .update({ name: preset.step, subject: preset.subject, body: preset.body, days: preset.days, ...(data && "delay_minutes" in data ? { delay_minutes: null } : {}), updated_at: new Date().toISOString(), timing_changed_at: new Date().toISOString() })
     .eq("id", id).eq("client_id", clientId);
   return error ? fail(error.message) : done();
 }

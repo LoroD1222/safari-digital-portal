@@ -272,3 +272,41 @@ describe("personalisation", () => {
     }
   });
 });
+
+describe("Minute and hour follow-ups", () => {
+  const own = (id: string, delay_minutes: number | null, days = 0): FollowupRule => ({
+    id, client_id: "c1", preset: null, step: null, stage: "quoted", days, delay_minutes, name: id,
+    subject: id, body: "Hi", enabled: true, created_at: iso(MON - 30 * DAY), timing_changed_at: iso(MON - 30 * DAY),
+  });
+
+  it("sends 30 minutes after the quote, even on a Saturday evening", () => {
+    const sat = Date.UTC(2025, 10, 8, 15); // Saturday 18:00 in Dar es Salaam
+    const plan = planFollowups(input({ now: sat, rules: [own("m30", 30)], cycle: cycle("quoted", sat) }));
+    expect(plan.next!.dueAt).toBe(sat + 30 * 60_000);
+  });
+
+  it("waits until 8:00 when the time falls at night", () => {
+    const late = Date.UTC(2025, 10, 3, 18); // Monday 21:00 in Dar es Salaam
+    const plan = planFollowups(input({ now: late, rules: [own("h2", 120)], cycle: cycle("quoted", late) }));
+    expect(plan.next!.dueAt).toBe(Date.UTC(2025, 10, 4, 5)); // Tuesday 08:00
+  });
+
+  it("orders by real wait, and a 2-hour step follows a 30-minute one without the 2-day gap", () => {
+    const rules = [own("d1", null, 1), own("h2", 120), own("m30", 30)];
+    const first = planFollowups(input({ rules, cycle: cycle("quoted", MON) }));
+    expect(first.next!.rule.id).toBe("m30");
+    const second = planFollowups(input({ now: MON + 31 * 60_000, rules, cycle: cycle("quoted", MON), sends: [sent("m30", MON + 30 * 60_000)] }));
+    expect(second.next!.rule.id).toBe("h2");
+    expect(second.next!.dueAt).toBe(MON + 2 * HOUR);
+    // The Day 1 step after the 2-hour one goes on day 1, not 40 hours after the last email.
+    const third = planFollowups(input({ now: MON + 3 * HOUR, rules, cycle: cycle("quoted", MON), sends: [sent("m30", MON + 30 * 60_000), sent("h2", MON + 2 * HOUR)] }));
+    expect(third.next!.rule.id).toBe("d1");
+    expect(third.next!.dueAt).toBe(MON + DAY);
+  });
+
+  it("counts a short step from the operator's own message", () => {
+    const c = cycle("quoted", MON, { last_operator_at: iso(MON + HOUR) });
+    const plan = planFollowups(input({ rules: [own("h2", 120)], cycle: c }));
+    expect(plan.next!.dueAt).toBe(MON + 3 * HOUR);
+  });
+});

@@ -1,6 +1,6 @@
 import "server-only";
 import type { createClient } from "./supabase/server";
-import { FOLLOWUP_STAGES, TEMPLATES, waNumber, type FollowupRule, type FollowupSettings } from "./followup-presets";
+import { FOLLOWUP_STAGES, TEMPLATES, delayLabel, delayMs, waNumber, type FollowupRule, type FollowupSettings } from "./followup-presets";
 import { DAY, type Cycle, type Plan, type SendRow } from "./followup-plan";
 import { planFor, type InquiryLite } from "./followups";
 
@@ -76,7 +76,7 @@ export type InquiryFollowupView = {
   next: { subject: string; when: string } | null; remaining: number;
   lastSent: { subject: string; when: string } | null;
   history: { id: string; subject: string; status: string; when: string; note: string | null; channel: string }[];
-  upcoming: { subject: string; day: number }[];
+  upcoming: { subject: string; day: number; when: string }[];
 };
 
 export async function inquiryFollowupView(supabase: Supabase, q: InquiryLite, now = Date.now()): Promise<InquiryFollowupView> {
@@ -89,7 +89,7 @@ export async function inquiryFollowupView(supabase: Supabase, q: InquiryLite, no
   const sent = f.sends.filter((x) => x.status === "sent");
   const anchor = cycle?.confirmed_at ? new Date(cycle.confirmed_at).getTime() : null;
   const done = (id: string) => f.sends.some((x) => x.cycle_id === cycle?.id && x.step_key === id && x.channel === "email" && x.status !== "failed");
-  const upcoming = cycle ? f.rules.filter((r) => r.enabled && r.stage === cycle.stage && !done(r.id)).sort((a, b) => a.days - b.days).map((r) => ({ subject: r.subject, day: r.days })) : [];
+  const upcoming = cycle ? f.rules.filter((r) => r.enabled && r.stage === cycle.stage && !done(r.id)).sort((a, b) => delayMs(a) - delayMs(b)).map((r) => ({ subject: r.subject, day: r.days, when: delayLabel(r) })) : [];
   // The instant reply (if any) shows in the history too.
   const { data: ar } = await supabase.from("inquiries").select("autoreply_status, autoreply_at, autoreply_error").eq("id", q.id).maybeSingle();
   const instant = ar?.autoreply_status && ar.autoreply_at ? [{
@@ -126,6 +126,6 @@ export function whatsappDueFor(o: { now: number; rules: FollowupRule[]; cycle: C
   const anchor = new Date(c.confirmed_at).getTime();
   const done = (id: string) => o.sends.some((s) => s.cycle_id === c.id && s.step_key === id && s.channel === "whatsapp");
   return o.rules.filter((r) => r.enabled && r.stage === c.stage && !done(r.id))
-    .filter((r) => { const at = anchor + r.days * DAY; return at <= o.now && at >= o.now - 7 * DAY; })
-    .sort((a, b) => b.days - a.days)[0] ?? null;
+    .filter((r) => { const at = anchor + delayMs(r); return at <= o.now && at >= o.now - 7 * DAY; })
+    .sort((a, b) => delayMs(b) - delayMs(a))[0] ?? null;
 }

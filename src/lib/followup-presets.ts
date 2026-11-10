@@ -7,11 +7,41 @@ export type TemplateKey = "standard" | "gentle" | "persistent" | "blank" | "agen
 export const FOLLOWUP_STAGES: FollowupStage[] = ["contacted", "no_answer", "no_show", "quoted", "negotiating"];
 export const FOLLOWUP_DAYS = [1, 2, 3, 4, 5, 6, 7, 9, 10, 12, 14, 15, 17, 21, 22, 25, 28, 30, 42, 45, 60];
 
+// ───────────── How long a follow-up waits ─────────────
+// Days (the templates) or, for the operator's own timing, minutes and hours.
+export type DelayUnit = "minutes" | "hours" | "days";
+export type Delay = { days: number; delay_minutes?: number | null };
+export const DELAY_LIMITS: Record<DelayUnit, [number, number]> = { minutes: [5, 59], hours: [1, 72], days: [1, 60] };
+
+export function delayMs(r: Delay) {
+  return r.delay_minutes != null ? r.delay_minutes * 60_000 : r.days * 86_400_000;
+}
+export function delayParts(r: Delay): { value: number; unit: DelayUnit } {
+  if (r.delay_minutes == null) return { value: r.days, unit: "days" };
+  return r.delay_minutes % 60 === 0 ? { value: r.delay_minutes / 60, unit: "hours" } : { value: r.delay_minutes, unit: "minutes" };
+}
+// What's stored for a value and unit, or an error.
+export function toDelay(value: number, unit: DelayUnit): { days: number; delay_minutes: number | null } | { error: string } {
+  const [min, max] = DELAY_LIMITS[unit] ?? [0, 0];
+  if (!Number.isInteger(value) || value < min || value > max) return { error: `Pick ${min} to ${max} ${unit}.` };
+  if (unit === "days") return { days: value, delay_minutes: null };
+  return { days: 0, delay_minutes: unit === "hours" ? value * 60 : value };
+}
+// Short labels for the list ("Day 3", "2 hours", "30 min") and the badge (unit on top, number below).
+export function delayLabel(r: Delay) {
+  const { value, unit } = delayParts(r);
+  return unit === "days" ? `Day ${value}` : unit === "hours" ? `${value} ${value === 1 ? "hour" : "hours"}` : `${value} min`;
+}
+export function delayBadge(r: Delay) {
+  const { value, unit } = delayParts(r);
+  return { top: unit === "days" ? "Day" : unit === "hours" ? (value === 1 ? "Hour" : "Hours") : "Min", value };
+}
+
 // Bump when the template copy changes: clients still on older copy get the new emails (their own stay).
 export const TEMPLATE_VERSION = 2;
 
 export type FollowupRule = {
-  id: string; client_id: string; preset: string | null; step: string | null; stage: FollowupStage; days: number;
+  id: string; client_id: string; preset: string | null; step: string | null; stage: FollowupStage; days: number; delay_minutes?: number | null;
   name: string; subject: string; body: string; enabled: boolean; created_at: string; timing_changed_at?: string | null;
 };
 

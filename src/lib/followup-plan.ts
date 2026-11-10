@@ -1,7 +1,7 @@
 // Works out what the automatic follow-ups do next for one inquiry.
 // Pure (no database, no clock of its own) so the sender, the screens and the tests all agree.
 
-import type { FollowupRule, FollowupStage } from "./followup-presets";
+import { delayMs, type FollowupRule, type FollowupStage } from "./followup-presets";
 
 export const HOUR = 3_600_000;
 export const DAY = 24 * HOUR;
@@ -9,7 +9,11 @@ export const GAP_AFTER_AUTO = 40 * HOUR;      // never two automatic emails with
 export const GAP_AFTER_MANUAL = 72 * HOUR;    // a message the operator sent pushes the next one back 3 days
 export const MAX_LATE = 7 * DAY;              // a step more than a week overdue (e.g. the system was down) is skipped
 export const MAX_ATTEMPTS = 3;                // provider errors are retried on the next runs, then given up
-export const WINDOW = { startHour: 9, endHour: 17 }; // Monday–Friday, guest's local time
+export type Window = { startHour: number; endHour: number; weekends: boolean };
+export const WINDOW: Window = { startHour: 9, endHour: 17, weekends: false };       // day steps: Monday–Friday, guest's local time
+export const SHORT_WINDOW: Window = { startHour: 8, endHour: 20, weekends: true };  // minute/hour steps: any day, waking hours
+// A step that waits less than a day is "short": it goes at its own time (within waking hours), not office hours.
+export const isShort = (r: FollowupRule) => delayMs(r) < DAY;
 
 export type CycleStatus = "awaiting" | "active" | "paused" | "replied" | "ended";
 export type Cycle = {
@@ -89,23 +93,23 @@ export function zonedTime(y: number, m: number, d: number, h: number, tz: string
 
 const WEEKEND = new Set(["Sat", "Sun"]);
 
-// The first moment at or after t that's inside Monday–Friday 9:00–17:00 in tz.
-export function nextSendTime(t: number, tz: string) {
+// The first moment at or after t that's inside the window (default Monday–Friday 9:00–17:00) in tz.
+export function nextSendTime(t: number, tz: string, w: Window = WINDOW) {
   let at = t;
   for (let i = 0; i < 10; i++) {
     const p = parts(at, tz);
-    if (!WEEKEND.has(p.wd) && p.h >= WINDOW.startHour && p.h < WINDOW.endHour) return at;
-    // Jump to 9:00 today if it's early, else 9:00 the next day; then check the weekday again.
-    const startToday = zonedTime(p.y, p.m, p.d, WINDOW.startHour, tz);
-    if (!WEEKEND.has(p.wd) && p.h < WINDOW.startHour) return startToday;
+    const dayOk = w.weekends || !WEEKEND.has(p.wd);
+    if (dayOk && p.h >= w.startHour && p.h < w.endHour) return at;
+    // Jump to the start today if it's early, else the start the next day; then check the weekday again.
+    if (dayOk && p.h < w.startHour) return zonedTime(p.y, p.m, p.d, w.startHour, tz);
     const next = new Date(Date.UTC(p.y, p.m - 1, p.d) + DAY);
-    at = zonedTime(next.getUTCFullYear(), next.getUTCMonth() + 1, next.getUTCDate(), WINDOW.startHour, tz);
+    at = zonedTime(next.getUTCFullYear(), next.getUTCMonth() + 1, next.getUTCDate(), w.startHour, tz);
   }
   return at;
 }
 
-export function inWindow(t: number, tz: string) {
-  return nextSendTime(t, tz) === t;
+export function inWindow(t: number, tz: string, w: Window = WINDOW) {
+  return nextSendTime(t, tz, w) === t;
 }
 
 // ───────────── Travel dates ─────────────
@@ -139,7 +143,7 @@ export function planFollowups(i: PlanInput): Plan {
   const c = i.cycle;
   if (!i.settings.enabled) return { ...base, state: "off", label: "Follow-ups are off" };
   if (!c || c.status === "ended") return { ...base, state: "none", label: "No follow-ups in this stage" };
-  const stageRules = i.rules.filter((r) => r.enabled && r.stage === c.stage).sort((a, b) => a.days - b.days);
+  const stageRules = i.rules.filter((r) => r.enabled && r.stage === c.stage).sort((a, b) => delayMs(a) - delayMs(b));
   const mine = i.sends.filter((s) => s.cycle_id === c.id && s.channel === "email");
   const isDone = (r: FollowupRule) => mine.some((s) => s.step_key === r.id && (DONE.includes(s.status) || (s.status === "failed" && s.attempts >= MAX_ATTEMPTS)));
   const open = stageRules.filter((r) => !isDone(r));
@@ -168,7 +172,7 @@ export function planFollowups(i: PlanInput): Plan {
   const skip: Plan["skip"] = [];
   const candidates: FollowupRule[] = [];
   for (const r of open) {
-    const due = anchor + r.days * DAY;
+    const due = anchor + delayMs(r);
     const retrying = mine.some((s) => s.step_key === r.id && s.status === "failed");
     if (!retrying && due < floorFor(r)) skip.push({ rule: r, reason: "Was due before follow-ups started, resumed or changed" });
     else if (!retrying && due < i.now - MAX_LATE) skip.push({ rule: r, reason: "More than a week late" });
@@ -177,15 +181,25 @@ export function planFollowups(i: PlanInput): Plan {
   if (!candidates.length) return { ...base, skip, remaining: 0, state: "done", label: "All follow-ups for this stage have been sent" };
 
   const rule = candidates[0];
-  const lastAuto = Math.max(0, ...i.sends.filter((s) => s.channel === "email" && s.sent_at && (s.status === "sent" || s.status === "sending")).map((s) => ts(s.sent_at)));
+  const autoSends = i.sends.filter((s) => s.channel === "email" && s.sent_at && (s.status === "sent" || s.status === "sending"));
+  const last = autoSends.sort((a, b) => ts(b.sent_at) - ts(a.sent_at))[0];
+  const lastAuto = ts(last?.sent_at);
   const manual = ts(c.last_operator_at);
-  let earliest = anchor + rule.days * DAY;
-  if (lastAuto) earliest = Math.max(earliest, lastAuto + GAP_AFTER_AUTO);
-  if (manual > anchor) earliest = Math.max(earliest, manual + GAP_AFTER_MANUAL);
-  const dueAt = nextSendTime(earliest, tz);
+  const short = isShort(rule);
+  let earliest = anchor + delayMs(rule);
+  if (lastAuto) {
+    // ~2 days between day steps. After a short step in this stage, only the difference between the two waits.
+    const prev = last?.cycle_id === c.id ? stageRules.find((r) => r.id === last.step_key) : undefined;
+    const gap = short ? 0 : prev && isShort(prev) ? Math.min(GAP_AFTER_AUTO, Math.max(0, delayMs(rule) - delayMs(prev))) : GAP_AFTER_AUTO;
+    earliest = Math.max(earliest, lastAuto + gap);
+  }
+  // A message the operator sent: day steps wait 3 days after it; short steps count their wait from it.
+  if (manual > anchor) earliest = Math.max(earliest, manual + (short ? delayMs(rule) : GAP_AFTER_MANUAL));
+  const window = short ? SHORT_WINDOW : WINDOW;
+  const dueAt = nextSendTime(earliest, tz, window);
   const failed = mine.find((s) => s.step_key === rule.id && s.status === "failed");
   return {
     state: "scheduled", label: "Scheduled", skip, remaining: candidates.length, timezone: tz,
-    next: { rule, dueAt, sendNow: i.now >= dueAt && inWindow(i.now, tz), attempt: (failed?.attempts ?? 0) + 1 },
+    next: { rule, dueAt, sendNow: i.now >= dueAt && inWindow(i.now, tz, window), attempt: (failed?.attempts ?? 0) + 1 },
   };
 }

@@ -203,3 +203,15 @@ describe("Client Resend keys", () => {
     await as(null);
   });
 });
+
+describe("Minute and hour timing", () => {
+  it("allows 5 minutes to 3 days in minutes, or 1 to 60 days, never both", async () => {
+    await as(null);
+    const ins = (days: number, mins: string) => db.exec(`insert into public.followup_rules (client_id, stage, days, delay_minutes, name, subject, body) values ('${A}', 'quoted', ${days}, ${mins}, 'x', 'x', 'x')`);
+    await ins(0, "30");
+    await ins(3, "null");
+    await expect(ins(0, "2")).rejects.toThrow(/followup_rules_days/);
+    await expect(ins(2, "30")).rejects.toThrow(/followup_rules_days/);
+    await expect(ins(0, "null")).rejects.toThrow(/followup_rules_days/);
+  });
+});

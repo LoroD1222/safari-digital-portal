@@ -6,8 +6,8 @@ import { Icon, type IconName } from "./icons";
 import { Alert, Badge, Button, Input, Select, Textarea } from "./ui";
 import { ConfirmDialog } from "./confirm-dialog";
 import {
-  FOLLOWUP_DAYS, FOLLOWUP_STAGES, INTERNAL_TEMPLATE_KEYS, TEMPLATES, TEMPLATE_KEYS, TOKENS, composeEmail, presetByKey,
-  type FollowupRule, type FollowupStage, type TemplateKey,
+  DELAY_LIMITS, FOLLOWUP_STAGES, INTERNAL_TEMPLATE_KEYS, TEMPLATES, TEMPLATE_KEYS, TOKENS, composeEmail, delayBadge, delayLabel, delayMs, delayParts, presetByKey,
+  type DelayUnit, type FollowupRule, type FollowupStage, type TemplateKey,
 } from "@/lib/followup-presets";
 import { useStageWords } from "./stage-labels";
 import {
@@ -84,7 +84,7 @@ export function FollowupsManager(p: {
   const ownRules = p.rules.filter((r) => !r.preset);
   const isEdited = (r: FollowupRule) => {
     const base = presetByKey(r.preset);
-    return !!base && (base.subject !== r.subject || base.body !== r.body || base.days !== r.days);
+    return !!base && (base.subject !== r.subject || base.body !== r.body || base.days !== r.days || r.delay_minutes != null);
   };
   const editedCount = presetRules.filter(isEdited).length;
   const restoring = pick === p.template;
@@ -110,7 +110,7 @@ export function FollowupsManager(p: {
   const stagesWithRules = FOLLOWUP_STAGES.filter((s) => p.rules.some((r) => r.stage === s));
   const groups = FOLLOWUP_STAGES
     .filter((s) => stage === "all" || s === stage)
-    .map((s) => ({ stage: s, rules: p.rules.filter((r) => r.stage === s).sort((a, b) => a.days - b.days) }))
+    .map((s) => ({ stage: s, rules: p.rules.filter((r) => r.stage === s).sort((a, b) => delayMs(a) - delayMs(b)) }))
     .filter((g) => g.rules.length);
   const whatsapp = p.whatsapp.filter((w) => !tapped.includes(w.inquiryId));
 
@@ -498,11 +498,16 @@ function RuleRow({ rule, company, agent, open, pending, onOpen, onToggle, onSave
   const { label: L, internal } = useStageWords();
   const own = !rule.preset;
   const preset = presetByKey(rule.preset);
-  const [d, setD] = useState({ name: rule.name, stage: rule.stage, days: rule.days, subject: rule.subject, body: rule.body });
+  const [d, setD] = useState({ name: rule.name, stage: rule.stage, ...delayParts(rule), subject: rule.subject, body: rule.body });
   const [seen, setSeen] = useState(rule);
-  if (rule !== seen) { setSeen(rule); setD({ name: rule.name, stage: rule.stage, days: rule.days, subject: rule.subject, body: rule.body }); }
-  const changed = d.name !== rule.name || d.stage !== rule.stage || d.days !== rule.days || d.subject !== rule.subject || d.body !== rule.body;
-  const edited = !!preset && (preset.subject !== rule.subject || preset.body !== rule.body || preset.days !== rule.days);
+  if (rule !== seen) { setSeen(rule); setD({ name: rule.name, stage: rule.stage, ...delayParts(rule), subject: rule.subject, body: rule.body }); }
+  const cur = delayParts(rule);
+  const timingChanged = d.value !== cur.value || d.unit !== cur.unit;
+  const changed = d.name !== rule.name || d.stage !== rule.stage || timingChanged || d.subject !== rule.subject || d.body !== rule.body;
+  const edited = !!preset && (preset.subject !== rule.subject || preset.body !== rule.body || preset.days !== rule.days || rule.delay_minutes != null);
+  const [lo, hi] = DELAY_LIMITS[d.unit];
+  const valueOk = Number.isInteger(d.value) && d.value >= lo && d.value <= hi;
+  const delay = { value: d.value, unit: d.unit };
   // Tags go in where the cursor is, in the subject or the message (whichever was used last).
   const subjectRef = useRef<HTMLInputElement>(null);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
@@ -523,9 +528,10 @@ function RuleRow({ rule, company, agent, open, pending, onOpen, onToggle, onSave
   return (
     <li className={open ? "bg-[#FBFCFA]" : ""}>
       <div className="grid grid-cols-[64px_minmax(0,1fr)_auto] items-center gap-x-3.5 px-4 py-3">
-        <span className={`flex h-11 flex-col items-center justify-center rounded-control ${rule.enabled ? "bg-[#E3F4EA] text-forest" : "bg-[#F1F2F4] text-slate"}`}>
-          <span className="text-[10px] uppercase tracking-[0.04em]">Day</span>
-          <span className="text-base font-semibold leading-none">{rule.days}</span>
+        <span title={`Sent ${delayLabel(rule).startsWith("Day") ? `on ${delayLabel(rule)}` : `${delayLabel(rule)} after`}`}
+          className={`flex h-11 flex-col items-center justify-center rounded-control ${rule.enabled ? "bg-[#E3F4EA] text-forest" : "bg-[#F1F2F4] text-slate"}`}>
+          <span className="text-[10px] uppercase tracking-[0.04em]">{delayBadge(rule).top}</span>
+          <span className="text-base font-semibold leading-none">{delayBadge(rule).value}</span>
         </span>
         <button type="button" onClick={onOpen} aria-expanded={open} aria-controls={id}
           className={`flex min-w-0 flex-col items-start gap-0.5 text-left ${rule.enabled ? "text-ink" : "text-slate"}`}>
@@ -542,7 +548,7 @@ function RuleRow({ rule, company, agent, open, pending, onOpen, onToggle, onSave
       </div>
       {open && (
         <div id={id} className="flex flex-col gap-3 px-4 pb-4 sm:pl-[94px]">
-          <div className="grid gap-2.5 sm:grid-cols-[minmax(0,1fr)_150px]">
+          <div className="grid gap-2.5 sm:grid-cols-[minmax(0,1fr)_200px]">
             {own ? (
               <label className="flex flex-col gap-1.5 text-[13px] font-medium">When the inquiry is in
                 <Select value={d.stage} onChange={(e) => setD({ ...d, stage: e.target.value as FollowupStage })}>
@@ -552,11 +558,26 @@ function RuleRow({ rule, company, agent, open, pending, onOpen, onToggle, onSave
               <span className="flex flex-col gap-1.5 text-[13px] font-medium">Stage
                 <span className="flex h-10 items-center rounded-control border border-[#EEF0F2] bg-sidebar px-3 font-normal text-body">{L[rule.stage]}</span></span>
             )}
-            <label className="flex flex-col gap-1.5 text-[13px] font-medium">Send on
-              <Select value={d.days} onChange={(e) => setD({ ...d, days: Number(e.target.value) })}>
-                {FOLLOWUP_DAYS.map((n) => <option key={n} value={n}>Day {n}</option>)}
-              </Select></label>
+            <fieldset className="flex flex-col gap-1.5 text-[13px] font-medium">
+              <legend className="mb-1.5">Send after</legend>
+              <div className="grid grid-cols-[80px_minmax(0,1fr)] gap-2">
+                <Input type="number" inputMode="numeric" min={lo} max={hi} step={1} aria-label="How long to wait" aria-invalid={!valueOk}
+                  value={Number.isNaN(d.value) ? "" : d.value} onChange={(e) => setD({ ...d, value: e.target.value === "" ? NaN : Math.round(Number(e.target.value)) })} />
+                <Select aria-label="Unit" value={d.unit} onChange={(e) => {
+                  const unit = e.target.value as DelayUnit;
+                  const [a, b] = DELAY_LIMITS[unit];
+                  setD({ ...d, unit, value: Math.min(b, Math.max(a, Number.isNaN(d.value) ? a : d.value)) });
+                }}>
+                  <option value="minutes">minutes</option><option value="hours">hours</option><option value="days">days</option>
+                </Select>
+              </div>
+            </fieldset>
           </div>
+          <p className="-mt-1 text-xs text-slate">
+            {!valueOk ? <span className="text-danger-text">Pick {lo} to {hi} {d.unit}.</span>
+              : d.unit === "days" ? "Counted from when you confirm you sent your message. Day emails go Monday to Friday, 9:00 to 17:00 in the guest's time zone."
+                : "Counted from when you confirm you sent your message. Minute and hour emails go at their time, any day between 8:00 and 20:00 in the guest's time zone; outside that, at 8:00."}
+          </p>
           <label className="flex flex-col gap-1.5 text-[13px] font-medium">Subject
             <Input ref={subjectRef} value={d.subject} maxLength={150} onFocus={() => { last.current = "subject"; }} onChange={(e) => setD({ ...d, subject: e.target.value })} /></label>
           <label className="flex flex-col gap-1.5 text-[13px] font-medium">Message
@@ -576,8 +597,8 @@ function RuleRow({ rule, company, agent, open, pending, onOpen, onToggle, onSave
             <span className="whitespace-pre-line text-[13px] text-body">{preview.body}</span>
           </div>
           <div className="flex flex-wrap items-center gap-4">
-            <Button className="h-9" disabled={!changed || pending} onClick={() => onSave(own ? { stage: d.stage, days: d.days, subject: d.subject, body: d.body } : { days: d.days, subject: d.subject, body: d.body })}>Save</Button>
-            {changed && <button type="button" onClick={() => setD({ name: rule.name, stage: rule.stage, days: rule.days, subject: rule.subject, body: rule.body })} className="text-[13px] font-medium text-slate hover:text-ink">Cancel</button>}
+            <Button className="h-9" disabled={!changed || pending || !valueOk} onClick={() => onSave({ ...(own ? { stage: d.stage } : {}), ...(timingChanged ? { delay } : {}), subject: d.subject, body: d.body })}>Save</Button>
+            {changed && <button type="button" onClick={() => setD({ name: rule.name, stage: rule.stage, ...delayParts(rule), subject: rule.subject, body: rule.body })} className="text-[13px] font-medium text-slate hover:text-ink">Cancel</button>}
             <span className="flex-1" />
             {edited && !changed && <button type="button" onClick={onReset} disabled={pending} className="text-[13px] font-medium text-brand">Use Safari Digital&apos;s text again</button>}
             {own && <button type="button" onClick={onDelete} disabled={pending} className="text-[13px] font-medium text-danger-text">Delete</button>}

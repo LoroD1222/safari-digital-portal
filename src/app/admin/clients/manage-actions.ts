@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { logActivity } from "@/lib/activity";
 import { notifyClient } from "@/lib/email";
 import type { Campaign, OnboardingStatus, WebsiteStage } from "@/lib/types";
+import type { Answers } from "@/lib/onboarding";
 import { syncClient } from "@/lib/meta";
 import { sendTestEvent } from "@/lib/meta-events";
 import { checkSenderDomain } from "@/lib/followups";
@@ -237,4 +238,47 @@ export async function saveFollowupSender(clientId: string, _: FormState, form: F
   if (error) return { error: /followup_settings|schema cache/.test(error.message) ? "Run 0020_followups.sql in Supabase first." : error.message };
   done();
   return check.ready ? { saved: true, message: check.message } : { error: email ? `Saved, but emails can't go yet. ${check.message}` : check.message };
+}
+
+// Safari Digital corrects or fills in the client's onboarding answers. Only the fields the editor knows
+// change; the client's checklist progress and anything else saved stays as it is.
+export async function saveOnboardingAnswers(clientId: string, next: Answers): Promise<{ ok: true } | { ok: false; error: string }> {
+  await requireAdmin();
+  const text = (v: unknown, max = 2000) => (typeof v === "string" ? v.trim().slice(0, max) : undefined) || undefined;
+  const words = (v: unknown) => Array.isArray(v) ? [...new Set(v.map((x) => String(x).trim()).filter(Boolean).map((x) => x.slice(0, 80)))].slice(0, 30) : [];
+  const pick = <T extends string>(v: unknown, ok: readonly T[]) => (ok as readonly unknown[]).includes(v) ? (v as T) : undefined;
+  const b = next.business ?? {}, m = next.marketing ?? {}, w = next.website ?? {}, f = next.files ?? {};
+  const email = text(b.inquiry_email, 200);
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, error: "The inquiry email doesn't look like an email address." };
+  const budget = text(m.budget, 20)?.replace(/[$,\s]/g, "");
+  if (budget && !/^\d+(\.\d+)?$/.test(budget)) return { ok: false, error: "Write the ad budget as a number of dollars, e.g. 500." };
+
+  const admin = createAdminClient();
+  const { data: cur, error: readErr } = await admin.from("onboarding_responses").select("data").eq("client_id", clientId).maybeSingle();
+  if (readErr) return { ok: false, error: readErr.message };
+  const old = (cur?.data ?? {}) as Answers;
+  const data: Answers = {
+    ...old,
+    business: { ...old.business,
+      contact_name: text(b.contact_name, 120), whatsapp: text(b.whatsapp, 40), about: text(b.about),
+      offers: words(b.offers), markets: words(b.markets), inquiry_dest: pick(b.inquiry_dest, ["whatsapp", "email", "both"] as const), inquiry_email: email,
+    },
+    marketing: { ...old.marketing,
+      instagram: text(m.instagram, 200), facebook: text(m.facebook, 200), no_instagram: !!m.no_instagram,
+      people_added: !!m.people_added, payment_added: !!m.payment_added, budget, ad_goals: words(m.ad_goals), promote: text(m.promote),
+    },
+    website: { ...old.website,
+      current_site: text(w.current_site, 200), domain_choice: pick(w.domain_choice, ["have", "need", "unsure"] as const),
+      domain: text(w.domain, 200), registrar: text(w.registrar, 120), wanted_domain: text(w.wanted_domain, 200),
+      goals: words(w.goals), pages: words(w.pages), likes: text(w.likes),
+    },
+    files: { ...old.files,
+      mode: pick(f.mode, ["drive", "upload"] as const), drive_link: text(f.drive_link, 500), drive_shared: !!f.drive_shared, reviews: text(f.reviews),
+    },
+  };
+  if (data.files?.drive_link && !/^https?:\/\//i.test(data.files.drive_link)) return { ok: false, error: "The Drive folder link should start with https://" };
+  const { error } = await admin.from("onboarding_responses").upsert({ client_id: clientId, data, updated_at: new Date().toISOString() }, { onConflict: "client_id" });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/admin/clients/${clientId}`);
+  return { ok: true };
 }

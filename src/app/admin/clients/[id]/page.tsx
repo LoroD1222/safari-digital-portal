@@ -15,7 +15,7 @@ import { Row, RowList, Section, Tabs } from "@/components/blocks";
 import { ClientForm } from "../client-form";
 import { updateClientRecord } from "../actions";
 import { PortalAccess } from "../portal-access";
-import { OnboardingSummary } from "../onboarding-summary";
+import { OnboardingAnswers } from "../onboarding-edit";
 import { DataSection } from "../data-section";
 import { DangerZone } from "../danger-zone";
 import { InternalSwitch } from "../internal-switch";
@@ -173,7 +173,7 @@ async function OnboardingTab({ client }: { client: Client }) {
         {client.onboarding_note && <Alert tone="info">Currently asked: “{client.onboarding_note}”</Alert>}
         <MissingInfoForm client={client} />
       </Section>
-      <OnboardingSummary answers={(ob?.data as Answers) ?? null} submittedAt={ob?.submitted_at ?? null} files={files} />
+      <OnboardingAnswers clientId={client.id} answers={(ob?.data as Answers) ?? null} submittedAt={ob?.submitted_at ?? null} files={files} />
     </>
   );
 }

@@ -28,8 +28,8 @@ function Section({ title, rows }: { title: string; rows: Row[] }) {
   );
 }
 
-export function OnboardingSummary({ answers, submittedAt, files }: {
-  answers: Answers | null; submittedAt: string | null; files: (StoredFile & { url: string | null })[];
+export function OnboardingSummary({ answers, submittedAt, files, action }: {
+  answers: Answers | null; submittedAt: string | null; files: (StoredFile & { url: string | null })[]; action?: React.ReactNode;
 }) {
   const a = answers ?? {};
   const b = a.business ?? {}, m = a.marketing ?? {}, w = a.website ?? {}, f = a.files ?? {};
@@ -40,11 +40,14 @@ export function OnboardingSummary({ answers, submittedAt, files }: {
 
   return (
     <section aria-labelledby="ob-h" className="flex flex-col gap-5 border-t border-line-soft pt-6">
-      <div className="flex flex-col gap-0.5">
-        <h2 id="ob-h" className="text-[15px] font-semibold">Onboarding answers</h2>
-        <p className="text-[13px] text-slate">
-          {submittedAt ? `Submitted ${new Date(submittedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}` : answers ? "In progress, not submitted yet" : "The client hasn't started onboarding yet"}
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex flex-col gap-0.5">
+          <h2 id="ob-h" className="text-[15px] font-semibold">Onboarding answers</h2>
+          <p className="text-[13px] text-slate">
+            {submittedAt ? `Submitted ${new Date(submittedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}` : answers ? "In progress, not submitted yet" : "The client hasn't started onboarding yet"}
+          </p>
+        </div>
+        {action}
       </div>
       {answers && (
         <>

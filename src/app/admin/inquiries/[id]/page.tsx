@@ -11,6 +11,7 @@ import { InquiryStatusPicker } from "@/components/inquiry-status";
 import { InquiryForm } from "../inquiry-form";
 import { saveInquiry } from "../actions";
 import { DeleteInquiry } from "../delete-inquiry";
+import { ResendAlert } from "../resend-alert";
 
 export const metadata: Metadata = { title: "Inquiry" };
 const UUID = /^[0-9a-f-]{36}$/i;
@@ -28,7 +29,7 @@ export default async function AdminInquiry(props: PageProps<"/admin/inquiries/[i
   return (
     <div className="flex max-w-[720px] flex-col gap-6">
       <BackLink href="/admin/inquiries">Inquiries</BackLink>
-      <PageHeader title={q.customer_name} actions={<DeleteInquiry id={q.id} name={q.customer_name} />}
+      <PageHeader title={q.customer_name} actions={<div className="flex flex-wrap items-start gap-2"><ResendAlert id={q.id} /><DeleteInquiry id={q.id} name={q.customer_name} /></div>}
         subtitle={<><Link href={`/admin/clients/${q.client_id}`} className="font-medium text-brand no-underline">{q.clients?.name}</Link> · {fmtDateTime(q.received_at)} · {q.origin === "website_form" ? "from the website form" : "added by hand"}</>} />
       {created && <Alert tone="success">Inquiry added. The client can see it now.</Alert>}
       <InquiryStatusPicker id={q.id} status={q.status} />

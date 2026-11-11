@@ -35,21 +35,22 @@ async function reportRecipients(clientId: string) {
 }
 
 // A new inquiry from the website form (or added by Safari Digital). Call inside after().
-export async function emailNewInquiry(inquiryId: string) {
-  if (!emailConfigured()) return;
+// The "New inquiry" alert to the client. Also used by the admin's "Send to client again" button.
+export async function emailNewInquiry(inquiryId: string, again = false): Promise<{ ok: boolean; to?: string[]; error?: string }> {
+  if (!emailConfigured()) return { ok: false, error: "Email isn't set up (RESEND_API_KEY)." };
   try {
     const admin = createAdminClient();
     const { data: q } = await admin.from("inquiries").select("*").eq("id", inquiryId).maybeSingle();
-    if (!q) return;
+    if (!q) return { ok: false, error: "Inquiry not found." };
     const to = await leadRecipients(q.client_id);
-    if (!to.length) return;
+    if (!to.length) return { ok: false, error: "The client has no email address to send to. Add an inquiry email in their onboarding answers." };
     const phone = (q.phone as string | null)?.replace(/\D/g, "").replace(/^00/, "").replace(/^0(?=[67]\d{8}$)/, "255") ?? "";
     const first = String(q.customer_name).split(/\s+/)[0];
     const actions: { label: string; url: string }[] = [];
     if (phone.length >= 8) actions.push({ label: "Reply on WhatsApp", url: `https://wa.me/${phone}?text=${encodeURIComponent(`Hello ${first}, thank you for your safari inquiry!`)}` });
     if (q.email) actions.push({ label: "Reply by email", url: `mailto:${q.email}?subject=${encodeURIComponent("Your safari inquiry")}` });
-    await send(to, {
-      subject: `New inquiry: ${q.customer_name}${q.interested_in ? ` · ${q.interested_in}` : ""}`,
+    const ok = await send(to, {
+      subject: `${again ? "Reminder: " : ""}New inquiry: ${q.customer_name}${q.interested_in ? ` · ${q.interested_in}` : ""}`,
       heading: `New inquiry from ${q.customer_name}`,
       intro: "Reply quickly: guests who hear back within the hour book far more often.",
       rows: [
@@ -63,8 +64,10 @@ export async function emailNewInquiry(inquiryId: string) {
       replyTo: q.email,
       footer: "Replying to this email goes straight to the guest. Mark the inquiry Contacted or Booked in your portal so your ads learn what works.",
     }, await siteOrigin());
+    return ok ? { ok, to } : { ok, error: "Resend refused it. Check Resend → Logs." };
   } catch (e) {
     console.error("New inquiry email failed", e);
+    return { ok: false, error: "Something went wrong sending it." };
   }
 }
 

@@ -104,3 +104,13 @@ export async function deleteInquiries(ids: string[]): Promise<{ error?: string; 
   revalidatePath("/", "layout");
   return { deleted: count ?? clean.length };
 }
+
+// Sends the client the "New inquiry" email for this lead again.
+export async function resendInquiryAlert(id: string): Promise<{ ok: boolean; message: string }> {
+  await requireAdmin();
+  const r = await emailNewInquiry(id, true);
+  if (!r.ok) return { ok: false, message: r.error ?? "Not sent." };
+  const { data: q } = await (await createClient()).from("inquiries").select("client_id, customer_name").eq("id", id).maybeSingle();
+  if (q) await logActivity({ clientId: q.client_id, actor: "admin", message: `Inquiry alert for ${q.customer_name} sent again`, visibleToClient: false, adminLink: `/admin/inquiries/${id}` });
+  return { ok: true, message: `Sent to ${r.to!.join(", ")}.` };
+}

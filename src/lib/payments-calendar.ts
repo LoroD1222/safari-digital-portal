@@ -5,6 +5,7 @@ export type PayKind = "paid" | "due" | "overdue" | "draft" | "expected";
 export type PayEvent = {
   date: string; kind: PayKind; clientId: string; client: string; amount: number; currency: string;
   label: string; href: string;
+  invoiceId?: string; // set for real invoices: these can be moved on the calendar
 };
 export type BillableClient = {
   id: string; name: string; marketing_package: MarketingPackage | null; account_status: string | null; is_internal?: boolean | null;
@@ -32,7 +33,7 @@ export function paymentEvents(month: string, invoices: Invoice[], clients: Billa
     const date = state === "paid" ? (inv.paid_at ?? inv.due_date).slice(0, 10) : inv.due_date;
     if (!date.startsWith(month)) continue;
     const kind: PayKind = state === "paid" ? "paid" : state === "overdue" ? "overdue" : state === "draft" ? "draft" : "due";
-    out.push({ date, kind, clientId: inv.client_id, client: names.get(inv.client_id) ?? "Client", amount: Number(inv.total), currency: inv.currency, label: inv.number, href: `/admin/invoices/${inv.id}` });
+    out.push({ date, kind, clientId: inv.client_id, client: names.get(inv.client_id) ?? "Client", amount: Number(inv.total), currency: inv.currency, label: inv.number, href: `/admin/invoices/${inv.id}`, invoiceId: inv.id });
   }
   // Fees not invoiced yet: this month (until the draft exists) and later months.
   if (month >= today.slice(0, 7)) {

@@ -47,7 +47,7 @@ export default async function PaymentsPage(props: PageProps<"/admin/payments">) 
           note={allOverdue.length ? `${allOverdue.length} past the due date` : "Nothing overdue"} href={allOverdue.length ? "/admin/invoices?status=overdue" : undefined} />
       </section>
 
-      <PaymentsCalendar month={month} today={today} events={events} />
+      <PaymentsCalendar key={`${month}:${events.map((e) => `${e.invoiceId ?? e.clientId}@${e.date}`).join(",")}`} month={month} today={today} events={events} />
     </>
   );
 }

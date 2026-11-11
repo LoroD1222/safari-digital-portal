@@ -55,7 +55,7 @@ export async function send(to: string[], m: Message, origin: string): Promise<bo
       headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({ from: process.env.EMAIL_FROM, to, subject: m.subject, html, text, ...(m.replyTo ? { reply_to: m.replyTo } : {}), ...(m.attachments?.length ? { attachments: m.attachments } : {}) }),
     });
-    if (!res.ok) { console.error("Email not sent", res.status, await res.text()); return false; }
+    if (!res.ok) { console.error("Email not sent", res.status, (await res.text()).slice(0, 300), "from", process.env.EMAIL_FROM, "to", to.join(", ")); return false; }
     return true;
   } catch (e) {
     console.error("Email not sent", e);

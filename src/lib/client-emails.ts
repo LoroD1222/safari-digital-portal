@@ -2,6 +2,7 @@ import "server-only";
 import { createAdminClient } from "./supabase/admin";
 import { clientEmails, emailConfigured, send } from "./email";
 import { siteOrigin } from "./origin";
+import { logActivity } from "./activity";
 import { monthBounds } from "./dates";
 import { adChats, formatMoney, SOURCE_LABEL, CHANNEL_LABEL, type Campaign, type InquirySource } from "./types";
 import { monthRange } from "./vercel";
@@ -37,7 +38,20 @@ async function reportRecipients(clientId: string) {
 // A new inquiry from the website form (or added by Safari Digital). Call inside after().
 // The "New inquiry" alert to the client. Also used by the admin's "Send to client again" button.
 export async function emailNewInquiry(inquiryId: string, again = false): Promise<{ ok: boolean; to?: string[]; error?: string }> {
-  if (!emailConfigured()) return { ok: false, error: "Email isn't set up (RESEND_API_KEY)." };
+  const r = await alertInquiry(inquiryId, again);
+  // Leave a note for Safari Digital (not the client) so a missing alert can be traced later.
+  try {
+    const { data: q } = await createAdminClient().from("inquiries").select("client_id, customer_name").eq("id", inquiryId).maybeSingle();
+    if (q && !again) await logActivity({
+      clientId: q.client_id, actor: "admin", visibleToClient: false, adminLink: `/admin/inquiries/${inquiryId}`,
+      message: r.ok ? `New-inquiry email for ${q.customer_name} sent to ${r.to!.join(", ")}` : `New-inquiry email for ${q.customer_name} NOT sent: ${r.error}`,
+    });
+  } catch { /* the note is optional */ }
+  return r;
+}
+
+async function alertInquiry(inquiryId: string, again: boolean): Promise<{ ok: boolean; to?: string[]; error?: string }> {
+  if (!emailConfigured()) return { ok: false, error: "Email isn't set up: RESEND_API_KEY or EMAIL_FROM is missing in Vercel." };
   try {
     const admin = createAdminClient();
     const { data: q } = await admin.from("inquiries").select("*").eq("id", inquiryId).maybeSingle();
@@ -64,7 +78,7 @@ export async function emailNewInquiry(inquiryId: string, again = false): Promise
       replyTo: q.email,
       footer: "Replying to this email goes straight to the guest. Mark the inquiry Contacted or Booked in your portal so your ads learn what works.",
     }, await siteOrigin());
-    return ok ? { ok, to } : { ok, error: "Resend refused it. Check Resend → Logs." };
+    return ok ? { ok, to } : { ok, error: `Resend refused it (from ${process.env.EMAIL_FROM}). Check Resend → Logs.` };
   } catch (e) {
     console.error("New inquiry email failed", e);
     return { ok: false, error: "Something went wrong sending it." };

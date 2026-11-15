@@ -56,10 +56,10 @@ export type FollowupSettings = {
 // Sets expectations only: the operator still replies personally (and then marks the card Contacted).
 
 export const AUTOREPLY_SAFARI = {
-  subject: "A few quick questions about your trip",
+  subject: "Karibu Tanzania!",
   body: `Hi {{first_name}},
 
-Thanks for getting in touch about your {{trip_name}}! I'll be helping you plan it.
+Thanks for getting in touch about your trip to Tanzania! I'll be helping you plan it.
 
 So I can put together something that really suits you, could you tell me a bit more? How many of you are travelling (and any children), roughly when you'd like to go, and what matters most to you: the Big Five, the Migration, Kilimanjaro, or some beach time in Zanzibar? A rough budget per person helps too.
 

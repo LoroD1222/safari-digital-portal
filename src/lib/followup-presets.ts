@@ -56,7 +56,7 @@ export type FollowupSettings = {
 // Sets expectations only: the operator still replies personally (and then marks the card Contacted).
 
 export const AUTOREPLY_SAFARI = {
-  subject: "Karibu Tanzania!",
+  subject: "Karibu / Welcome to Tanzania!",
   body: `Hi {{first_name}},
 
 Thanks for getting in touch about your trip to Tanzania! I'll be helping you plan it.

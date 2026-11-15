@@ -1,6 +1,6 @@
 import "server-only";
 import { createAdminClient } from "./supabase/admin";
-import { clientEmails, emailConfigured, send } from "./email";
+import { clientEmails, emailConfigured, send, staffAddresses } from "./email";
 import { siteOrigin } from "./origin";
 import { logActivity } from "./activity";
 import { monthBounds } from "./dates";
@@ -47,7 +47,44 @@ export async function emailNewInquiry(inquiryId: string, again = false): Promise
       message: r.ok ? `New-inquiry email for ${q.customer_name} sent to ${r.to!.join(", ")}` : `New-inquiry email for ${q.customer_name} NOT sent: ${r.error}`,
     });
   } catch { /* the note is optional */ }
+  if (!again) await alertStaff(inquiryId, r.ok ? r.to ?? [] : []);
   return r;
+}
+
+// A copy for Safari Digital (Settings → "Email Safari Digital about new inquiries").
+async function alertStaff(inquiryId: string, alreadySentTo: string[]) {
+  if (!emailConfigured()) return;
+  try {
+    const admin = createAdminClient();
+    const [{ data: q }, { data: setting }] = await Promise.all([
+      admin.from("inquiries").select("*, clients(name, is_internal)").eq("id", inquiryId).maybeSingle(),
+      admin.from("app_settings").select("value").eq("key", "lead_alerts").maybeSingle(),
+    ]);
+    if (!q) return;
+    const mode = (setting?.value as string | null) || "all";
+    const client = (Array.isArray(q.clients) ? q.clients[0] : q.clients) as { name?: string; is_internal?: boolean } | null;
+    if (mode === "off" || (mode === "internal" && !client?.is_internal)) return;
+    const have = new Set(alreadySentTo.map((e) => e.toLowerCase()));
+    const to = (await staffAddresses()).filter((e) => !have.has(e.toLowerCase()));
+    if (!to.length) return;
+    const who = client?.name ?? "a client";
+    await send(to, {
+      subject: `New inquiry for ${who}: ${q.customer_name}${q.interested_in ? ` · ${q.interested_in}` : ""}`,
+      heading: `${who} got a new inquiry`,
+      intro: alreadySentTo.length ? `The client was emailed at ${alreadySentTo.join(", ")}.` : "The client was NOT emailed about this one. Check their inquiry email in the portal.",
+      rows: [
+        ["Guest", q.customer_name], ["Interested in", q.interested_in], ["Travel dates", q.travel_dates], ["Travellers", q.travellers],
+        ["Country", q.country], ["WhatsApp / phone", q.phone], ["Email", q.email],
+        ["Came from", `${SOURCE_LABEL[q.source as InquirySource] ?? "Unknown"} · via ${CHANNEL_LABEL[q.channel] ?? q.channel}`],
+      ],
+      detail: q.message,
+      path: `/admin/inquiries/${q.id}`, button: "Open in admin",
+      replyTo: q.email,
+      footer: "You get this because of Admin → Settings → Email Safari Digital about new inquiries.",
+    }, await siteOrigin());
+  } catch (e) {
+    console.error("Staff inquiry email failed", e);
+  }
 }
 
 async function alertInquiry(inquiryId: string, again: boolean): Promise<{ ok: boolean; to?: string[]; error?: string }> {

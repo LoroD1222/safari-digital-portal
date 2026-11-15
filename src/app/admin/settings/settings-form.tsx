@@ -2,7 +2,7 @@
 import { useActionState, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { TUTORIAL_VIDEO, compressFile } from "@/lib/compress";
-import { Alert, Field, Input, Textarea } from "@/components/ui";
+import { Alert, Field, Input, Select, Textarea } from "@/components/ui";
 import { SubmitButton } from "@/components/submit-button";
 import { VideoEmbed, toEmbed } from "@/components/video-embed";
 import { saveSettings, type SettingsState } from "./actions";
@@ -92,6 +92,13 @@ export function SettingsForm({ initial }: { initial: Settings }) {
           </Field>
           <Field label="Send staff notifications to" htmlFor="staff_email" hint="Empty = every admin's sign-in email. Separate several with commas.">
             <Input id="staff_email" name="staff_email" defaultValue={v("staff_email")} placeholder="hello@safaridigital.co.tz" />
+          </Field>
+          <Field label="Email Safari Digital about new inquiries" htmlFor="lead_alerts" hint="Sent to the staff notification addresses above, as each website inquiry comes in.">
+            <Select id="lead_alerts" name="lead_alerts" defaultValue={v("lead_alerts") || "all"}>
+              <option value="all">Every client&apos;s inquiries</option>
+              <option value="internal">Only Safari Digital&apos;s own (internal) inquiries</option>
+              <option value="off">Off</option>
+            </Select>
           </Field>
         </div>
       </section>

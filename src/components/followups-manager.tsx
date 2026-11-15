@@ -65,7 +65,7 @@ export type FollowupPrefs = { agent_name: string; timezone: string; quote_valid_
 export function FollowupsManager(p: {
   company: string; internal?: boolean; enabled: boolean; template: TemplateKey; senderReady: boolean; fromEmail: string | null; prefs: FollowupPrefs;
   rules: FollowupRule[]; whatsapp: WhatsappDue[]; recent: RecentSend[]; scheduled: number; awaiting: number;
-  autoreply: AutoReply;
+  autoreply: AutoReply; myWhatsapp?: string | null;
 }) {
   const router = useRouter();
   const { label: L, booked: bookedWord } = useStageWords();
@@ -164,7 +164,7 @@ export function FollowupsManager(p: {
         )}
       </section>
 
-      <AutoReplyCard a={p.autoreply} senderReady={p.senderReady} fromEmail={p.fromEmail} company={p.company} agent={p.prefs.agent_name} />
+      <AutoReplyCard a={p.autoreply} senderReady={p.senderReady} fromEmail={p.fromEmail} company={p.company} agent={p.prefs.agent_name} whatsapp={p.myWhatsapp ?? null} />
 
       {error && <Alert>{error}</Alert>}
 
@@ -273,7 +273,7 @@ export function FollowupsManager(p: {
               </div>
               <ul className="divide-y divide-[#EEF0F2]">
                 {g.rules.map((r) => (
-                  <RuleRow key={r.id} rule={r} company={p.company} agent={p.prefs.agent_name} open={open === r.id} pending={pending}
+                  <RuleRow key={r.id} rule={r} company={p.company} agent={p.prefs.agent_name} whatsapp={p.myWhatsapp ?? null} open={open === r.id} pending={pending}
                     onOpen={() => setOpen(open === r.id ? null : r.id)}
                     onToggle={() => run(() => saveRule(r.id, { enabled: !r.enabled }))}
                     onSave={(patch) => run(() => saveRule(r.id, patch), () => setOpen(null))}
@@ -363,7 +363,7 @@ export function FollowupsManager(p: {
 export type AutoReply = { enabled: boolean; subject: string; body: string; defaultSubject: string; defaultBody: string };
 
 // An email to the guest the moment they send an inquiry from the website. Separate from the follow-ups switch.
-function AutoReplyCard({ a, senderReady, fromEmail, company, agent }: { a: AutoReply; senderReady: boolean; fromEmail: string | null; company: string; agent: string }) {
+function AutoReplyCard({ a, senderReady, fromEmail, company, agent, whatsapp }: { a: AutoReply; senderReady: boolean; fromEmail: string | null; company: string; agent: string; whatsapp: string | null }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [on, setOn] = useState(a.enabled);
@@ -398,7 +398,7 @@ function AutoReplyCard({ a, senderReady, fromEmail, company, agent }: { a: AutoR
     const r = await sendAutoReplyTest(d);
     setMsg(r.ok ? { ok: true, text: `Test sent to ${r.to}. Check your inbox (and spam).` } : { ok: false, text: r.error });
   });
-  const preview = composeEmail(d, { firstName: "Sarah", trip: "Kilimanjaro climb", travelDates: "July 2027", agent, company });
+  const preview = composeEmail(d, { firstName: "Sarah", trip: "Kilimanjaro climb", travelDates: "July 2027", agent, company, whatsapp });
 
   return (
     <section aria-label="Instant reply to new inquiries" className={`flex flex-col overflow-hidden rounded-card border ${on ? "border-[#BFE3CF]" : "border-line"} bg-white`}>
@@ -491,8 +491,8 @@ function PrefsCard({ prefs, company }: { prefs: FollowupPrefs; company: string }
   );
 }
 
-function RuleRow({ rule, company, agent, open, pending, onOpen, onToggle, onSave, onReset, onDelete }: {
-  rule: FollowupRule; company: string; agent: string; open: boolean; pending: boolean;
+function RuleRow({ rule, company, agent, whatsapp, open, pending, onOpen, onToggle, onSave, onReset, onDelete }: {
+  rule: FollowupRule; company: string; agent: string; whatsapp?: string | null; open: boolean; pending: boolean;
   onOpen: () => void; onToggle: () => void; onSave: (p: RulePatch) => void; onReset: () => void; onDelete: () => void;
 }) {
   const { label: L, internal } = useStageWords();
@@ -522,7 +522,7 @@ function RuleRow({ rule, company, agent, open, pending, onOpen, onToggle, onSave
     setD({ ...d, [field]: next });
     requestAnimationFrame(() => { el?.focus(); el?.setSelectionRange(start + t.length, start + t.length); });
   };
-  const preview = composeEmail(d, { firstName: "Sarah", trip: "Kilimanjaro climb", travelDates: "July 2027", agent, company });
+  const preview = composeEmail(d, { firstName: "Sarah", trip: "Kilimanjaro climb", travelDates: "July 2027", agent, company, whatsapp });
   const id = `fu-${rule.id}`;
 
   return (

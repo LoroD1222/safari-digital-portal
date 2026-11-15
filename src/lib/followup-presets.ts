@@ -56,21 +56,23 @@ export type FollowupSettings = {
 // Sets expectations only: the operator still replies personally (and then marks the card Contacted).
 
 export const AUTOREPLY_SAFARI = {
-  subject: "Thank you for your inquiry · {{company_name}}",
+  subject: "Your {{trip_name}}",
   body: `Hi {{first_name}},
 
-Thank you for contacting us about your {{trip_name}}. We've received your inquiry and one of our safari experts will reply to you personally within 24 hours, usually much sooner.
+Thanks for getting in touch about your {{trip_name}}! I'll be helping you plan it.
 
-In the meantime, feel free to reply to this email with anything else we should know: who's travelling, your budget, or anything you'd love to see.`,
+So I can put together something that really suits you, could you tell me a bit more? How many of you are travelling (and any children), roughly when you'd like to go, and what matters most to you: the Big Five, the Migration, Kilimanjaro, or some beach time in Zanzibar? A rough budget per person helps too.
+
+If it's easier, message me on WhatsApp at {{whatsapp}}. That's where I reply fastest: {{whatsapp_link}}`,
 };
 
 export const AUTOREPLY_AGENCY = {
-  subject: "Thanks for getting in touch · {{company_name}}",
+  subject: "Your message to {{company_name}}",
   body: `Hi {{first_name}},
 
-Thanks for reaching out to Safari Digital. We've received your message and will get back to you personally within one working day.
+Thanks for reaching out! Before we talk, could you tell me a bit about your business? What's your website, roughly how many inquiries do you get a month right now, and what would you like more of: inquiries, bookings, or a better website?
 
-If it helps, reply with your website address and what you'd like more of: inquiries, bookings or a new website. We'll come prepared.`,
+If it's easier, message me on WhatsApp at {{whatsapp}}. That's where I reply fastest: {{whatsapp_link}}`,
 };
 
 export function autoreplyDefault(internal: boolean) {
@@ -475,9 +477,11 @@ export const TOKENS = [
   { token: "{{travel_dates}}", label: "Travel dates", help: "Their travel dates. If they're not known: \"your travel dates\"." },
   { token: "{{agent_name}}", label: "Your name", help: "The name you sign with. If it's not set: your company name." },
   { token: "{{company_name}}", label: "Company", help: "Your company name." },
+  { token: "{{whatsapp}}", label: "WhatsApp number", help: "Your WhatsApp number, from your onboarding answers. If it's not set, the whole line is left out." },
+  { token: "{{whatsapp_link}}", label: "WhatsApp link", help: "A wa.me link that opens a chat with you. If your number isn't set, the whole line is left out." },
 ] as const;
 
-export type Personal = { firstName: string | null; trip: string | null; travelDates: string | null; agent: string | null; company: string };
+export type Personal = { firstName: string | null; trip: string | null; travelDates: string | null; agent: string | null; company: string; whatsapp?: string | null };
 
 const clean = (s: string | null | undefined) => (s ?? "").replace(/\s+/g, " ").trim();
 
@@ -505,12 +509,24 @@ const T = {
   dates: /\{\{\s*travel_dates\s*\}\}/gi,
   agent: /\{\{\s*agent_name\s*\}\}/gi,
   company: /\{\{\s*company_name\s*\}\}|\[\s*company(\s*name)?\s*\]|\{company\}/gi,
+  waLink: /\{\{\s*whatsapp_link\s*\}\}/gi,
+  wa: /\{\{\s*whatsapp\s*\}\}/gi,
 };
+
+// "+255 712 345 678" style, for reading in an email.
+function prettyPhone(d: string) {
+  const m = d.match(/^255(\d{3})(\d{3})(\d{3})$/);
+  return m ? `+255 ${m[1]} ${m[2]} ${m[3]}` : `+${d}`;
+}
 
 // Fills the tags. Never leaves an empty or unknown tag behind, and never invents details.
 export function personalize(text: string, v: Personal) {
   const agent = clean(v.agent) || clean(v.company);
   let out = text;
+  const wa = waNumber(v.whatsapp);
+  // No number: leave out every line that mentions it, so nothing reads "WhatsApp us at ."
+  if (!wa) out = out.split("\n").filter((l) => !/\{\{\s*whatsapp(_link)?\s*\}\}/i.test(l)).join("\n").replace(/\n{3,}/g, "\n\n");
+  else out = out.replace(T.waLink, `https://wa.me/${wa}`).replace(T.wa, prettyPhone(wa));
   if (!v.firstName) {
     // "Hi {{first_name}}," → "Hello,"
     out = out.replace(/\b(hi|hello|hey|dear)\s+(\{\{\s*first_name\s*\}\}|\[\s*first\s*name\s*\]|\{name\})\s*,/gi, "Hello,");

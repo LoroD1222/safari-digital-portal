@@ -1,6 +1,7 @@
 import { createHmac } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { resendRequest, sendViaResend, verifyResendWebhook, webhookAction, type FollowupEmail } from "@/lib/followup-mail";
+import { personalize } from "@/lib/followup-presets";
 
 const email: FollowupEmail = {
   fromEmail: "bookings@goldentrips.co.tz", fromName: "Golden Trips", to: "sarah@example.com",
@@ -60,5 +61,17 @@ describe("11. bounces, complaints and unsubscribes", () => {
     expect(webhookAction({ type: "email.bounced", data: { email_id: "re_1", to: ["a@b.c"], bounce: { type: "Transient" } } })).toEqual({ kind: "ignore" });
     expect(webhookAction({ type: "email.complained", data: { email_id: "re_2", to: ["a@b.c"] } })).toMatchObject({ kind: "suppress", reason: "Marked as spam" });
     expect(webhookAction({ type: "email.opened", data: { email_id: "re_3" } })).toEqual({ kind: "ignore" });
+  });
+});
+
+describe("WhatsApp tags", () => {
+  const base = { firstName: "Sarah", trip: "Kilimanjaro climb", travelDates: null, agent: "Juma", company: "Golden Trips" };
+  it("fills the number and link", () => {
+    const out = personalize("Message me on WhatsApp at {{whatsapp}}: {{whatsapp_link}}", { ...base, whatsapp: "0712 345 678" });
+    expect(out).toBe("Message me on WhatsApp at +255 712 345 678: https://wa.me/255712345678");
+  });
+  it("drops the whole line when there's no number", () => {
+    const out = personalize("Hi {{first_name}},\n\nThanks!\n\nWhatsApp me at {{whatsapp}}.\n\nTalk soon", { ...base, whatsapp: null });
+    expect(out).toBe("Hi Sarah,\n\nThanks!\n\nTalk soon");
   });
 });

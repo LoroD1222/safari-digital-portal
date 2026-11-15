@@ -8,7 +8,7 @@ import {
   FOLLOWUP_STAGES, TEMPLATE_VERSION, autoreplyDefault, composeEmail, firstName, travelDatesLabel, tripLabel, waNumber,
   type FollowupRule, type FollowupSettings, type TemplateKey,
 } from "@/lib/followup-presets";
-import { installTemplate, planFor, type InquiryLite } from "@/lib/followups";
+import { installTemplate, operatorWhatsapp, planFor, type InquiryLite } from "@/lib/followups";
 import { loadFollowups, whatsappDueFor } from "@/lib/pipeline-followups";
 import { stageWords } from "@/lib/stage-words";
 
@@ -50,6 +50,7 @@ export default async function FollowupsPage() {
     rules = (r2.data ?? []) as FollowupRule[];
   }
   const enabled = !!settings?.enabled;
+  const myWhatsapp = await operatorWhatsapp(company.id);
   const status = await overview(supabase, company.id, company.name, settings, rules, !!company.is_internal);
 
   const { data: recentData } = await supabase.from("followup_sends")
@@ -80,6 +81,7 @@ export default async function FollowupsPage() {
       template={(settings?.template ?? "standard") as TemplateKey}
       senderReady={!!settings?.sender_ready && !!settings?.from_email}
       fromEmail={settings?.from_email ?? null}
+      myWhatsapp={myWhatsapp}
       prefs={{ agent_name: settings?.agent_name ?? "", timezone: settings?.send_timezone ?? "Africa/Dar_es_Salaam", quote_valid_days: settings?.quote_valid_days ?? null }}
       rules={rules}
       whatsapp={enabled ? status.whatsapp : []}

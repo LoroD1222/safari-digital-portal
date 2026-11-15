@@ -3,7 +3,7 @@ import { revalidatePath } from "next/cache";
 import { getPortalContext } from "@/lib/portal";
 import { createClient } from "@/lib/supabase/server";
 import { FOLLOWUP_DAYS, FOLLOWUP_STAGES, ALL_TEMPLATE_KEYS, TEMPLATE_VERSION, autoreplyDefault, toDelay, type DelayUnit, composeEmail, presetByKey, type FollowupStage, type TemplateKey } from "@/lib/followup-presets";
-import { installTemplate } from "@/lib/followups";
+import { installTemplate, operatorWhatsapp } from "@/lib/followups";
 import { sendViaResend } from "@/lib/followup-mail";
 import { sendingKey } from "@/lib/resend-keys";
 
@@ -172,7 +172,7 @@ export async function sendAutoReplyTest(p: { subject: string; body: string }): P
   const base = autoreplyDefault(!!company.is_internal);
   const name = (s.from_name as string | null)?.trim() || company.name.replace(/\s*\(internal\)\s*$/i, "");
   const mail = composeEmail({ subject: p.subject.trim() || base.subject, body: p.body.trim() || base.body },
-    { firstName: "Sarah", trip: "Kilimanjaro climb", travelDates: "July 2027", agent: s.agent_name as string | null, company: name });
+    { firstName: "Sarah", trip: "Kilimanjaro climb", travelDates: "July 2027", agent: s.agent_name as string | null, company: name, whatsapp: await operatorWhatsapp(company.id) });
   const res = await sendViaResend({
     fromEmail: s.from_email as string, fromName: name, to, subject: `[Test] ${mail.subject}`, body: mail.body, inquiryId: "test",
     unsubscribeUrl: "https://example.com", idempotencyKey: `autoreply-test-${company.id}-${Date.now()}`, threadId: `<test-${Date.now()}@${String(s.from_email).split("@")[1]}>`, kind: "autoreply",

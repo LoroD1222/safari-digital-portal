@@ -134,6 +134,7 @@ export async function runFollowups(now = Date.now()) {
     if (total >= MAX_PER_RUN) break;
     if (!s.sender_ready || !s.from_email) continue;
     const key = await sendingKey(s.client_id);
+    const whatsapp = await operatorWhatsapp(s.client_id);
     const [{ data: rulesData }, { data: client }, { data: cyclesData }, { data: supp }] = await Promise.all([
       db.from("followup_rules").select("*").eq("client_id", s.client_id),
       db.from("clients").select("name, account_status").eq("id", s.client_id).maybeSingle(),
@@ -170,7 +171,7 @@ export async function runFollowups(now = Date.now()) {
       }
       if (!plan.next?.sendNow || !q.email) continue;
       const rule = plan.next.rule;
-      const mail = composeEmail(rule, { firstName: firstName(q.customer_name), trip: tripLabel(q.interested_in), travelDates: travelDatesLabel(q.travel_dates), agent: s.agent_name, company });
+      const mail = composeEmail(rule, { firstName: firstName(q.customer_name), trip: tripLabel(q.interested_in), travelDates: travelDatesLabel(q.travel_dates), agent: s.agent_name, company, whatsapp });
 
       // Claim the step first: the unique (cycle, step, channel) key stops two runs sending it twice.
       const row = {
@@ -244,6 +245,13 @@ export async function handleResendEvent(event: Parameters<typeof webhookAction>[
 
 // ───────────── Instant reply to a new website inquiry ─────────────
 
+// The operator's WhatsApp number from their onboarding answers ({{whatsapp}} in emails).
+export async function operatorWhatsapp(clientId: string) {
+  const { data } = await createAdminClient().from("onboarding_responses").select("data").eq("client_id", clientId).maybeSingle();
+  const w = (data?.data as { business?: { whatsapp?: string } } | null)?.business?.whatsapp;
+  return typeof w === "string" && w.trim() ? w.trim() : null;
+}
+
 // Sends the operator's instant reply to the guest, once. Call inside after(). Never throws.
 export async function sendAutoReply(inquiryId: string): Promise<{ status: "sent" | "failed" | "skipped"; note?: string }> {
   try {
@@ -274,7 +282,7 @@ export async function sendAutoReply(inquiryId: string): Promise<{ status: "sent"
     const base = autoreplyDefault(!!client.is_internal);
     const mail = composeEmail(
       { subject: settings.autoreply_subject || base.subject, body: settings.autoreply_body || base.body },
-      { firstName: firstName(q.customer_name), trip: tripLabel(q.interested_in), travelDates: travelDatesLabel(q.travel_dates), agent: settings.agent_name, company },
+      { firstName: firstName(q.customer_name), trip: tripLabel(q.interested_in), travelDates: travelDatesLabel(q.travel_dates), agent: settings.agent_name, company, whatsapp: await operatorWhatsapp(q.client_id) },
     );
     const domain = settings.from_email.split("@")[1] ?? "followups";
     const res = await sendViaResend({

@@ -56,7 +56,7 @@ export type FollowupSettings = {
 // Sets expectations only: the operator still replies personally (and then marks the card Contacted).
 
 export const AUTOREPLY_SAFARI = {
-  subject: "Your {{trip_name}}",
+  subject: "A few quick questions about your trip",
   body: `Hi {{first_name}},
 
 Thanks for getting in touch about your {{trip_name}}! I'll be helping you plan it.
@@ -67,7 +67,7 @@ If it's easier, message me on WhatsApp at {{whatsapp}}. That's where I reply fas
 };
 
 export const AUTOREPLY_AGENCY = {
-  subject: "Your message to {{company_name}}",
+  subject: "A few quick questions about your business",
   body: `Hi {{first_name}},
 
 Thanks for reaching out! Before we talk, could you tell me a bit about your business? What's your website, roughly how many inquiries do you get a month right now, and what would you like more of: inquiries, bookings, or a better website?

@@ -1,10 +1,10 @@
 // Follow-up templates written by Safari Digital, and the personalisation shared by the page and the sender.
 // Pure functions only: this file is used in the browser, on the server and in tests.
 
-export type FollowupStage = "contacted" | "quoted" | "negotiating" | "no_show" | "no_answer"; // no_show, no_answer: internal account only
+export type FollowupStage = "new" | "contacted" | "quoted" | "negotiating" | "no_show" | "no_answer"; // no_show, no_answer: internal account only
 export type TemplateKey = "standard" | "gentle" | "persistent" | "blank" | "agency";
 
-export const FOLLOWUP_STAGES: FollowupStage[] = ["contacted", "no_answer", "no_show", "quoted", "negotiating"];
+export const FOLLOWUP_STAGES: FollowupStage[] = ["new", "contacted", "no_answer", "no_show", "quoted", "negotiating"];
 export const FOLLOWUP_DAYS = [1, 2, 3, 4, 5, 6, 7, 9, 10, 12, 14, 15, 17, 21, 22, 25, 28, 30, 42, 45, 60];
 
 // ───────────── How long a follow-up waits ─────────────

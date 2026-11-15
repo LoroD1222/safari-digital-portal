@@ -94,7 +94,7 @@ export function SettingsForm({ initial }: { initial: Settings }) {
             <Input id="staff_email" name="staff_email" defaultValue={v("staff_email")} placeholder="hello@safaridigital.co.tz" />
           </Field>
           <Field label="Email Safari Digital about new inquiries" htmlFor="lead_alerts" hint="Sent to the staff notification addresses above, as each website inquiry comes in.">
-            <Select id="lead_alerts" name="lead_alerts" defaultValue={v("lead_alerts") || "all"}>
+            <Select id="lead_alerts" name="lead_alerts" defaultValue={v("lead_alerts") || "off"}>
               <option value="all">Every client&apos;s inquiries</option>
               <option value="internal">Only Safari Digital&apos;s own (internal) inquiries</option>
               <option value="off">Off</option>

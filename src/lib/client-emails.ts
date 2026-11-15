@@ -61,7 +61,7 @@ async function alertStaff(inquiryId: string, alreadySentTo: string[]) {
       admin.from("app_settings").select("value").eq("key", "lead_alerts").maybeSingle(),
     ]);
     if (!q) return;
-    const mode = (setting?.value as string | null) || "all";
+    const mode = (setting?.value as string | null) || "off";
     const client = (Array.isArray(q.clients) ? q.clients[0] : q.clients) as { name?: string; is_internal?: boolean } | null;
     if (mode === "off" || (mode === "internal" && !client?.is_internal)) return;
     const have = new Set(alreadySentTo.map((e) => e.toLowerCase()));

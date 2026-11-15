@@ -22,7 +22,7 @@ export async function saveSettings(_: SettingsState, form: FormData): Promise<Se
   const staff = values.staff_email.split(/[,;\s]+/).filter(Boolean);
   if (staff.some((e) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e))) return { error: "Check the staff notification email.", values };
 
-  if (!["all", "internal", "off"].includes(values.lead_alerts)) values.lead_alerts = "all";
+  if (!["all", "internal", "off"].includes(values.lead_alerts)) values.lead_alerts = "off";
 
   const supabase = await createClient();
   const { error } = await supabase.from("app_settings").upsert(SETTING_KEYS.map((key) => ({ key, value: values[key] || null })));

@@ -16,7 +16,7 @@ const ENV_FALLBACK: Record<SettingKey, string | undefined> = {
   drive_share_email: process.env.NEXT_PUBLIC_DRIVE_SHARE_EMAIL,
   support_whatsapp: process.env.SUPPORT_WHATSAPP,
   staff_email: process.env.STAFF_EMAIL,
-  lead_alerts: "all", // email Safari Digital about new inquiries: all | internal | off
+  lead_alerts: "off", // email Safari Digital about new inquiries: all | internal | off
   support_email: process.env.SUPPORT_EMAIL,
   // Invoice defaults (from Safari Digital's current invoice); change them in Admin → Settings.
   invoice_from: "Safari Digital\nA sub-company of Tpromosoft Limited\nTupendane, Manzese, 09 Maula St\nDar es Salaam, Tanzania\nwww.safaridigital.co.tz · +255 746 401 433",

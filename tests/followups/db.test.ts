@@ -215,3 +215,20 @@ describe("Minute and hour timing", () => {
     await expect(ins(0, "null")).rejects.toThrow(/followup_rules_days/);
   });
 });
+
+describe("New stage", () => {
+  it("a website inquiry starts New follow-ups at once; a hand-added one doesn't", async () => {
+    await as(null);
+    const [web] = await q<{ id: string }>(`insert into public.inquiries (client_id, customer_name, email, origin) values ('${A}', 'Webby', 'w@example.com', 'website_form') returning id`);
+    const [c] = await q<{ stage: string; status: string; confirmed: boolean }>(`select stage, status, confirmed_at is not null as confirmed from public.followup_cycles where inquiry_id = '${web.id}'`);
+    expect(c).toEqual({ stage: "new", status: "active", confirmed: true });
+    const hand = await newInquiry("Handy");
+    expect(await q(`select * from public.followup_cycles where inquiry_id = '${hand}'`)).toHaveLength(0);
+    // Moving on ends the New follow-ups.
+    await as(UA);
+    await db.exec(`select public.set_inquiry_status('${web.id}', 'contacted')`);
+    await as(null);
+    const cycles = await q<{ stage: string; status: string }>(`select stage, status from public.followup_cycles where inquiry_id = '${web.id}' order by started_at, stage desc`);
+    expect(cycles.find((x) => x.stage === "new")?.status).toBe("ended");
+  });
+});

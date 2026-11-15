@@ -17,7 +17,7 @@ import {
 export type WhatsappDue = { inquiryId: string; ruleId: string; guest: string; trip: string; stage: string; days: number; ruleName: string; url: string };
 export type RecentSend = { id: string; guest: string; name: string; channel: "email" | "whatsapp"; status: string; at: string };
 
-const STAGE_DOT: Record<FollowupStage, string> = { no_answer: "#E07B3A", no_show: "#C2413B", contacted: "#E0A458", quoted: "#8B6FE0", negotiating: "#E07B3A" };
+const STAGE_DOT: Record<FollowupStage, string> = { new: "#5B7BE0", no_answer: "#E07B3A", no_show: "#C2413B", contacted: "#E0A458", quoted: "#8B6FE0", negotiating: "#E07B3A" };
 const dayWord = (n: number) => (n === 1 ? "day" : "days");
 const TAG_LABEL: Record<string, string> = Object.fromEntries(TOKENS.map((t) => [t.token, t.label]));
 
@@ -575,8 +575,8 @@ function RuleRow({ rule, company, agent, open, pending, onOpen, onToggle, onSave
           </div>
           <p className="-mt-1 text-xs text-slate">
             {!valueOk ? <span className="text-danger-text">Pick {lo} to {hi} {d.unit}.</span>
-              : d.unit === "days" ? "Counted from when you confirm you sent your message. Day emails go Monday to Friday, 9:00 to 17:00 in the guest's time zone."
-                : "Counted from when you confirm you sent your message. Minute and hour emails go at their time, any day between 8:00 and 20:00 in the guest's time zone; outside that, at 8:00."}
+              : d.unit === "days" ? `Counted from ${(own ? d.stage : rule.stage) === "new" ? "when the inquiry arrives from your website" : "when you confirm you sent your message"}. Day emails go Monday to Friday, 9:00 to 17:00 in the guest's time zone.`
+                : `Counted from ${(own ? d.stage : rule.stage) === "new" ? "when the inquiry arrives from your website" : "when you confirm you sent your message"}. Minute and hour emails go at their time, any day between 8:00 and 20:00 in the guest's time zone; outside that, at 8:00.`}
           </p>
           <label className="flex flex-col gap-1.5 text-[13px] font-medium">Subject
             <Input ref={subjectRef} value={d.subject} maxLength={150} onFocus={() => { last.current = "subject"; }} onChange={(e) => setD({ ...d, subject: e.target.value })} /></label>

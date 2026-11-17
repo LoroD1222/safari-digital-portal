@@ -76,7 +76,7 @@ describe("One main currency", () => {
       { client_id: "b", monthly_fee: null, currency: "TZS", billing_start: null, notes: null },
     ] as ClientPrivate[];
     const r = mrrUsd(c, b, { now: new Date("2026-11-15"), plans: new Map([["b", asanja]]), rate: 2600 });
-    expect(r.total).toBe(440 + 2_300_000 / 2600);
+    expect(r.total).toBe(1324.62); // $440 + TZS 2,300,000 / 2,600
     expect(r.history.at(-1)!.value).toBe(Math.round(440 + 2_300_000 / 2600));
   });
 });

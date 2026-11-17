@@ -303,3 +303,25 @@ export function invoiceState(i: Pick<Invoice, "status" | "due_date">, now = new 
 export function invoiceTotal(items: InvoiceItem[]) {
   return Math.round(items.reduce((n, i) => n + (Number(i.amount) || 0), 0) * 100) / 100;
 }
+
+// ───────────── One main currency ─────────────
+// Everything adds up in USD. TZS amounts convert at the rate in Admin → Settings (default 2,600 TZS = 1 USD).
+export const DEFAULT_TZS_PER_USD = 2600;
+
+export function toUsd(amount: number, currency: Currency | string, tzsPerUsd = DEFAULT_TZS_PER_USD) {
+  return currency === "TZS" ? amount / (tzsPerUsd || DEFAULT_TZS_PER_USD) : amount;
+}
+
+// MRR and its monthly history, all in USD.
+export function mrrUsd(
+  clients: Pick<Client, "id" | "account_status" | "created_at" | "is_internal">[], billing: ClientPrivate[],
+  opts: { now?: Date; plans?: Map<string, SeoPlan>; rate?: number; months?: number } = {},
+) {
+  const now = opts.now ?? new Date(), rate = opts.rate ?? DEFAULT_TZS_PER_USD;
+  const r = mrr(clients, billing, now, opts.plans);
+  const total = Object.entries(r.totals).reduce((n, [c, v]) => n + toUsd(v ?? 0, c, rate), 0);
+  const usd = mrrHistory(clients, billing, "USD", opts.months ?? 12, now, opts.plans);
+  const tzs = mrrHistory(clients, billing, "TZS", opts.months ?? 12, now, opts.plans);
+  const history = usd.map((m, i) => ({ ...m, value: Math.round(m.value + toUsd(tzs[i].value, "TZS", rate)) }));
+  return { ...r, total: Math.round(total * 100) / 100, hasTzs: !!r.totals.TZS, history };
+}

@@ -23,6 +23,8 @@ export async function saveSettings(_: SettingsState, form: FormData): Promise<Se
   if (staff.some((e) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e))) return { error: "Check the staff notification email.", values };
 
   if (!["all", "internal", "off"].includes(values.lead_alerts)) values.lead_alerts = "off";
+  const rate = Number(String(values.tzs_per_usd ?? "").replace(/[, ]/g, ""));
+  values.tzs_per_usd = Number.isFinite(rate) && rate >= 100 && rate <= 100000 ? String(Math.round(rate)) : "2600";
 
   const supabase = await createClient();
   const { error } = await supabase.from("app_settings").upsert(SETTING_KEYS.map((key) => ({ key, value: values[key] || null })));

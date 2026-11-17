@@ -1,7 +1,7 @@
 import "server-only";
 import { createClient } from "./supabase/server";
 
-export const SETTING_KEYS = ["meta_video_url", "drive_video_url", "payment_video_url", "ad_account_video_url", "meta_business_id", "meta_ad_emails", "drive_share_email", "support_whatsapp", "staff_email", "support_email", "lead_alerts",
+export const SETTING_KEYS = ["meta_video_url", "drive_video_url", "payment_video_url", "ad_account_video_url", "meta_business_id", "meta_ad_emails", "drive_share_email", "support_whatsapp", "staff_email", "support_email", "lead_alerts", "tzs_per_usd",
   "invoice_from", "invoice_tin", "mpesa_number", "mpesa_name", "invoice_terms"] as const;
 export type SettingKey = (typeof SETTING_KEYS)[number];
 export type Settings = Record<SettingKey, string | null>;
@@ -16,6 +16,7 @@ const ENV_FALLBACK: Record<SettingKey, string | undefined> = {
   drive_share_email: process.env.NEXT_PUBLIC_DRIVE_SHARE_EMAIL,
   support_whatsapp: process.env.SUPPORT_WHATSAPP,
   staff_email: process.env.STAFF_EMAIL,
+  tzs_per_usd: "2600", // exchange rate: everything adds up in USD
   lead_alerts: "off", // email Safari Digital about new inquiries: all | internal | off
   support_email: process.env.SUPPORT_EMAIL,
   // Invoice defaults (from Safari Digital's current invoice); change them in Admin → Settings.

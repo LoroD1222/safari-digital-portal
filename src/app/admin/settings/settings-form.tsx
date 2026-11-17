@@ -93,6 +93,9 @@ export function SettingsForm({ initial }: { initial: Settings }) {
           <Field label="Send staff notifications to" htmlFor="staff_email" hint="Empty = every admin's sign-in email. Separate several with commas.">
             <Input id="staff_email" name="staff_email" defaultValue={v("staff_email")} placeholder="hello@safaridigital.co.tz" />
           </Field>
+          <Field label="Exchange rate (TZS per 1 USD)" htmlFor="tzs_per_usd" hint="Everything adds up in USD. TZS prices and invoices convert at this rate.">
+            <Input id="tzs_per_usd" name="tzs_per_usd" inputMode="numeric" defaultValue={v("tzs_per_usd") || "2600"} placeholder="2600" />
+          </Field>
           <Field label="Email Safari Digital about new inquiries" htmlFor="lead_alerts" hint="Sent to the staff notification addresses above, as each website inquiry comes in.">
             <Select id="lead_alerts" name="lead_alerts" defaultValue={v("lead_alerts") || "off"}>
               <option value="all">Every client&apos;s inquiries</option>

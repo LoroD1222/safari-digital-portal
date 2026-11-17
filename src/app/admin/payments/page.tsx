@@ -1,23 +1,20 @@
 import type { Metadata } from "next";
 import { requireAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { formatMoney, type Invoice } from "@/lib/types";
+import { DEFAULT_TZS_PER_USD, formatMoney, toUsd, type Invoice } from "@/lib/types";
 import { todayTz } from "@/lib/invoices";
 import { paymentEvents, type BillableClient, type PayEvent, type PayKind } from "@/lib/payments-calendar";
 import { PaymentsCalendar } from "./calendar";
 import { plansByClient, type SeoPlanMonth } from "@/lib/seo-plan";
+import { getSettings } from "@/lib/settings";
 import { ButtonLink, PageHeader, Stat } from "@/components/ui";
 import { Icon } from "@/components/icons";
 
 export const metadata: Metadata = { title: "Payments" };
 
-// Totals per currency: "$1,200" or "$1,200 + TZS 2,500,000".
-const money = (list: PayEvent[]) => {
-  const by = new Map<string, number>();
-  for (const e of list) by.set(e.currency, (by.get(e.currency) ?? 0) + e.amount);
-  const parts = [...by.entries()].filter(([, v]) => v).map(([c, v]) => formatMoney(Math.round(v * 100) / 100, c as "USD" | "TZS"));
-  return parts.length ? parts.join(" + ") : formatMoney(0, "USD");
-};
+// Totals in USD; TZS amounts convert at the rate in Settings.
+const moneyIn = (rate: number) => (list: PayEvent[]) =>
+  formatMoney(Math.round(list.reduce((n, e) => n + toUsd(e.amount, e.currency, rate), 0) * 100) / 100, "USD");
 
 export default async function PaymentsPage(props: PageProps<"/admin/payments">) {
   await requireAdmin();
@@ -37,6 +34,8 @@ export default async function PaymentsPage(props: PageProps<"/admin/payments">) 
   const plans = plansByClient((planRows ?? []) as (SeoPlanMonth & { client_id: string })[], (cl ?? []).filter((c) => c.seo_enabled).map((c) => ({ client_id: c.id as string, seo_start: c.seo_start as string | null })));
   const events = paymentEvents(month, invoices, clients, today, plans);
 
+  const rate = Number((await getSettings()).tzs_per_usd) || DEFAULT_TZS_PER_USD;
+  const money = moneyIn(rate);
   const sum = (k: PayKind[]) => money(events.filter((e) => k.includes(e.kind)));
   const count = (k: PayKind[]) => events.filter((e) => k.includes(e.kind)).length;
   const allOverdue = paymentEvents("", invoices, [], today).filter((e) => e.kind === "overdue");
@@ -55,7 +54,7 @@ export default async function PaymentsPage(props: PageProps<"/admin/payments">) 
           note={allOverdue.length ? `${allOverdue.length} past the due date` : "Nothing overdue"} href={allOverdue.length ? "/admin/invoices?status=overdue" : undefined} />
       </section>
 
-      <PaymentsCalendar key={`${month}:${events.map((e) => `${e.invoiceId ?? e.clientId}@${e.date}`).join(",")}`} month={month} today={today} events={events} />
+      <PaymentsCalendar key={`${month}:${events.map((e) => `${e.invoiceId ?? e.clientId}@${e.date}`).join(",")}`} month={month} today={today} events={events} rate={rate} />
     </>
   );
 }

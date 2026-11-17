@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { requireAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { formatMoney, invoiceState, type Invoice, mrr, WEBSITE_PRICE, type WebsitePackage, mrrHistory, type Client, type ClientPrivate, type ContentItem, type Currency, type SupportRequest } from "@/lib/types";
+import { DEFAULT_TZS_PER_USD, formatMoney, invoiceState, mrrUsd, type Invoice, WEBSITE_PRICE, type WebsitePackage, type Client, type ClientPrivate, type ContentItem, type SupportRequest } from "@/lib/types";
+import { getSettings } from "@/lib/settings";
 import { monthBounds } from "@/lib/dates";
 import { ButtonLink, EmptyState, PageHeader, Stat } from "@/components/ui";
 import { ActivityList, AttentionList, Section, type AttentionItem } from "@/components/blocks";
@@ -36,12 +37,11 @@ export default async function AdminOverview() {
   const seoIds = new Set(clients.filter((c) => c.seo_enabled).map((c) => c.id));
   const plans = plansByClient(((planRows ?? []) as (SeoPlanMonth & { client_id: string })[]).filter((r) => seoIds.has(r.client_id)),
     clients.filter((c) => c.seo_enabled).map((c) => ({ client_id: c.id, seo_start: c.seo_start })));
-  const revenue = mrr(clients, (bills ?? []) as ClientPrivate[], new Date(), plans);
-  const totals = (Object.entries(revenue.totals) as [Currency, number][]).filter(([, v]) => v > 0);
+  const rate = Number((await getSettings()).tzs_per_usd) || DEFAULT_TZS_PER_USD;
+  const revenue = mrrUsd(clients, (bills ?? []) as ClientPrivate[], { plans, rate });
+  const totals = revenue.total > 0;
   const activeCount = clients.filter((c) => c.account_status !== "paused").length;
-  // Chart the main currency (the one with the most revenue).
-  const chartCurrency = (totals.slice().sort((a, b) => b[1] - a[1])[0]?.[0] ?? "USD") as Currency;
-  const history = totals.length || revenue.upcoming ? mrrHistory(clients, (bills ?? []) as ClientPrivate[], chartCurrency, 12, new Date(), plans) : [];
+  const history = totals || revenue.upcoming ? revenue.history : [];
 
   const live = clients.filter((c) => c.account_status !== "paused");
   const awaitingOnboarding = live.filter((c) => c.onboarding_status !== "setup_complete");
@@ -84,16 +84,16 @@ export default async function AdminOverview() {
     <>
       <PageHeader title={`${greeting()}${first ? `, ${first}` : ""}`} subtitle="Here's what needs doing today." />
       <section aria-label="Summary" className="grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-3">
-        <Stat label="MRR" value={totals.length ? totals.map(([c, v]) => formatMoney(v, c)).join(" + ") : "—"}
-          note={billsError ? "Run 0007_billing.sql in Supabase" : totals.length ? `${revenue.paying + revenue.upcoming} of ${revenue.billable} clients priced${revenue.upcoming ? ` · incl. ${revenue.upcoming} starting later` : ""}` : "Add each client's monthly price"} href="/admin/clients" />
+        <Stat label="MRR" value={totals ? formatMoney(revenue.total, "USD") : "—"}
+          note={billsError ? "Run 0007_billing.sql in Supabase" : totals ? `${revenue.paying + revenue.upcoming} of ${revenue.billable} clients priced${revenue.upcoming ? ` · incl. ${revenue.upcoming} starting later` : ""}` : "Add each client's monthly price"} href="/admin/clients" />
         <Stat label="Active clients" value={activeCount} href="/admin/clients" />
         <Stat label="Awaiting onboarding" value={awaitingOnboarding.length} href="/admin/clients" />
         <Stat label="Content awaiting approval" value={awaitingApproval.length} href="/admin/content?status=awaiting_approval" />
         <Stat label="Open requests" value={requests.length} href="/admin/requests" />
       </section>
       {history.length > 0 && (
-        <MrrChart data={history} currency={chartCurrency}
-          note={totals.length > 1 ? `In ${chartCurrency}, from each client's price and start date. Other currencies aren't included in the chart.` : undefined} />
+        <MrrChart data={history} currency="USD"
+          note={revenue.hasTzs ? `In USD, from each client's price and start date. TZS prices converted at ${rate.toLocaleString("en-US")} TZS = 1 USD.` : undefined} />
       )}
       <MrrChart id="web" data={websiteSeries} currency="USD" title="Website income · last 12 months"
         note="Each client's website price (after discount), in the month it was built"

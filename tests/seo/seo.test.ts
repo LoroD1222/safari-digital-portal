@@ -65,3 +65,18 @@ describe("SEO onboarding", () => {
     expect(canFinish("site_access", { seo: { platform: "safari_digital" } })).toBe(true);
   });
 });
+
+describe("One main currency", () => {
+  it("adds TZS into USD at 2,600", async () => {
+    const { mrrUsd, toUsd } = await import("@/lib/types");
+    expect(toUsd(2_600_000, "TZS")).toBe(1000);
+    const c = [{ id: "a", account_status: "active", created_at: "2026-01-01" }, { id: "b", account_status: "active", created_at: "2026-01-01" }] as Client[];
+    const b = [
+      { client_id: "a", monthly_fee: 440, currency: "USD", billing_start: "2026-01-01", notes: null },
+      { client_id: "b", monthly_fee: null, currency: "TZS", billing_start: null, notes: null },
+    ] as ClientPrivate[];
+    const r = mrrUsd(c, b, { now: new Date("2026-11-15"), plans: new Map([["b", asanja]]), rate: 2600 });
+    expect(r.total).toBe(440 + 2_300_000 / 2600);
+    expect(r.history.at(-1)!.value).toBe(Math.round(440 + 2_300_000 / 2600));
+  });
+});

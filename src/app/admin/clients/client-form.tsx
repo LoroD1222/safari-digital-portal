@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useActionState, useState } from "react";
 import type { Client, ClientPrivate } from "@/lib/types";
-import { ACCOUNT_LABEL, MARKETING_LABEL, MARKETING_PRICE, ONBOARDING_LABEL, WEBSITE_LABEL, WEBSITE_PRICE, discounted, formatMoney, type DiscountType, type MarketingPackage, type WebsitePackage } from "@/lib/types";
+import { ACCOUNT_LABEL, MARKETING_LABEL, MARKETING_PRICE, ONBOARDING_LABEL, WEBSITE_LABEL, WEBSITE_PRICE, discounted, formatMoney, toUsd, type DiscountType, type MarketingPackage, type WebsitePackage } from "@/lib/types";
 import { Alert, Field, Input, Select, Textarea, buttonClass } from "@/components/ui";
 import { SubmitButton } from "@/components/submit-button";
 import type { ClientFormState } from "./actions";
@@ -191,7 +191,7 @@ function PackagePricing({ client, billing, seoPlan, val, fe }: { client?: Client
         )}
 
         <input type="hidden" name="seo_field" value="1" />
-        <SeoPlanFields on={seo} setOn={setSeo} plan={seoPlan} start={client?.seo_start ?? null} showCurrency={!mk} currency={val("currency", billing?.currency ?? "TZS")} usdOnly={!!mk && mkList !== null} error={fe.seo_plan} />
+        <SeoPlanFields on={seo} setOn={setSeo} plan={seoPlan} start={client?.seo_start ?? null} showCurrency={!mk} currency={val("currency", billing?.currency ?? "USD")} usdOnly={!!mk && mkList !== null} error={fe.seo_plan} />
 
         <div className="max-w-[240px]">
           <Field label="Paying since" htmlFor="billing_start" optional hint="When the monthly price started. Used for the MRR chart.">
@@ -209,7 +209,7 @@ function SeoPlanFields({ on, setOn, plan, start, showCurrency, currency, usdOnly
 }) {
   const blank = (n: number): SeoPlanMonth => ({ month_no: n, title: "", price: 0, backlinks: 0 });
   const [rows, setRows] = useState<SeoPlanMonth[]>(plan.length ? plan : [1, 2, 3].map(blank));
-  const [cur, setCur] = useState(usdOnly ? "USD" : currency || "TZS");
+  const [cur, setCur] = useState(usdOnly ? "USD" : currency || "USD");
   const setCount = (n: number) => setRows((r) => Array.from({ length: n }, (_, i) => r[i] ?? blank(i + 1)));
   const set = (i: number, patch: Partial<SeoPlanMonth>) => setRows((r) => r.map((x, j) => (j === i ? { ...x, ...patch } : x)));
   const num = (v: string) => Number(v.replace(/[^\d.]/g, "")) || 0;
@@ -234,7 +234,7 @@ function SeoPlanFields({ on, setOn, plan, start, showCurrency, currency, usdOnly
             {showCurrency ? (
               <Field label="Currency" htmlFor="seo_currency">
                 <Select id="seo_currency" name="currency" value={cur} onChange={(e) => setCur(e.target.value)}>
-                  <option value="TZS">TZS</option><option value="USD">USD</option>
+                  <option value="USD">USD</option><option value="TZS">TZS</option>
                 </Select>
               </Field>
             ) : <p className="self-end pb-2 text-xs text-slate">{usdOnly ? "In USD, like the marketing package." : "In the marketing currency above."}</p>}
@@ -253,6 +253,7 @@ function SeoPlanFields({ on, setOn, plan, start, showCurrency, currency, usdOnly
           {error && <p className="text-[13px] text-danger-text">{error}</p>}
           <p className="rounded-control bg-white px-3 py-2 text-[13px] text-body">
             Total {rows.length}-month plan: <strong className="font-semibold text-ink">{formatMoney(total, c)}</strong>
+            {c === "TZS" && <> (≈ {formatMoney(Math.round(toUsd(total, "TZS")), "USD")} at 2,600)</>}
             {" "}· invoiced each month in advance: the month&apos;s price and its backlinks cost as separate lines.
           </p>
         </>

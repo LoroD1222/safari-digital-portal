@@ -2,7 +2,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { formatMoney } from "@/lib/types";
+import { formatMoney, toUsd } from "@/lib/types";
 import { monthGrid, shiftMonth, type PayEvent, type PayKind } from "@/lib/payments-calendar";
 import { Icon } from "@/components/icons";
 import { movePayment } from "./actions";
@@ -19,9 +19,11 @@ const MONTHS = ["January", "February", "March", "April", "May", "June", "July", 
 // Same text on the server and in the browser (toLocaleDateString can differ between them).
 const dayLabel = (d: string) => `${WEEKDAYS[(new Date(d + "T00:00:00Z").getUTCDay() + 6) % 7]} ${Number(d.slice(8))} ${MONTHS[Number(d.slice(5, 7)) - 1].slice(0, 3)}`;
 const monthLabel = (m: string) => `${MONTHS[Number(m.slice(5, 7)) - 1]} ${m.slice(0, 4)}`;
-const money = (e: PayEvent) => formatMoney(e.amount, e.currency as "USD" | "TZS");
 
-export function PaymentsCalendar({ month, today, events: initial }: { month: string; today: string; events: PayEvent[] }) {
+export function PaymentsCalendar({ month, today, events: initial, rate }: { month: string; today: string; events: PayEvent[]; rate: number }) {
+  // Amounts in USD; a TZS invoice also shows its TZS amount in the tooltip and list.
+  const money = (e: PayEvent) => formatMoney(Math.round(toUsd(e.amount, e.currency, rate)), "USD");
+  const orig = (e: PayEvent) => (e.currency === "TZS" ? ` (${formatMoney(e.amount, "TZS")})` : "");
   const router = useRouter();
   const [pending, start] = useTransition();
   const [events, setEvents] = useState(initial);
@@ -83,7 +85,7 @@ export function PaymentsCalendar({ month, today, events: initial }: { month: str
                   {day && <span className={`self-start px-1 text-xs tabular-nums ${isToday ? "rounded-full bg-forest px-2 font-semibold text-white" : "text-slate"}`}>{Number(day.slice(8))}</span>}
                   {list.map((e, i) => (
                     <Link key={i} href={e.href}
-                      title={`${e.client} · ${money(e)} · ${KIND[e.kind].label}${e.kind === "expected" ? " · create the invoice to move it" : ` · ${e.label} · drag to another day to move`}`}
+                      title={`${e.client} · ${money(e)}${orig(e)} · ${KIND[e.kind].label}${e.kind === "expected" ? " · create the invoice to move it" : ` · ${e.label} · drag to another day to move`}`}
                       draggable={!!e.invoiceId}
                       onDragStart={e.invoiceId ? (ev) => { ev.dataTransfer.setData("text/x-invoice", e.invoiceId!); ev.dataTransfer.effectAllowed = "move"; setDragging(e.invoiceId!); } : undefined}
                       onDragEnd={() => { setDragging(null); setOver(null); }}
@@ -115,7 +117,7 @@ export function PaymentsCalendar({ month, today, events: initial }: { month: str
                       <span className={`size-2.5 shrink-0 rounded-full ${KIND[e.kind].dot}`} />
                       <span className="flex min-w-0 flex-1 flex-col">
                         <span className="truncate text-[14px] font-medium text-ink">{e.client}</span>
-                        <span className="text-xs text-slate">{KIND[e.kind].label}{e.kind === "expected" ? "" : ` · ${e.label}`}</span>
+                        <span className="text-xs text-slate">{KIND[e.kind].label}{e.kind === "expected" ? "" : ` · ${e.label}`}{orig(e)}</span>
                       </span>
                       <span className="text-[14px] font-medium tabular-nums text-ink">{money(e)}</span>
                     </Link>

@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { requireAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { ACCOUNT_LABEL, ONBOARDING_LABEL, formatMoney, mrr, packageSummary, type Client, type ClientPrivate, type Currency } from "@/lib/types";
+import { ACCOUNT_LABEL, DEFAULT_TZS_PER_USD, ONBOARDING_LABEL, formatMoney, mrrUsd, packageSummary, type Client, type ClientPrivate } from "@/lib/types";
+import { plansByClient, type SeoPlanMonth } from "@/lib/seo-plan";
+import { getSettings } from "@/lib/settings";
 import { ACCOUNT_TONE, ONBOARDING_TONE } from "@/lib/status-tone";
 import { Alert, Badge, ButtonLink, EmptyState, Input, PageHeader } from "@/components/ui";
 import { Icon } from "@/components/icons";
@@ -21,15 +23,18 @@ export default async function ClientsPage(props: PageProps<"/admin/clients">) {
   // Our own business (internal) goes at the end.
   const clients = ((data ?? []) as Client[]).sort((a, b) => Number(!!a.is_internal) - Number(!!b.is_internal));
   const { data: bills } = await supabase.from("client_private").select("client_id, monthly_fee, currency, billing_start");
+  const { data: planRows } = await supabase.from("seo_plan").select("*");
+  const plans = plansByClient((planRows ?? []) as (SeoPlanMonth & { client_id: string })[], clients.filter((c) => c.seo_enabled).map((c) => ({ client_id: c.id, seo_start: c.seo_start })));
+  const rate = Number((await getSettings()).tzs_per_usd) || DEFAULT_TZS_PER_USD;
   const billing = (bills ?? []) as ClientPrivate[];
   const price = Object.fromEntries(billing.filter((b) => b.monthly_fee).map((b) => [b.client_id, formatMoney(Number(b.monthly_fee), b.currency)]));
-  const totals = (Object.entries(mrr(clients, billing).totals) as [Currency, number][]).filter(([, v]) => v > 0);
+  const total = mrrUsd(clients, billing, { plans, rate }).total;
 
   return (
     <>
       <PageHeader
         title="Clients"
-        subtitle={totals.length && !query ? <>MRR: <span className="font-medium text-ink">{totals.map(([c, v]) => formatMoney(v, c)).join(" + ")}</span> / month</> : undefined}
+        subtitle={total > 0 && !query ? <>MRR: <span className="font-medium text-ink">{formatMoney(total, "USD")}</span> / month</> : undefined}
         actions={<ButtonLink href="/admin/clients/new"><Icon name="plus" size={16} />Add client</ButtonLink>}
       />
       {typeof deleted === "string" && <Alert tone="success">{deleted} was deleted.</Alert>}

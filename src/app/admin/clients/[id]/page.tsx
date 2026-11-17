@@ -27,11 +27,18 @@ import { AdReportForm, MissingInfoForm, PlanForm, WebsiteProjectForm } from "../
 import { setOnboardingStatus } from "../manage-actions";
 import { listOnboardingFiles } from "@/lib/client-files";
 import type { Answers } from "@/lib/onboarding";
+import { loadSeo } from "@/lib/seo";
+import { todayTz } from "@/lib/invoices";
+import { searchConsoleEmail } from "@/lib/search-console";
+import { SeoReport } from "@/components/seo-report";
+import { KeywordsCard, SearchConsoleCard, WorkCard } from "../seo-admin";
+import { BacklinksAdmin } from "../backlinks-admin";
+import { backlinkMonths } from "@/lib/seo";
 
 export const metadata: Metadata = { title: "Client" };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const TABS = ["overview", "onboarding", "reporting", "connections"] as const;
+const TABS = ["overview", "onboarding", "reporting", "seo", "backlinks", "connections"] as const;
 type Tab = (typeof TABS)[number];
 
 export default async function ClientPage(props: PageProps<"/admin/clients/[id]">) {
@@ -72,11 +79,14 @@ export default async function ClientPage(props: PageProps<"/admin/clients/[id]">
         { href: base, label: "Overview", active: tab === "overview" },
         { href: `${base}?tab=onboarding`, label: "Onboarding", active: tab === "onboarding", count: client.onboarding_status === "submitted" ? 1 : 0 },
         { href: `${base}?tab=reporting`, label: "Reporting", active: tab === "reporting" },
+        ...(client.seo_enabled ? [{ href: `${base}?tab=seo`, label: "SEO", active: tab === "seo" }, { href: `${base}?tab=backlinks`, label: "Backlinks", active: tab === "backlinks" }] : []),
         { href: `${base}?tab=connections`, label: "Connections", active: tab === "connections" },
       ]} />
       {tab === "overview" && <OverviewTab client={client} />}
       {tab === "onboarding" && <OnboardingTab client={client} />}
       {tab === "reporting" && <ReportingTab client={client} month={typeof sp.month === "string" ? sp.month : null} />}
+      {tab === "seo" && <SeoTab client={client} />}
+      {tab === "backlinks" && <BacklinksTab client={client} />}
       {tab === "connections" && <DataSection client={client} />}
     </div>
   );
@@ -95,6 +105,7 @@ async function OverviewTab({ client }: { client: Client }) {
   const { data: reqs } = await supabase.from("requests").select("*").eq("client_id", client.id).order("last_message_at", { ascending: false }).limit(5);
   const requests = (reqs ?? []) as SupportRequest[];
   const { data: billing } = await supabase.from("client_private").select("*").eq("client_id", client.id).maybeSingle();
+  const { data: seoPlan } = await supabase.from("seo_plan").select("month_no, title, price, backlinks").eq("client_id", client.id).order("month_no");
 
   return (
     <>
@@ -131,7 +142,7 @@ async function OverviewTab({ client }: { client: Client }) {
         )}
       </Section>
       <div className="border-t border-line-soft pt-6">
-        <ClientForm action={updateClientRecord.bind(null, client.id)} client={client} billing={billing as ClientPrivate | null} submitLabel="Save changes" cancelHref="/admin/clients" />
+        <ClientForm action={updateClientRecord.bind(null, client.id)} client={client} billing={billing as ClientPrivate | null} seoPlan={(seoPlan ?? []).map((r) => ({ ...r, price: Number(r.price), backlinks: Number(r.backlinks) }))} submitLabel="Save changes" cancelHref="/admin/clients" />
       </div>
       <InternalSwitch clientId={client.id} internal={!!client.is_internal} />
       <DangerZone clientId={client.id} name={client.name} logins={members.length} />
@@ -228,4 +239,37 @@ async function ReportingTab({ client, month }: { client: Client; month: string |
       <p className="text-xs text-slate">Website visitors come straight from Vercel once the website project is picked in Connections.</p>
     </>
   );
+}
+
+
+// SEO clients: connect Search Console, choose keywords, write the monthly work note; below, what the client sees.
+async function SeoTab({ client }: { client: Client }) {
+  const data = await loadSeo(await createClient(), client.id);
+  if (!data.ready) return <Alert>Run 0032_seo.sql in Supabase to start using SEO.</Alert>;
+  const thisMonth = todayTz().slice(0, 7);
+  return (
+    <div className="flex flex-col gap-5">
+      <SearchConsoleCard clientId={client.id} site={client.gsc_site ?? null} email={searchConsoleEmail()} syncedAt={client.seo_synced_at ?? null} error={client.seo_sync_error ?? null} />
+      <div className="grid items-start gap-5 lg:grid-cols-2">
+        <KeywordsCard clientId={client.id} keywords={data.keywords} />
+        <WorkCard clientId={client.id} work={data.work} thisMonth={thisMonth} />
+      </div>
+      <div className="flex flex-col gap-3 border-t border-line-soft pt-5">
+        <h2 className="text-[13px] font-semibold uppercase tracking-[0.05em] text-slate">What the client sees</h2>
+        <SeoReport data={data} connected={!!client.gsc_site} site={client.gsc_site} />
+      </div>
+    </div>
+  );
+}
+
+// Backlinks per SEO plan month.
+async function BacklinksTab({ client }: { client: Client }) {
+  const supabase = await createClient();
+  const data = await loadSeo(supabase, client.id);
+  if (!data.ready) return <Alert>Run 0032_seo.sql in Supabase to start using SEO.</Alert>;
+  const { data: priv } = await supabase.from("client_private").select("currency").eq("client_id", client.id).maybeSingle();
+  const months = backlinkMonths(data.plan, data.backlinks);
+  const now = todayTz().slice(0, 7) + "-01";
+  const initial = months.find((m) => m.month === now)?.month ?? months.find((m) => m.month > now)?.month ?? months.at(-1)?.month ?? now;
+  return <BacklinksAdmin clientId={client.id} months={months} links={data.backlinks} currency={priv?.currency === "USD" ? "USD" : "TZS"} initial={initial} />;
 }

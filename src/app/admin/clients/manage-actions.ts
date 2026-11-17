@@ -247,7 +247,7 @@ export async function saveOnboardingAnswers(clientId: string, next: Answers): Pr
   const text = (v: unknown, max = 2000) => (typeof v === "string" ? v.trim().slice(0, max) : undefined) || undefined;
   const words = (v: unknown) => Array.isArray(v) ? [...new Set(v.map((x) => String(x).trim()).filter(Boolean).map((x) => x.slice(0, 80)))].slice(0, 30) : [];
   const pick = <T extends string>(v: unknown, ok: readonly T[]) => (ok as readonly unknown[]).includes(v) ? (v as T) : undefined;
-  const b = next.business ?? {}, m = next.marketing ?? {}, w = next.website ?? {}, f = next.files ?? {};
+  const b = next.business ?? {}, m = next.marketing ?? {}, w = next.website ?? {}, f = next.files ?? {}, o = next.seo ?? {};
   const email = text(b.inquiry_email, 200);
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, error: "The inquiry email doesn't look like an email address." };
   const budget = text(m.budget, 20)?.replace(/[$,\s]/g, "");
@@ -271,6 +271,11 @@ export async function saveOnboardingAnswers(clientId: string, next: Answers): Pr
       current_site: text(w.current_site, 200), domain_choice: pick(w.domain_choice, ["have", "need", "unsure"] as const),
       domain: text(w.domain, 200), registrar: text(w.registrar, 120), wanted_domain: text(w.wanted_domain, 200),
       goals: words(w.goals), pages: words(w.pages), likes: text(w.likes),
+    },
+    seo: { ...old.seo,
+      site: text(o.site, 200), platform: pick(o.platform, ["wordpress", "wix", "squarespace", "safari_digital", "other", "unsure"] as const),
+      platform_other: text(o.platform_other, 120), tours: text(o.tours), keywords: words(o.keywords), markets: words(o.markets), competitors: text(o.competitors),
+      has_gsc: pick(o.has_gsc, ["yes", "no", "unsure"] as const), gsc_added: !!o.gsc_added, ga_added: !!o.ga_added, site_access_added: !!o.site_access_added,
     },
     files: { ...old.files,
       mode: pick(f.mode, ["drive", "upload"] as const), drive_link: text(f.drive_link, 500), drive_shared: !!f.drive_shared, reviews: text(f.reviews),

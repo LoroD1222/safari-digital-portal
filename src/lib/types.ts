@@ -1,3 +1,4 @@
+import { seoAmount, type SeoPlan } from "./seo-plan";
 export type Role = "admin" | "client";
 export type OnboardingStatus = "not_started" | "in_progress" | "submitted" | "being_reviewed" | "setup_complete";
 export type AccountStatus = "invited" | "active" | "paused";
@@ -20,6 +21,11 @@ export type Client = {
   vercel_project_name?: string | null;
   meta_ad_account_id?: string | null;
   is_internal?: boolean;                // Safari Digital's own business (0025): left out of counts, income and invoices
+  seo_enabled?: boolean;                // SEO service (0032): SEO onboarding, SEO tab, monthly SEO fee
+  gsc_site?: string | null;             // Google Search Console property, e.g. sc-domain:asanja.com
+  seo_synced_at?: string | null;
+  seo_sync_error?: string | null;
+  seo_start?: string | null;            // first day of SEO plan month 1
   meta_dataset_id?: string | null;
   tracking_since?: string | null;
   meta_page_id?: string | null;
@@ -79,9 +85,10 @@ export const WEBSITE_FEATURES: Record<WebsitePackage, string[]> = {
   advanced: ["Custom website design", "Advanced tour management", "Search, filters and multiple languages", "Booking and CRM integrations", "Custom features and automations"],
 };
 
-export function packageSummary(c: Pick<Client, "marketing_package" | "website_package">) {
+export function packageSummary(c: Pick<Client, "marketing_package" | "website_package"> & { seo_enabled?: boolean }) {
   const parts: string[] = [];
   if (c.marketing_package) parts.push(`Marketing ${MARKETING_LABEL[c.marketing_package]}`);
+  if (c.seo_enabled) parts.push("SEO");
   if (c.website_package) parts.push(`Website ${WEBSITE_LABEL[c.website_package]}`);
   return parts.length ? parts.join(" + ") : "No package yet";
 }
@@ -225,14 +232,22 @@ function startOf(b: ClientPrivate, c: Pick<Client, "created_at">) {
 
 // Monthly recurring revenue today, one total per currency. Prices with a
 // start date in the future count as "upcoming", not MRR yet.
-export function mrr(clients: Pick<Client, "id" | "account_status" | "created_at" | "is_internal">[], billing: ClientPrivate[], now = new Date()) {
+// SEO plans: month 1 counts until the plan starts, then the month the client is in, then nothing after the plan.
+function seoNow(plan: SeoPlan | undefined, today: string) {
+  if (!plan?.months.length) return 0;
+  const period = today.slice(0, 8) + "01";
+  if (plan.start && period < plan.start.slice(0, 8) + "01") return seoAmount(plan, plan.start);
+  return seoAmount(plan, period);
+}
+
+export function mrr(clients: Pick<Client, "id" | "account_status" | "created_at" | "is_internal">[], billing: ClientPrivate[], now = new Date(), seo?: Map<string, SeoPlan>) {
   const live = new Map(clients.filter(billable).map((c) => [c.id, c]));
   const today = now.toISOString().slice(0, 10);
   const totals: Partial<Record<Currency, number>> = {};
   let paying = 0, upcoming = 0;
   for (const b of billing) {
     const c = live.get(b.client_id);
-    const fee = Number(b.monthly_fee);
+    const fee = Number(b.monthly_fee ?? 0) + seoNow(seo?.get(b.client_id), today);
     if (!c || !fee || !Number.isFinite(fee)) continue;
     // Every invited client counts towards the total, including ones starting later.
     // The monthly chart (mrrHistory) still uses each client's start date.
@@ -245,7 +260,7 @@ export function mrr(clients: Pick<Client, "id" | "account_status" | "created_at"
 // MRR per month for the last `months` months: each client's price counts from
 // the month they started paying (or were added), unless they're paused now.
 export function mrrHistory(
-  clients: Pick<Client, "id" | "account_status" | "created_at" | "is_internal">[], billing: ClientPrivate[], currency: Currency, months = 12, now = new Date(),
+  clients: Pick<Client, "id" | "account_status" | "created_at" | "is_internal">[], billing: ClientPrivate[], currency: Currency, months = 12, now = new Date(), seo?: Map<string, SeoPlan>,
 ) {
   const live = new Map(clients.filter(billable).map((c) => [c.id, c]));
   const today = now.toISOString().slice(0, 10);
@@ -257,9 +272,11 @@ export function mrrHistory(
     let value = 0;
     for (const b of billing) {
       const c = live.get(b.client_id);
-      const fee = Number(b.monthly_fee);
-      if (!c || !fee || !Number.isFinite(fee) || b.currency !== currency) continue;
-      if (startOf(b, c) <= end) value += fee;
+      if (!c || b.currency !== currency) continue;
+      const fee = Number(b.monthly_fee ?? 0);
+      if (fee && Number.isFinite(fee) && startOf(b, c) <= end) value += fee;
+      value += seoAmount(seo?.get(b.client_id), start.toISOString().slice(0, 10)); // SEO counts in its plan months
+
     }
     out.push({ month: start.toISOString().slice(0, 7), label: start.toLocaleDateString("en-GB", { month: "short", timeZone: "UTC" }), value });
   }

@@ -232,3 +232,18 @@ describe("New stage", () => {
     expect(cycles.find((x) => x.stage === "new")?.status).toBe("ended");
   });
 });
+
+describe("SEO tables", () => {
+  it("clients read their own SEO data but can't change it", async () => {
+    await as(null);
+    await db.exec(`insert into public.seo_plan (client_id, month_no, title, price, backlinks) values ('${A}', 1, 'Foundation', 2000000, 300000)`);
+    await db.exec(`insert into public.seo_backlinks (client_id, month, site, status) values ('${A}', '2026-11-01', 'safaribookings.com', 'live')`);
+    await as(UA);
+    expect(await q(`select title from public.seo_plan`)).toEqual([{ title: "Foundation" }]);
+    expect(await q(`select site from public.seo_backlinks`)).toHaveLength(1);
+    await expect(db.exec(`insert into public.seo_backlinks (client_id, month, site) values ('${A}', '2026-11-01', 'x.com')`)).rejects.toThrow(/row-level security/);
+    await as(UB);
+    expect(await q(`select * from public.seo_plan`)).toHaveLength(0);
+    await as(null);
+  });
+});

@@ -1,4 +1,5 @@
 import "server-only";
+import { planMonth, plansByClient, type SeoPlanMonth } from "./seo-plan";
 import { createAdminClient } from "./supabase/admin";
 import { clientEmails, emailConfigured, send, staffAddresses } from "./email";
 import { siteOrigin } from "./origin";
@@ -36,23 +37,37 @@ export async function nextNumber(db: Admin | Awaited<ReturnType<typeof import(".
 // Line items for a client's monthly marketing fee: list price, then the discount as its own line.
 export async function monthlyItems(db: Admin, clientId: string, period: string): Promise<InvoiceItem[]> {
   const [{ data: c }, { data: p }] = await Promise.all([
-    db.from("clients").select("marketing_package").eq("id", clientId).single(),
-    db.from("client_private").select("monthly_fee, discount_type, discount_value").eq("client_id", clientId).maybeSingle(),
+    db.from("clients").select("*").eq("id", clientId).single(),
+    db.from("client_private").select("*").eq("client_id", clientId).maybeSingle(),
   ]);
   const pkg = c?.marketing_package as MarketingPackage | null;
-  if (!pkg) return [];
   const label = monthBounds(0, new Date(period + "T00:00:00Z")).label;
+  const seo = c?.seo_enabled ? await seoItems(db, clientId, c.seo_start ?? null, period, label) : [];
+  if (!pkg) return seo;
   const list = MARKETING_PRICE[pkg];
   const details = MARKETING_FEATURES[pkg]?.join(" · ") ?? null;
   const title = `${MARKETING_LABEL[pkg]} Marketing · ${label}`;
   if (list === null) {
-    return [{ description: title, details, amount: Number(p?.monthly_fee ?? 0) }];
+    return [{ description: title, details, amount: Number(p?.monthly_fee ?? 0) }, ...seo];
   }
   const items: InvoiceItem[] = [{ description: title, details, amount: list }];
   const type = (p?.discount_type ?? "percent") as DiscountType;
   const value = Number(p?.discount_value ?? 0);
   const final = discounted(list, type, value);
   if (final < list) items.push({ description: `Discount${type === "percent" ? ` (${value}%)` : ""}`, amount: -(Math.round((list - final) * 100) / 100) });
+  return [...items, ...seo];
+}
+
+// SEO plan month for this period: the month's price, and its backlinks cost as its own line.
+async function seoItems(db: Admin, clientId: string, start: string | null, period: string, label: string): Promise<InvoiceItem[]> {
+  const { data } = await db.from("seo_plan").select("*").eq("client_id", clientId);
+  const plan = plansByClient((data ?? []) as (SeoPlanMonth & { client_id: string })[], [{ client_id: clientId, seo_start: start }]).get(clientId)!;
+  const m = planMonth(plan, period);
+  if (!m) return [];
+  const total = plan.months.length;
+  const items: InvoiceItem[] = [];
+  if (m.price > 0) items.push({ description: `SEO · Month ${m.month_no} of ${total}${m.title ? ` · ${m.title}` : ""}`, details: label, amount: m.price });
+  if (m.backlinks > 0) items.push({ description: `Backlinks · Month ${m.month_no}`, details: label, amount: m.backlinks });
   return items;
 }
 
@@ -61,7 +76,9 @@ export async function createMonthlyDrafts(now = new Date()) {
   const db = createAdminClient();
   const period = monthBounds(0, now).start;
   const today = todayTz(now);
-  const { data: all } = await db.from("clients").select("*").neq("account_status", "paused").not("marketing_package", "is", null);
+  const first = await db.from("clients").select("*").neq("account_status", "paused").or("marketing_package.not.is.null,seo_enabled.eq.true");
+  // Before 0032_seo.sql has run there's no seo_enabled column: marketing clients only.
+  const all = first.error ? (await db.from("clients").select("*").neq("account_status", "paused").not("marketing_package", "is", null)).data : first.data;
   const clients = (all ?? []).filter((c) => !c.is_internal); // never invoice our own business
   const made: string[] = [];
   for (const c of clients) {
@@ -71,9 +88,11 @@ export async function createMonthlyDrafts(now = new Date()) {
     const items = await monthlyItems(db, c.id, period);
     const total = invoiceTotal(items);
     if (!items.length || total <= 0) continue;
+    // The client's billing currency (list-price marketing is USD; custom prices and SEO plans can be TZS).
+    const { data: cp } = await db.from("client_private").select("currency").eq("client_id", c.id).maybeSingle();
     const { error: e2 } = await db.from("invoices").insert({
       client_id: c.id, number: await nextNumber(db), kind: "monthly", period_month: period, status: "draft",
-      currency: "USD", issue_date: today, due_date: addDays(today, 14), items, total,
+      currency: cp?.currency === "TZS" ? "TZS" : "USD", issue_date: today, due_date: addDays(today, 14), items, total,
     });
     if (!e2) made.push(c.name as string);
   }

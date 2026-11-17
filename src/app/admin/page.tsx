@@ -7,6 +7,7 @@ import { ButtonLink, EmptyState, PageHeader, Stat } from "@/components/ui";
 import { ActivityList, AttentionList, Section, type AttentionItem } from "@/components/blocks";
 import { Icon } from "@/components/icons";
 import { MrrChart } from "@/components/mrr-chart";
+import { plansByClient, type SeoPlanMonth } from "@/lib/seo-plan";
 
 export const metadata: Metadata = { title: "Overview" };
 
@@ -25,18 +26,22 @@ export default async function AdminOverview() {
     supabase.from("activity").select("id, client_id, message, created_at, admin_link, actor_role").order("created_at", { ascending: false }).limit(8),
     supabase.from("client_private").select("*"),
   ]);
+  const { data: planRows } = await supabase.from("seo_plan").select("*"); // missing before 0032: no SEO in MRR
   // Our own business (internal) isn't a client: out of counts and income.
   const everyone = (cs ?? []) as Client[];
   const clients = everyone.filter((c) => !c.is_internal);
   const items = (content ?? []) as ContentItem[];
   const requests = (reqs ?? []) as SupportRequest[];
   const name = Object.fromEntries(everyone.map((c) => [c.id, c.name]));
-  const revenue = mrr(clients, (bills ?? []) as ClientPrivate[]);
+  const seoIds = new Set(clients.filter((c) => c.seo_enabled).map((c) => c.id));
+  const plans = plansByClient(((planRows ?? []) as (SeoPlanMonth & { client_id: string })[]).filter((r) => seoIds.has(r.client_id)),
+    clients.filter((c) => c.seo_enabled).map((c) => ({ client_id: c.id, seo_start: c.seo_start })));
+  const revenue = mrr(clients, (bills ?? []) as ClientPrivate[], new Date(), plans);
   const totals = (Object.entries(revenue.totals) as [Currency, number][]).filter(([, v]) => v > 0);
   const activeCount = clients.filter((c) => c.account_status !== "paused").length;
   // Chart the main currency (the one with the most revenue).
   const chartCurrency = (totals.slice().sort((a, b) => b[1] - a[1])[0]?.[0] ?? "USD") as Currency;
-  const history = totals.length || revenue.upcoming ? mrrHistory(clients, (bills ?? []) as ClientPrivate[], chartCurrency) : [];
+  const history = totals.length || revenue.upcoming ? mrrHistory(clients, (bills ?? []) as ClientPrivate[], chartCurrency, 12, new Date(), plans) : [];
 
   const live = clients.filter((c) => c.account_status !== "paused");
   const awaitingOnboarding = live.filter((c) => c.onboarding_status !== "setup_complete");

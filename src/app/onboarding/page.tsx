@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { DEFAULT_ANSWERS, inferDone, type Answers } from "@/lib/onboarding";
 import { Wizard } from "./wizard";
 import { getSettings } from "@/lib/settings";
+import { searchConsoleEmail } from "@/lib/search-console";
 
 export const metadata: Metadata = { title: "Onboarding" };
 
@@ -15,6 +16,7 @@ function merge(saved: Answers | null): Answers {
     marketing: { ...DEFAULT_ANSWERS.marketing, ...s.marketing },
     website: { ...DEFAULT_ANSWERS.website, ...s.website },
     files: { ...DEFAULT_ANSWERS.files, ...s.files, mode: "drive" },
+    seo: { ...DEFAULT_ANSWERS.seo, ...s.seo },
     done: s.done ?? inferDone(s),
   };
 }
@@ -34,7 +36,9 @@ export default async function OnboardingPage() {
       clientId={company.id}
       companyName={company.name}
       contactName={company.contact_name ?? null}
-      services={{ marketing: !!company.marketing_package, website: !!company.website_package }}
+      services={{ marketing: !!company.marketing_package, website: !!company.website_package, seo: !!company.seo_enabled }}
+      searchConsoleEmail={searchConsoleEmail()}
+      gscConnected={!!company.gsc_site}
       initialAnswers={merge((row?.data as Answers) ?? null)}
       initialView={row?.submitted_at && !reopened ? "done" : "hub"}
       submitted={!!row?.submitted_at && !reopened}

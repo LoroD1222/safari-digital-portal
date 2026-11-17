@@ -65,13 +65,14 @@ function readPrivate(form: FormData): { values: Record<string, unknown>; error?:
   if ("error" in typedWeb) return { values: {}, error: "The website price must be a number." };
   const webFee = !web ? null : webList !== null ? discounted(webList, wd.type, wd.value) : typedWeb.value;
 
+
   const start = text(form, "billing_start");
   const built = text(form, "website_built_on");
   return {
     values: {
       monthly_fee: monthly,
-      // List prices are in USD; a custom price can be in TZS.
-      currency: mkList !== null ? "USD" : (oneOf(form, "currency", ["USD", "TZS"]) ?? "USD"),
+      // List prices are in USD; a custom price or an SEO plan can be in TZS.
+      currency: mk && mkList !== null ? "USD" : (oneOf(form, "currency", ["USD", "TZS"]) ?? "USD"),
       discount_type: d.type, discount_value: mkList !== null ? d.value : 0,
       website_fee: webFee,
       website_discount_type: wd.type, website_discount_value: webList !== null ? wd.value : 0,
@@ -80,6 +81,32 @@ function readPrivate(form: FormData): { values: Record<string, unknown>; error?:
       notes: text(form, "notes"),
     },
   };
+}
+
+// The SEO plan rows from the form: seo_months, then seo_title_n / seo_price_n / seo_backlinks_n.
+function readSeoPlan(form: FormData): { rows: { month_no: number; title: string; price: number; backlinks: number }[] } | { error: string } {
+  const n = Math.min(36, Math.max(1, Number(form.get("seo_months")) || 0));
+  const rows = [];
+  for (let i = 1; i <= n; i++) {
+    const price = money(form, `seo_price_${i}`), backlinks = money(form, `seo_backlinks_${i}`);
+    if ("error" in price || "error" in backlinks) return { error: `Month ${i}: prices must be numbers.` };
+    rows.push({ month_no: i, title: (text(form, `seo_title_${i}`) ?? "").slice(0, 120), price: price.value ?? 0, backlinks: backlinks.value ?? 0 });
+  }
+  return { rows };
+}
+
+async function saveSeoPlan(supabase: Awaited<ReturnType<typeof createClient>>, clientId: string, form: FormData) {
+  if (!form.has("seo_field")) return null;
+  const on = form.get("seo_enabled") === "on";
+  const plan = on ? readSeoPlan(form) : { rows: [] };
+  if ("error" in plan) return plan.error;
+  const { error } = await supabase.from("seo_plan").delete().eq("client_id", clientId);
+  if (error) return /seo_plan/.test(error.message) ? "Run 0032_seo.sql in Supabase to save the SEO plan." : error.message;
+  if (plan.rows.length) {
+    const { error: e2 } = await supabase.from("seo_plan").insert(plan.rows.map((r) => ({ client_id: clientId, ...r })));
+    if (e2) return e2.message;
+  }
+  return null;
 }
 
 async function savePrivate(supabase: Awaited<ReturnType<typeof createClient>>, clientId: string, values: Record<string, unknown>) {
@@ -104,6 +131,10 @@ function readClient(form: FormData) {
     website_url: text(form, "website_url"),
     marketing_package: oneOf(form, "marketing_package", MARKETING),
     website_package: oneOf(form, "website_package", WEBSITE),
+    ...(form.has("seo_field") ? {
+      seo_enabled: form.get("seo_enabled") === "on",
+      seo_start: form.get("seo_enabled") === "on" && /^\d{4}-\d{2}$/.test(String(form.get("seo_start") ?? "")) ? `${form.get("seo_start")}-01` : null,
+    } : {}),
   };
   return { values, fieldErrors };
 }
@@ -117,8 +148,9 @@ export async function createClientRecord(_: ClientFormState, form: FormData): Pr
 
   const supabase = await createClient();
   const { data, error } = await supabase.from("clients").insert(values).select("id").single();
-  if (error || !data) return { error: "Couldn't add the client. " + (error?.message ?? ""), values: echo(form) };
+  if (error || !data) return { error: /seo_enabled/.test(error?.message ?? "") ? "Run 0032_seo.sql in Supabase to add SEO clients." : "Couldn't add the client. " + (error?.message ?? ""), values: echo(form) };
   await savePrivate(supabase, data.id, priv.values);
+  await saveSeoPlan(supabase, data.id, form);
   let invite = "";
   if (form.get("invite_now") === "on" && values.contact_email) {
     const { inviteToPortal } = await import("./access-actions");
@@ -153,8 +185,8 @@ export async function updateClientRecord(id: string, _: ClientFormState, form: F
 
   const supabase = await createClient();
   const { error } = await supabase.from("clients").update(update).eq("id", id);
-  if (error) return { error: "Couldn't save the changes. " + error.message, values: echo(form) };
-  const privError = await savePrivate(supabase, id, priv.values);
+  if (error) return { error: /seo_enabled/.test(error.message) ? "Run 0032_seo.sql in Supabase to turn on SEO." : "Couldn't save the changes. " + error.message, values: echo(form) };
+  const privError = (await savePrivate(supabase, id, priv.values)) ?? (await saveSeoPlan(supabase, id, form));
   if (privError) return { error: privError, values: echo(form) };
   revalidatePath("/admin", "layout");
   return { saved: true };

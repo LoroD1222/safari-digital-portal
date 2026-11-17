@@ -34,6 +34,7 @@ export default async function PortalLayout({ children }: LayoutProps<"/portal">)
     ]);
     if (company.marketing_package) nav.push({ href: toApprove ? "/portal/marketing" : "/portal/marketing/advertising", base: "/portal/marketing", label: "Marketing", icon: "megaphone", badge: toApprove ?? 0 });
     if (company.website_package || company.vercel_project_id || company.tracking_since) nav.push({ href: "/portal/website", label: "Website", icon: "globe" });
+    if (company.seo_enabled) nav.push({ href: "/portal/seo", label: "SEO", icon: "search" });
     nav.push({ href: "/portal/inquiries", label: "Inquiries", icon: "inbox", badge: newInquiries ?? 0 });
     nav.push({ href: "/portal/pipeline", label: "Pipeline", icon: "pipeline" });
     nav.push({ href: "/portal/followups", label: "Follow-ups", icon: "mail" });

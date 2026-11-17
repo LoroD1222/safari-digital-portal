@@ -1,7 +1,7 @@
 "use client";
 import { useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { AD_GOALS, MARKETS, OFFERS, PAGES, WEB_GOALS, type Answers, type StoredFile } from "@/lib/onboarding";
+import { AD_GOALS, MARKETS, OFFERS, PAGES, SEO_KEYWORDS, SEO_PLATFORMS, WEB_GOALS, type Answers, type StoredFile } from "@/lib/onboarding";
 import { Alert, Button, Input, Select, Textarea } from "@/components/ui";
 import { OnboardingSummary } from "./onboarding-summary";
 import { saveOnboardingAnswers } from "./manage-actions";
@@ -29,8 +29,8 @@ function Editor({ clientId, answers, onDone }: { clientId: string; answers: Answ
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [a, setA] = useState<Answers>(() => structuredClone(answers));
-  const b = a.business ?? {}, m = a.marketing ?? {}, w = a.website ?? {}, f = a.files ?? {};
-  const set = <K extends "business" | "marketing" | "website" | "files">(k: K, patch: NonNullable<Answers[K]>) => setA((x) => ({ ...x, [k]: { ...x[k], ...patch } }));
+  const b = a.business ?? {}, m = a.marketing ?? {}, w = a.website ?? {}, f = a.files ?? {}, o = a.seo ?? {};
+  const set = <K extends "business" | "marketing" | "website" | "files" | "seo">(k: K, patch: NonNullable<Answers[K]>) => setA((x) => ({ ...x, [k]: { ...x[k], ...patch } }));
   const save = () => start(async () => {
     setError(null);
     const r = await saveOnboardingAnswers(clientId, a);
@@ -88,6 +88,27 @@ function Editor({ clientId, answers, onDone }: { clientId: string; answers: Answ
         <Choices label="Goals" options={WEB_GOALS} value={w.goals} onChange={(v) => set("website", { goals: v })} />
         <Choices label="Pages" options={PAGES} value={w.pages} onChange={(v) => set("website", { pages: v })} />
         <Long label="Websites they like" value={w.likes} onChange={(v) => set("website", { likes: v })} />
+      </Group>
+
+      <Group title="SEO">
+        <Text label="SEO website" value={o.site} onChange={(v) => set("seo", { site: v })} placeholder="theircompany.com" />
+        <Row label="Built with">
+          <Select value={o.platform ?? ""} onChange={(e) => set("seo", { platform: (e.target.value || undefined) as NonNullable<Answers["seo"]>["platform"] })}>
+            <option value="">Not set</option>{SEO_PLATFORMS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </Select>
+        </Row>
+        <Long label="Trips to rank for" value={o.tours} onChange={(v) => set("seo", { tours: v })} />
+        <Choices label="Searches" options={SEO_KEYWORDS} value={o.keywords} onChange={(v) => set("seo", { keywords: v })} />
+        <Choices label="SEO countries" options={MARKETS} value={o.markets} onChange={(v) => set("seo", { markets: v })} />
+        <Long label="Competitors" value={o.competitors} onChange={(v) => set("seo", { competitors: v })} />
+        <Row label="Has Search Console">
+          <Select value={o.has_gsc ?? ""} onChange={(e) => set("seo", { has_gsc: (e.target.value || undefined) as "yes" | "no" | "unsure" | undefined })}>
+            <option value="">Not set</option><option value="yes">Yes</option><option value="no">No</option><option value="unsure">Not sure</option>
+          </Select>
+        </Row>
+        <Check label="Our emails added in Search Console" checked={!!o.gsc_added} onChange={(v) => set("seo", { gsc_added: v })} />
+        <Check label="Added to Google Analytics" checked={!!o.ga_added} onChange={(v) => set("seo", { ga_added: v })} />
+        <Check label="Website access given" checked={!!o.site_access_added} onChange={(v) => set("seo", { site_access_added: v })} />
       </Group>
 
       <Group title="Photos & brand files">

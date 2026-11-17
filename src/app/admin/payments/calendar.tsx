@@ -44,7 +44,6 @@ export function PaymentsCalendar({ month, today, events: initial }: { month: str
     });
   };
   const label = monthLabel(month);
-  const inUsd = events.filter((e) => e.currency === "USD");
   const byDay = new Map<string, PayEvent[]>();
   for (const e of events) byDay.set(e.date, [...(byDay.get(e.date) ?? []), e]);
   const href = (m: string) => `/admin/payments?m=${m}`;
@@ -138,7 +137,6 @@ export function PaymentsCalendar({ month, today, events: initial }: { month: str
           </div>
         ))}
       </div>
-      {inUsd.length < events.length && <p className="text-xs text-slate">Totals are in USD; invoices in TZS show on the calendar but aren&apos;t added in.</p>}
     </section>
   );
 }

@@ -1,5 +1,5 @@
 import type { Answers, StoredFile } from "@/lib/onboarding";
-import { FILE_CATEGORIES } from "@/lib/onboarding";
+import { FILE_CATEGORIES, SEO_PLATFORMS } from "@/lib/onboarding";
 
 type Row = { k: string; v: React.ReactNode };
 
@@ -66,6 +66,17 @@ export function OnboardingSummary({ answers, submittedAt, files, action }: {
             { k: "Current website", v: w.current_site }, { k: "Domain", v: domain }, { k: "Goals", v: list(w.goals) },
             { k: "Pages", v: list(w.pages) }, { k: "Websites they like", v: w.likes },
           ]} />
+          {answers.seo && Object.values(answers.seo).some((x) => (Array.isArray(x) ? x.length : !!x)) && (
+            <Section title="SEO" rows={[
+              { k: "Website", v: link(answers.seo.site ? (/^https?:/.test(answers.seo.site) ? answers.seo.site : `https://${answers.seo.site}`) : undefined) },
+              { k: "Built with", v: answers.seo.platform ? (answers.seo.platform === "other" ? answers.seo.platform_other || "Something else" : Object.fromEntries(SEO_PLATFORMS)[answers.seo.platform]) : null },
+              { k: "Trips to rank for", v: answers.seo.tours }, { k: "Searches", v: list(answers.seo.keywords) },
+              { k: "Countries", v: list(answers.seo.markets) }, { k: "Competitors", v: answers.seo.competitors },
+              { k: "Search Console", v: answers.seo.has_gsc === "yes" ? (answers.seo.gsc_added ? "Client says our emails are added" : "Has it, not added yet") : answers.seo.has_gsc ? "Doesn't have it: we set it up" : null },
+              { k: "Google Analytics", v: answers.seo.ga_added ? "Client says we're added" : null },
+              { k: "Website access", v: answers.seo.platform === "safari_digital" ? "We built it" : answers.seo.site_access_added ? "Client says we're added" : "Not yet" },
+            ]} />
+          )}
           <Section title="Photos & brand files" rows={[
             { k: "Sharing by", v: f.mode === "drive" ? "Google Drive" : f.mode === "upload" ? "Upload" : null },
             { k: "Drive folder", v: link(f.drive_link) }, { k: "Folder shared", v: f.mode === "drive" ? (f.drive_shared ? "Yes" : "Not yet") : null },

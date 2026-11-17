@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
 import { CopyButton } from "@/components/copy-button";
 import {
-  AD_GOALS, MARKETS, OFFERS, PAGES, WEB_GOALS,
+  AD_GOALS, MARKETS, OFFERS, PAGES, SEO_KEYWORDS, SEO_PLATFORMS, WEB_GOALS,
   canFinish, isDriveLink, isTaskDone, tasksFor,
   type Answers, type Task, type TaskKey,
 } from "@/lib/onboarding";
@@ -16,7 +16,9 @@ type Props = {
   clientId: string;
   companyName: string;
   contactName: string | null;
-  services: { marketing: boolean; website: boolean };
+  services: { marketing: boolean; website: boolean; seo?: boolean };
+  searchConsoleEmail?: string | null;
+  gscConnected?: boolean;
   initialAnswers: Answers;
   initialView: View;
   submitted: boolean;
@@ -264,7 +266,8 @@ export function Wizard(p: Props) {
 
   function statusOf(t: Task): { label: string; tone: string } {
     if (!done(t.key)) return { label: "To do", tone: "bg-[#F4F5F2] text-slate" };
-    const confirmed = t.key === "meta" ? p.metaConfirmed : t.key === "photos" ? false : true;
+    const confirmed = t.key === "meta" ? p.metaConfirmed : t.key === "search_console" ? !!p.gscConnected || a.seo?.has_gsc !== "yes"
+      : t.key === "site_access" ? a.seo?.platform === "safari_digital" : t.key === "photos" ? false : true;
     return confirmed || t.group === "ask"
       ? { label: "Done", tone: "bg-[#F1FAF6] text-brand" }
       : { label: "We're checking", tone: "bg-[#FFF7E8] text-[#8A5A12]" };
@@ -291,17 +294,23 @@ export function Wizard(p: Props) {
     });
   }
 
-  const hasMk = keys.includes("meta"), hasWeb = keys.includes("website");
-  const serviceWords = hasMk && hasWeb ? "marketing and website" : hasMk ? "marketing" : "website";
+  const hasMk = keys.includes("meta"), hasWeb = keys.includes("website"), hasSeo = keys.includes("seo_goals");
+  const serviceWords = [hasMk && "marketing", hasWeb && "website", hasSeo && "SEO"].filter(Boolean).join(" and ").replace(/ and (?=.* and )/, ", ") || "website";
   const firstName = (a.business?.contact_name || p.contactName || "").trim().split(/\s+/)[0];
   const wa = p.supportWhatsapp?.replace(/\D/g, "") || null;
   const timeline: [string, string][] = [
     ["You finish setup", "The tasks on this page"],
     ["We check everything", "Access, files and answers · 1–2 working days"],
-    ["Your plan is ready", hasMk ? "First month of posts and ads to approve" : "Website structure to approve"],
-    ["We go live", hasMk && hasWeb ? "Posts, ads and website design start" : hasMk ? "Posts and ads start" : "Website design starts"],
+    ["Your plan is ready", hasMk ? "First month of posts and ads to approve" : hasWeb ? "Website structure to approve" : "SEO audit and keyword plan"],
+    ["We go live", hasMk && hasWeb ? "Posts, ads and website design start" : hasMk ? "Posts and ads start" : hasWeb ? "Website design starts" : "We start improving your Google rankings"],
   ];
-  const b = a.business ?? {}, m = a.marketing ?? {}, w = a.website ?? {}, f = a.files ?? {};
+  const b = a.business ?? {}, m = a.marketing ?? {}, w = a.website ?? {}, f = a.files ?? {}, o = a.seo ?? {};
+  const teamEmails = p.metaAdEmails;
+  const emailChips = (list: string[]) => (
+    <span className="mt-1.5 flex flex-wrap gap-2">
+      {list.map((e) => <span key={e} className="inline-flex items-center gap-2 rounded-badge border border-line bg-sidebar py-0.5 pl-2.5 pr-1 font-mono text-[13px] text-ink">{e}<CopyButton text={e} /></span>)}
+    </span>
+  );
   const driveBad = !!f.drive_link?.trim() && !isDriveLink(f.drive_link);
 
   const header = (
@@ -546,6 +555,82 @@ export function Wizard(p: Props) {
               </>
             )}
 
+            {task.key === "seo_goals" && (
+              <>
+                <TextField id="ob-seo-site" label="Your website" placeholder="yourcompany.com" value={o.site} onChange={(v) => update("seo", { site: v })} />
+                <Radios legend="What is your website built with?" name="platform" value={o.platform} options={SEO_PLATFORMS} onChange={(v) => update("seo", { platform: v })} />
+                {o.platform === "other" && (
+                  <div className="max-w-[360px]"><TextField id="ob-seo-plat" label="Which one?" placeholder="e.g. Webflow, a developer built it" value={o.platform_other} onChange={(v) => update("seo", { platform_other: v })} /></div>
+                )}
+                <AreaField id="ob-seo-tours" label="Trips and destinations you most want to be found for" placeholder="e.g. 7-day Serengeti migration safari, Machame route Kilimanjaro, Zanzibar beach extension" value={o.tours} onChange={(v) => update("seo", { tours: v })} />
+                <Chips legend="What do your guests type into Google?" addLabel="Add a search" addPlaceholder="e.g. family safari Tanzania" options={SEO_KEYWORDS} value={o.keywords} onChange={(v) => update("seo", { keywords: v })} />
+                <Chips legend="Countries you want to rank in" addLabel="Add a country" addPlaceholder="e.g. Australia" options={MARKETS} value={o.markets} onChange={(v) => update("seo", { markets: v })} />
+                <AreaField id="ob-seo-comp" label="Competitors" optional placeholder="Websites of companies you compete with on Google" value={o.competitors} onChange={(v) => update("seo", { competitors: v })} />
+              </>
+            )}
+
+            {task.key === "search_console" && (
+              <>
+                <Radios legend="Do you have Google Search Console for your website?" name="gsc" value={o.has_gsc}
+                  options={[["yes", "Yes"], ["no", "No"], ["unsure", "Not sure"]]} onChange={(v) => update("seo", { has_gsc: v })} />
+                {o.has_gsc === "yes" && (
+                  <>
+                    <Section first title="Add our emails">
+                      <ol className="list-decimal space-y-2 pl-5 text-body">
+                        <li>Open <strong className="font-semibold text-ink">Google Search Console</strong> and choose your website at the top left.</li>
+                        <li>Go to <strong className="font-semibold text-ink">Settings → Users and permissions → Add user</strong>.</li>
+                        {p.searchConsoleEmail && (
+                          <li>Add this email with <strong className="font-semibold text-ink">Restricted</strong> permission. It lets the portal show your Google results:{emailChips([p.searchConsoleEmail])}</li>
+                        )}
+                        {teamEmails.length > 0 && (
+                          <li>Add {teamEmails.length === 1 ? "this email" : "these emails"} with <strong className="font-semibold text-ink">Full</strong> permission, for our team:{emailChips(teamEmails)}</li>
+                        )}
+                      </ol>
+                      <a href="https://search.google.com/search-console/users" target="_blank" rel="noopener noreferrer" className={buttonClass("secondary", "h-9 self-start")}>Open Search Console ↗</a>
+                    </Section>
+                    <Section title="Google Analytics (optional)">
+                      <p className="text-body">If you use Google Analytics, add {teamEmails.length ? "the same team emails" : "our team"} under <strong className="font-semibold text-ink">Admin → Property access management → +</strong> as <strong className="font-semibold text-ink">Viewer</strong>.</p>
+                      <Check checked={o.ga_added} onChange={(v) => update("seo", { ga_added: v })}>I&apos;ve added Safari Digital to Google Analytics</Check>
+                    </Section>
+                    <Section title="Confirm">
+                      <Check checked={o.gsc_added} onChange={(v) => update("seo", { gsc_added: v })}>I&apos;ve added the emails in Search Console</Check>
+                      <span className="text-xs text-slate">{p.gscConnected ? "Connected. We can see your Search Console." : "We'll check we can see it and confirm here, usually the same day."}</span>
+                    </Section>
+                  </>
+                )}
+                {(o.has_gsc === "no" || o.has_gsc === "unsure") && (
+                  <p className="rounded-card bg-sidebar px-4 py-3.5 text-body">No problem. We&apos;ll set up Search Console for your website ourselves once we have website access (the next step). You&apos;ll stay the owner.</p>
+                )}
+              </>
+            )}
+
+            {task.key === "site_access" && (
+              <>
+                {o.platform === "safari_digital" ? (
+                  <p className="rounded-card bg-sidebar px-4 py-3.5 text-body">We built your website, so we already have access. Nothing to do here.</p>
+                ) : (
+                  <>
+                    {o.platform === "wordpress" ? (
+                      <ol className="list-decimal space-y-2 pl-5 text-body">
+                        <li>Log in to your WordPress dashboard (usually <strong className="font-semibold text-ink">yourwebsite.com/wp-admin</strong>).</li>
+                        <li>Go to <strong className="font-semibold text-ink">Users → Add New User</strong>.</li>
+                        <li>{teamEmails.length ? <>Use {teamEmails.length === 1 ? "this email" : "one of these emails"}:{emailChips(teamEmails)}</> : <>Use the email we send you on WhatsApp.</>}</li>
+                        <li>Set the role to <strong className="font-semibold text-ink">Administrator</strong>, tick <strong className="font-semibold text-ink">Send the new user an email</strong>, and click <strong className="font-semibold text-ink">Add New User</strong>.</li>
+                      </ol>
+                    ) : (
+                      <ol className="list-decimal space-y-2 pl-5 text-body">
+                        <li>Open your website builder{o.platform === "wix" ? " (Wix: Settings → Roles & Permissions → Invite People)" : o.platform === "squarespace" ? " (Squarespace: Settings → Permissions & ownership → Invite contributor)" : ""}.</li>
+                        <li>{teamEmails.length ? <>Invite {teamEmails.length === 1 ? "this email" : "these emails"}:{emailChips(teamEmails)}</> : <>Invite the email we send you on WhatsApp.</>}</li>
+                        <li>Give us <strong className="font-semibold text-ink">admin</strong> (or website manager) access, so we can edit pages and SEO settings.</li>
+                      </ol>
+                    )}
+                    <span className="text-[13px] text-slate">We never ask for your password. You can remove us anytime.</span>
+                    <Check checked={o.site_access_added} onChange={(v) => update("seo", { site_access_added: v })}>I&apos;ve added Safari Digital to our website</Check>
+                  </>
+                )}
+              </>
+            )}
+
             {task.key === "photos" && (
               <>
                 <div className="rounded-card bg-sidebar px-4 py-3.5">
@@ -582,7 +667,10 @@ export function Wizard(p: Props) {
             <div className="flex flex-wrap items-center justify-end gap-3">
               {nudge && (
                 <span role="alert" className="text-[13px] text-[#8A5A12]">
-                  {task.key === "meta" ? "Tick the box once you've sent the request in Meta." : "Add your Drive folder link and tick that you've shared it."}
+                  {task.key === "meta" ? "Tick the box once you've sent the request in Meta."
+                    : task.key === "search_console" ? (o.has_gsc ? "Tick the box once you've added our emails." : "Tell us if you have Search Console.")
+                    : task.key === "site_access" ? "Tick the box once you've added us to your website."
+                    : "Add your Drive folder link and tick that you've shared it."}
                 </span>
               )}
               <Button onClick={saveTask}>{after && after !== task.key ? "Save and continue" : "Save"}</Button>

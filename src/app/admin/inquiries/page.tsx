@@ -3,9 +3,10 @@ import { requireAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { INQUIRY_LABEL, OPEN_STAGES, type Inquiry, type InquiryStatus } from "@/lib/types";
 import { Alert, ButtonLink, EmptyState, PageHeader } from "@/components/ui";
+import { DailyChart, perRange } from "@/components/daily-chart";
 import { InquirySelectList } from "./inquiry-select-list";
 import { PipelineBoard } from "@/components/pipeline-board";
-import { daysAgo } from "@/lib/dates";
+import { daysAgo, last30Bounds } from "@/lib/dates";
 import Link from "next/link";
 import { Icon } from "@/components/icons";
 
@@ -28,7 +29,18 @@ export default async function AdminInquiries(props: PageProps<"/admin/inquiries"
   if (client) q = q.eq("client_id", client);
   else if (who === "internal") q = q.in("client_id", internalIds.length ? internalIds : ["00000000-0000-0000-0000-000000000000"]);
   else if (who === "clients" && internalIds.length) q = q.not("client_id", "in", `(${internalIds.join(",")})`);
-  const { data } = await q;
+  // Chart: inquiries per day over the last 30 days (and the 30 before, to compare), same filters as the list.
+  const p30 = last30Bounds(), prev30 = last30Bounds(new Date(), 1);
+  let cq = supabase.from("inquiries").select("received_at").gte("received_at", `${prev30.start}T00:00:00+03:00`).lt("received_at", `${p30.next}T00:00:00+03:00`).limit(10000);
+  if (client) cq = cq.eq("client_id", client);
+  else if (who === "internal") cq = cq.in("client_id", internalIds.length ? internalIds : ["00000000-0000-0000-0000-000000000000"]);
+  else if (who === "clients" && internalIds.length) cq = cq.not("client_id", "in", `(${internalIds.join(",")})`);
+  const [{ data }, { data: chartRows }] = await Promise.all([q, cq]);
+  const stamps = (chartRows ?? []).map((r) => r.received_at as string);
+  const from30 = Date.parse(`${p30.start}T00:00:00+03:00`);
+  const inLast30 = stamps.filter((t) => Date.parse(t) >= from30);
+  const total30 = inLast30.length, totalPrev = stamps.length - total30;
+  const change = totalPrev ? Math.round(((total30 - totalPrev) / totalPrev) * 100) : null;
   const all = (data ?? []) as Inquiry[];
   const shown = filter ? all.filter((i) => i.status === filter) : all;
   const names = Object.fromEntries(clients.map((c) => [c.id, c.name]));
@@ -52,6 +64,10 @@ export default async function AdminInquiries(props: PageProps<"/admin/inquiries"
                 className={"inline-flex h-8 items-center rounded-badge px-3.5 text-[13px] font-medium no-underline " + (who === k ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,3,33,0.12)]" : "text-body hover:text-ink")}>{l}</Link>
             ))}
           </nav>
+      )}
+      {!board && (
+        <DailyChart title={`Inquiries per day · last 30 days · ${total30} total`} days={perRange(p30.start, 30, inLast30)}
+          note={`${client ? names[client] ?? "This client" : who === "internal" ? "Internal accounts" : who === "clients" ? "All clients (not internal)" : "All clients"}${change !== null ? ` · ${change >= 0 ? "▲" : "▼"} ${Math.abs(change)}% vs the 30 days before (${totalPrev})` : ""}`} />
       )}
       {client && (
         <div className="flex flex-wrap items-center gap-3">

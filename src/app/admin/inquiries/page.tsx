@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
 import { requireAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { INQUIRY_LABEL, OPEN_STAGES, STAGES, type Inquiry, type InquiryStatus } from "@/lib/types";
-import { Alert, ButtonLink, EmptyState, PageHeader, Select } from "@/components/ui";
-import { Filters } from "@/components/blocks";
+import { INQUIRY_LABEL, OPEN_STAGES, type Inquiry, type InquiryStatus } from "@/lib/types";
+import { Alert, ButtonLink, EmptyState, PageHeader } from "@/components/ui";
 import { InquirySelectList } from "./inquiry-select-list";
 import { PipelineBoard } from "@/components/pipeline-board";
 import { daysAgo } from "@/lib/dates";
@@ -40,40 +39,20 @@ export default async function AdminInquiries(props: PageProps<"/admin/inquiries"
     : null;
   const qs = (s: string | null, w: string = who) => "/admin/inquiries?" + new URLSearchParams({ ...(client ? { client } : {}), ...(s ? { status: s } : {}), ...(w !== "all" ? { who: w } : {}) });
   // Agency-only stages (No answer, Meeting booked, No show) only appear when something is in them.
-  const statusChips = STATUSES.filter((s) => STAGES.includes(s) || all.some((i) => i.status === s));
 
   return (
     <>
       <PageHeader title="Inquiries" subtitle="Leads across all clients. Website forms arrive automatically; add the rest here."
         actions={<ButtonLink href={`/admin/inquiries/new${client ? `?client=${client}` : ""}`}><Icon name="plus" size={16} />Add inquiry</ButtonLink>} />
       {sp.deleted && <Alert tone="success">Inquiry deleted.</Alert>}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-3">
-        {!client && (
+      {!client && (
           <nav aria-label="Whose inquiries" className="inline-flex rounded-control bg-[#F1F2F4] p-[3px]">
             {([["all", "All"], ["clients", "Clients"], ["internal", "Internal"]] as const).map(([k, l]) => (
               <Link key={k} href={qs(filter, k)} aria-current={who === k ? "page" : undefined}
                 className={"inline-flex h-8 items-center rounded-badge px-3.5 text-[13px] font-medium no-underline " + (who === k ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,3,33,0.12)]" : "text-body hover:text-ink")}>{l}</Link>
             ))}
           </nav>
-        )}
-        <Filters label="Filter by status" items={[
-          { href: qs(null), label: "All", active: !filter, count: all.length },
-          ...statusChips.map((s) => ({ href: qs(s), label: INQUIRY_LABEL[s], active: filter === s, count: all.filter((i) => i.status === s).length })),
-        ]} />
-        </div>
-        <form className="flex items-center gap-2">
-          {filter && <input type="hidden" name="status" value={filter} />}
-          {who !== "all" && <input type="hidden" name="who" value={who} />}
-          <label htmlFor="client" className="sr-only">Client</label>
-          <Select id="client" name="client" defaultValue={client} className="h-9 w-52">
-            <option value="">{who === "internal" ? "All internal" : "All clients"}</option>
-            {clients.filter((c) => (who === "internal" ? c.is_internal : who === "clients" ? !c.is_internal : true))
-              .map((c) => <option key={c.id} value={c.id}>{c.name}{c.is_internal ? " (internal)" : ""}</option>)}
-          </Select>
-          <button className="h-9 rounded-control border border-field px-3 text-[13px] font-medium hover:bg-[#F4F5F2]">Show</button>
-        </form>
-      </div>
+      )}
       {client && (
         <div className="flex flex-wrap items-center gap-3">
           <nav aria-label="View" className="inline-flex rounded-control bg-[#F1F2F4] p-[3px]">

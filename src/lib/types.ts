@@ -26,6 +26,8 @@ export type Client = {
   seo_synced_at?: string | null;
   seo_sync_error?: string | null;
   seo_start?: string | null;            // first day of SEO plan month 1
+  meeting_link?: string | null;         // internal accounts: default Meet/Zoom link for appointments (0033)
+  meeting_address?: string | null;      // internal accounts: default address for in-person meetings
   meta_dataset_id?: string | null;
   tracking_since?: string | null;
   meta_page_id?: string | null;

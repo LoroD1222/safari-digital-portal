@@ -247,3 +247,21 @@ describe("SEO tables", () => {
     await as(null);
   });
 });
+
+describe("Appointments", () => {
+  it("only internal accounts can use the calendar", async () => {
+    await as(null);
+    const row = (c: string) => `insert into public.appointments (client_id, title, starts_at) values ('${c}', 'Intro', now())`;
+    await as(UA);
+    await expect(db.exec(row(A))).rejects.toThrow(/row-level security/);
+    await as(null);
+    await db.exec(`update public.clients set is_internal = true where id = '${A}'`);
+    await as(UA);
+    await db.exec(row(A));
+    expect(await q(`select title from public.appointments`)).toEqual([{ title: "Intro" }]);
+    await as(UB);
+    expect(await q(`select * from public.appointments`)).toHaveLength(0);
+    await as(null);
+    await db.exec(`update public.clients set is_internal = false where id = '${A}'`);
+  });
+});

@@ -37,6 +37,7 @@ export default async function PortalLayout({ children }: LayoutProps<"/portal">)
     if (company.seo_enabled) nav.push({ href: "/portal/seo", label: "SEO", icon: "search" });
     nav.push({ href: "/portal/inquiries", label: "Inquiries", icon: "inbox", badge: newInquiries ?? 0 });
     nav.push({ href: "/portal/pipeline", label: "Pipeline", icon: "pipeline" });
+    if (company.is_internal) nav.push({ href: "/portal/calendar", label: "Calendar", icon: "calendar" });
     nav.push({ href: "/portal/followups", label: "Follow-ups", icon: "mail" });
     nav.push({ href: "/portal/requests", label: "Requests", icon: "message", badge: replies ?? 0 });
     help = <HelpButton whatsapp={settings.support_whatsapp} email={settings.support_email} openRequests={replies ?? 0} />;

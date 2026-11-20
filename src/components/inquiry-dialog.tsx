@@ -1,5 +1,7 @@
 "use client";
 import { useEffect, useRef, useState, useTransition } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { deleteMyInquiry, getInquiryHistory, saveInquiryDeal, updateInquiryStatus, type HistoryRow } from "@/app/inquiry-actions";
 import { ConfirmDialog } from "./confirm-dialog";
 import { InquiryFollowups } from "./inquiry-followups";
@@ -53,6 +55,7 @@ export function InquiryDialog({ q, company, intent: startIntent = null, onClose,
   followup?: FollowupBadge | null; // undefined = follow-ups are off for this client, so the switch is hidden
 }) {
   const { label: L, value: valueWord, valueHelp, booked: bookedWord, stages: STAGES } = useStageWords();
+  const pathname = usePathname() ?? "";
   const [intent, setIntent] = useState<Intent>(startIntent);
   const [removing, setRemoving] = useState(false);
   const [removeError, setRemoveError] = useState<string | null>(null);
@@ -251,6 +254,9 @@ export function InquiryDialog({ q, company, intent: startIntent = null, onClose,
         )}
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line-soft pt-3">
           <span className="text-xs text-slate">Only {company} and Safari Digital can see this inquiry.</span>
+          {STAGES.includes("meeting") && pathname.startsWith("/portal") && !["booked", "closed"].includes(q.status) && (
+            <Link href={`/portal/calendar?lead=${q.id}`} className="text-[13px] font-medium text-brand hover:underline">Book a meeting</Link>
+          )}
           {onDeleted && (
             <button type="button" onClick={() => { setRemoveError(null); setRemoving(true); }} className="text-[13px] font-medium text-danger-text hover:underline">Delete inquiry</button>
           )}

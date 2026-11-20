@@ -183,7 +183,7 @@ export function CalendarView({ monday, today, appointments, leads, defaults, ope
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const k = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const k = (e: KeyboardEvent) => { if (e.key === "Escape" && !e.defaultPrevented) onClose(); };
     document.addEventListener("keydown", k);
     ref.current?.querySelector<HTMLElement>("input, select, button")?.focus();
     return () => document.removeEventListener("keydown", k);
@@ -218,15 +218,11 @@ function Editor({ draft, leads, appointments, defaults, onClose, onSaved }: {
   return (
     <Modal title={d.id ? "Edit meeting" : "New meeting"} onClose={onClose}>
       <div className="flex flex-col gap-3.5">
-        <label className="flex flex-col gap-1.5 text-[13px] font-medium"><span>Lead <span className="font-normal text-slate">(optional)</span></span>
-          <Select value={d.inquiry_id ?? ""} onChange={(e) => {
-            const l = leads.find((x) => x.id === e.target.value) ?? null;
-            setD({ ...d, inquiry_id: l?.id ?? null, title: !d.title || d.title.startsWith("Meeting with ") ? (l ? `Meeting with ${l.customer_name}` : "") : d.title, invite: !!l?.email && (d.id ? d.invite : true) });
-          }}>
-            <option value="">No lead: a general meeting</option>
-            {leads.map((l) => <option key={l.id} value={l.id}>{l.customer_name}{l.email ? ` · ${l.email}` : l.phone ? ` · ${l.phone}` : ""}</option>)}
-          </Select>
-        </label>
+        <LeadPicker leads={leads} value={lead} onChange={(l) => setD({
+          ...d, inquiry_id: l?.id ?? null,
+          title: !d.title || d.title.startsWith("Meeting with ") ? (l ? `Meeting with ${l.customer_name}` : "") : d.title,
+          invite: !!l?.email && (d.id ? d.invite : true),
+        })} />
         <label className="flex flex-col gap-1.5 text-[13px] font-medium">Title
           <Input value={d.title} maxLength={160} onChange={(e) => setD({ ...d, title: e.target.value })} placeholder="Intro call with Golden Trips" />
         </label>
@@ -272,6 +268,78 @@ function Editor({ draft, leads, appointments, defaults, onClose, onSaved }: {
         </div>
       </div>
     </Modal>
+  );
+}
+
+const STAGE_WORD: Record<string, string> = {
+  new: "New lead", contacted: "Contacted", no_answer: "No answer", meeting: "Meeting booked", no_show: "No show", quoted: "Proposal sent", negotiating: "Negotiating",
+};
+
+// Type to find a lead by name, email or phone. Empty = a general meeting.
+function LeadPicker({ leads, value, onChange }: { leads: Lead[]; value: Lead | null; onChange: (l: Lead | null) => void }) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(0);
+  const norm = (x: string) => x.toLowerCase().replace(/[\s+()-]/g, "");
+  const q = norm(query);
+  const results = (q ? leads.filter((l) => norm(`${l.customer_name} ${l.email ?? ""} ${l.phone ?? ""}`).includes(q)) : leads).slice(0, 8);
+  const pick = (l: Lead) => { onChange(l); setQuery(""); setOpen(false); };
+
+  if (value) {
+    return (
+      <div className="flex flex-col gap-1.5">
+        <span className="text-[13px] font-medium">Lead</span>
+        <div className="flex items-center gap-3 rounded-control border border-forest bg-[#F3FAF6] px-3 py-2">
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#E3F4EA] text-[13px] font-semibold text-forest">{value.customer_name.trim().charAt(0).toUpperCase()}</span>
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span className="truncate text-[14px] font-medium">{value.customer_name}</span>
+            <span className="truncate text-xs text-slate">{[value.email, value.phone, STAGE_WORD[value.status]].filter(Boolean).join(" · ")}</span>
+          </span>
+          <button type="button" onClick={() => onChange(null)} className="text-[13px] font-medium text-brand hover:underline">Change</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative flex flex-col gap-1.5">
+      <label htmlFor="lead-search" className="text-[13px] font-medium">Lead <span className="font-normal text-slate">(optional)</span></label>
+      <div className="relative">
+        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate"><Icon name="search" size={16} /></span>
+        <Input id="lead-search" role="combobox" aria-expanded={open} aria-controls="lead-list" aria-autocomplete="list" autoComplete="off"
+          aria-activedescendant={open && results[active] ? `lead-${results[active].id}` : undefined}
+          className="pl-9" placeholder="Search by name, email or phone"
+          value={query}
+          onClick={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 120)}
+          onChange={(e) => { setQuery(e.target.value); setActive(0); setOpen(true); }}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowDown") { e.preventDefault(); setOpen(true); setActive((a) => Math.min(a + 1, results.length - 1)); }
+            else if (e.key === "ArrowUp") { e.preventDefault(); setActive((a) => Math.max(a - 1, 0)); }
+            else if (e.key === "Enter" && open && results[active]) { e.preventDefault(); pick(results[active]); }
+            else if (e.key === "Escape" && open) { e.preventDefault(); setOpen(false); }
+          }} />
+      </div>
+      {open && (
+        <ul id="lead-list" role="listbox" aria-label="Leads" className="absolute inset-x-0 top-full z-10 mt-1 max-h-[280px] overflow-y-auto rounded-control border border-line bg-white py-1 shadow-[0_8px_24px_rgba(0,3,33,0.12)]">
+          {!q && <li className="px-3 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-[0.05em] text-slate">Recent leads</li>}
+          {results.length === 0 && <li className="px-3 py-2.5 text-[13px] text-slate">No lead matches “{query}”. Leave it empty for a general meeting.</li>}
+          {results.map((l, i) => (
+            <li key={l.id} id={`lead-${l.id}`} role="option" aria-selected={i === active}
+              onMouseDown={(e) => { e.preventDefault(); pick(l); }} onMouseEnter={() => setActive(i)}
+              className={`flex cursor-pointer items-center gap-3 px-3 py-2 ${i === active ? "bg-[#F1F7F3]" : ""}`}>
+              <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-sidebar text-xs font-semibold text-body">{l.customer_name.trim().charAt(0).toUpperCase()}</span>
+              <span className="flex min-w-0 flex-1 flex-col">
+                <span className="truncate text-[14px] font-medium">{l.customer_name}</span>
+                <span className="truncate text-xs text-slate">{l.email ?? l.phone ?? "No contact details"}</span>
+              </span>
+              <span className="shrink-0 rounded-full bg-sidebar px-2 py-0.5 text-[11px] text-slate">{STAGE_WORD[l.status] ?? l.status}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <span className="text-xs text-slate">Leave empty for a general meeting.</span>
+    </div>
   );
 }
 

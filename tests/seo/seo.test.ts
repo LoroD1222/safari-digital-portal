@@ -80,3 +80,11 @@ describe("One main currency", () => {
     expect(r.history.at(-1)!.value).toBe(Math.round(440 + 2_300_000 / 2600));
   });
 });
+
+describe("Inquiry emails", () => {
+  it("reads several addresses, once each", async () => {
+    const { emailList } = await import("@/lib/email");
+    expect(emailList("info@goldentrips.co.tz, irene@goldentrips.co.tz;joel@goldentrips.co.tz  norah@goldentrips.co.tz, INFO@goldentrips.co.tz, nope"))
+      .toEqual(["info@goldentrips.co.tz", "irene@goldentrips.co.tz", "joel@goldentrips.co.tz", "norah@goldentrips.co.tz"]);
+  });
+});

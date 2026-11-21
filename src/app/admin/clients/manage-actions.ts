@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { logActivity } from "@/lib/activity";
-import { notifyClient } from "@/lib/email";
+import { emailList, notifyClient } from "@/lib/email";
 import type { Campaign, OnboardingStatus, WebsiteStage } from "@/lib/types";
 import type { Answers } from "@/lib/onboarding";
 import { syncClient } from "@/lib/meta";
@@ -248,8 +248,10 @@ export async function saveOnboardingAnswers(clientId: string, next: Answers): Pr
   const words = (v: unknown) => Array.isArray(v) ? [...new Set(v.map((x) => String(x).trim()).filter(Boolean).map((x) => x.slice(0, 80)))].slice(0, 30) : [];
   const pick = <T extends string>(v: unknown, ok: readonly T[]) => (ok as readonly unknown[]).includes(v) ? (v as T) : undefined;
   const b = next.business ?? {}, m = next.marketing ?? {}, w = next.website ?? {}, f = next.files ?? {}, o = next.seo ?? {};
-  const email = text(b.inquiry_email, 200);
-  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, error: "The inquiry email doesn't look like an email address." };
+  const typed = text(b.inquiry_email, 600);
+  const list = emailList(typed);
+  if (typed && list.length !== typed.split(/[,;\s]+/).filter(Boolean).length) return { ok: false, error: "One of the inquiry emails doesn't look like an email address. Separate them with commas." };
+  const email = list.join(", ") || undefined;
   const budget = text(m.budget, 20)?.replace(/[$,\s]/g, "");
   if (budget && !/^\d+(\.\d+)?$/.test(budget)) return { ok: false, error: "Write the ad budget as a number of dollars, e.g. 500." };
 

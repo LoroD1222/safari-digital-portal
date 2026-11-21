@@ -59,7 +59,8 @@ function Editor({ clientId, answers, onDone }: { clientId: string; answers: Answ
             <option value="">Not set</option><option value="whatsapp">WhatsApp</option><option value="email">Email</option><option value="both">WhatsApp and email</option>
           </Select>
         </Row>
-        <Text label="Inquiry email" value={b.inquiry_email} onChange={(v) => set("business", { inquiry_email: v })} type="email" placeholder="bookings@theircompany.com" />
+        <Long label="Inquiry emails" value={b.inquiry_email} onChange={(v) => set("business", { inquiry_email: v })} />
+        <p className="-mt-1 pb-2 text-xs text-slate sm:pl-52">Everyone here gets each new inquiry. Separate addresses with commas, e.g. info@theircompany.com, sales@theircompany.com.</p>
       </Group>
 
       <Group title="Facebook & Instagram">

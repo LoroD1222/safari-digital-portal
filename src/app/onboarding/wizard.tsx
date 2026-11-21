@@ -449,7 +449,7 @@ export function Wizard(p: Props) {
                   options={[["whatsapp", "WhatsApp"], ["email", "Email"], ["both", "Both"]]} onChange={(v) => update("business", { inquiry_dest: v })} />
                 {b.inquiry_dest !== "whatsapp" && (
                   <div className="max-w-[360px]">
-                    <TextField id="ob-inqemail" label="Inquiry email" type="email" placeholder="bookings@yourcompany.com" value={b.inquiry_email} onChange={(v) => update("business", { inquiry_email: v })} />
+                    <TextField id="ob-inqemail" label="Inquiry email" placeholder="bookings@yourcompany.com (add more with commas)" value={b.inquiry_email} onChange={(v) => update("business", { inquiry_email: v })} />
                   </div>
                 )}
               </>

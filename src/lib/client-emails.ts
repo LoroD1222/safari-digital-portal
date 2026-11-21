@@ -1,6 +1,7 @@
 import "server-only";
 import { createAdminClient } from "./supabase/admin";
-import { clientEmails, emailConfigured, send, staffAddresses } from "./email";
+import { clientEmails, emailConfigured, emailList, send, staffAddresses, type Message } from "./email";
+import { sendingKey } from "./resend-keys";
 import { siteOrigin } from "./origin";
 import { logActivity } from "./activity";
 import { monthBounds } from "./dates";
@@ -21,8 +22,9 @@ async function leadRecipients(clientId: string) {
     admin.from("clients").select("contact_email").eq("id", clientId).single(),
   ]);
   const b = ((ob?.data as { business?: Business } | null)?.business) ?? {};
-  const inquiry = b.inquiry_dest !== "whatsapp" ? b.inquiry_email?.trim() : undefined;
-  if (inquiry && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inquiry)) return [inquiry];
+  // One or more inquiry emails (separated by commas): the whole team gets each new inquiry.
+  const inquiry = b.inquiry_dest !== "whatsapp" ? emailList(b.inquiry_email) : [];
+  if (inquiry.length) return inquiry;
   const logins = await clientEmails(clientId);
   if (logins.length) return logins;
   return c?.contact_email ? [c.contact_email] : [];
@@ -87,6 +89,14 @@ async function alertStaff(inquiryId: string, alreadySentTo: string[]) {
   }
 }
 
+// The client's connected follow-up address, when its domain is verified: "Safari Digital Portal <info@theirdomain>".
+async function ownSender(clientId: string) {
+  const { data: s } = await createAdminClient().from("followup_settings").select("sender_ready, from_email").eq("client_id", clientId).maybeSingle();
+  if (!s?.sender_ready || !s.from_email) return null;
+  const key = await sendingKey(clientId);
+  return key ? { from: `New inquiry · Safari Digital <${s.from_email}>`, key } : null;
+}
+
 async function alertInquiry(inquiryId: string, again: boolean): Promise<{ ok: boolean; to?: string[]; error?: string }> {
   if (!emailConfigured()) return { ok: false, error: "Email isn't set up: RESEND_API_KEY or EMAIL_FROM is missing in Vercel." };
   try {
@@ -100,7 +110,7 @@ async function alertInquiry(inquiryId: string, again: boolean): Promise<{ ok: bo
     const actions: { label: string; url: string }[] = [];
     if (phone.length >= 8) actions.push({ label: "Reply on WhatsApp", url: `https://wa.me/${phone}?text=${encodeURIComponent(`Hello ${first}, thank you for your safari inquiry!`)}` });
     if (q.email) actions.push({ label: "Reply by email", url: `mailto:${q.email}?subject=${encodeURIComponent("Your safari inquiry")}` });
-    const ok = await send(to, {
+    const message: Message = {
       subject: `${again ? "Reminder: " : ""}New inquiry: ${q.customer_name}${q.interested_in ? ` · ${q.interested_in}` : ""}`,
       heading: `New inquiry from ${q.customer_name}`,
       intro: "Reply quickly: guests who hear back within the hour book far more often.",
@@ -114,7 +124,13 @@ async function alertInquiry(inquiryId: string, again: boolean): Promise<{ ok: bo
       path: `/portal/inquiries?open=${q.id}`, button: "Open in portal",
       replyTo: q.email,
       footer: "Replying to this email goes straight to the guest. Mark the inquiry Contacted or Booked in your portal so your ads learn what works.",
-    }, await siteOrigin());
+    };
+    const origin = await siteOrigin();
+    // Best delivery: from the client's own verified domain (their follow-up address), so their mail server
+    // trusts it. Otherwise, or if that fails, from Safari Digital's address.
+    const own = await ownSender(q.client_id);
+    if (own && await send(to, { ...message, from: own.from, apiKey: own.key }, origin)) return { ok: true, to };
+    const ok = await send(to, message, origin);
     return ok ? { ok, to } : { ok, error: `Resend refused it (from ${process.env.EMAIL_FROM}). Check Resend → Logs.` };
   } catch (e) {
     console.error("New inquiry email failed", e);

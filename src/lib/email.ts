@@ -20,7 +20,16 @@ export type Message = {
   replyTo?: string | null;             // "Reply" in the email app goes here
   footer?: string;
   attachments?: { filename: string; content: string }[]; // content = base64
+  from?: string;                       // send from another verified address (e.g. the client's own domain)
+  apiKey?: string;                     // with that address's Resend key
 };
+
+// Every valid address in "a@x.com, b@x.com; c@x.com", once each.
+export function emailList(v: string | null | undefined, max = 10) {
+  const seen = new Set<string>();
+  return (v ?? "").split(/[,;\s]+/).map((e) => e.trim()).filter((e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e))
+    .filter((e) => (seen.has(e.toLowerCase()) ? false : (seen.add(e.toLowerCase()), true))).slice(0, max);
+}
 
 function esc(s: string) {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
@@ -52,10 +61,10 @@ export async function send(to: string[], m: Message, origin: string): Promise<bo
   try {
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
-      headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from: process.env.EMAIL_FROM, to, subject: m.subject, html, text, ...(m.replyTo ? { reply_to: m.replyTo } : {}), ...(m.attachments?.length ? { attachments: m.attachments } : {}) }),
+      headers: { Authorization: `Bearer ${m.apiKey ?? process.env.RESEND_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ from: m.from ?? process.env.EMAIL_FROM, to, subject: m.subject, html, text, ...(m.replyTo ? { reply_to: m.replyTo } : {}), ...(m.attachments?.length ? { attachments: m.attachments } : {}) }),
     });
-    if (!res.ok) { console.error("Email not sent", res.status, (await res.text()).slice(0, 300), "from", process.env.EMAIL_FROM, "to", to.join(", ")); return false; }
+    if (!res.ok) { console.error("Email not sent", res.status, (await res.text()).slice(0, 300), "from", m.from ?? process.env.EMAIL_FROM, "to", to.join(", ")); return false; }
     return true;
   } catch (e) {
     console.error("Email not sent", e);

@@ -18,7 +18,9 @@ export function renderFollowup(body: string) {
 export type FollowupEmail = {
   fromEmail: string; fromName: string; to: string; subject: string; body: string;
   inquiryId: string; unsubscribeUrl: string; idempotencyKey: string; threadId: string;
-  kind?: "followup" | "autoreply" | "appointment";
+  kind?: "followup" | "autoreply" | "appointment" | "cold_call";
+  // Files Resend downloads and attaches, e.g. a case study PDF.
+  attachments?: { filename: string; path: string }[];
 };
 
 // The Resend request. Every follow-up for one inquiry carries the same References header,
@@ -37,6 +39,7 @@ export function resendRequest(e: FollowupEmail) {
         References: e.threadId, "In-Reply-To": e.threadId,
       },
       tags: [{ name: "kind", value: e.kind ?? "followup" }, { name: "inquiry", value: e.inquiryId.replace(/[^a-zA-Z0-9_-]/g, "") }],
+      ...(e.attachments?.length ? { attachments: e.attachments } : {}),
     },
   };
 }

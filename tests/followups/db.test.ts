@@ -265,3 +265,15 @@ describe("Appointments", () => {
     await db.exec(`update public.clients set is_internal = false where id = '${A}'`);
   });
 });
+
+describe("Contacted", () => {
+  it("starts follow-ups at once, without asking for confirmation", async () => {
+    await as(null);
+    const id = await newInquiry("Rehema");
+    await as(UA);
+    await db.exec(`select public.set_inquiry_status('${id}', 'contacted')`);
+    await as(null);
+    const [c] = await q<{ status: string; confirmed: boolean }>(`select status, confirmed_at is not null as confirmed from public.followup_cycles where inquiry_id = '${id}' and status <> 'ended'`);
+    expect(c).toEqual({ status: "active", confirmed: true });
+  });
+});

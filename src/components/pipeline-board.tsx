@@ -14,7 +14,7 @@ const BADGE: Record<FollowupBadge["kind"], [IconName, string, string]> = {
   sent: ["check", "#E3F4EA", "#1A6647"], stopped: ["close", "#F1F2F4", "#8A8FA3"],
   awaiting: ["send", "#FDF3E1", "#8A5A12"], paused: ["clock", "#F1F2F4", "#8A8FA3"], attention: ["help", "#FDF3E1", "#8A5A12"],
 };
-const FOLLOW_STAGES: InquiryStatus[] = ["contacted", "quoted", "negotiating"];
+const FOLLOW_STAGES: InquiryStatus[] = ["quoted", "negotiating"]; // Contacted starts follow-ups by itself
 const SENT_WHAT: Partial<Record<InquiryStatus, string>> = { contacted: "your first reply", quoted: "the quote", negotiating: "your latest message" };
 const today = () => new Date(Date.now() + 3 * 3600e3).toISOString().slice(0, 10); // Dar es Salaam
 const daysIn = (q: Inquiry) => Math.floor((Date.now() - new Date(q.stage_changed_at ?? q.received_at).getTime()) / 864e5);

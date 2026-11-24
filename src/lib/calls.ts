@@ -6,7 +6,7 @@ export type Outcome = "no_answer" | "callback" | "interested" | "not_interested"
 
 export type CallList = { id: string; name: string; script: string | null; archived: boolean; created_at: string };
 export type CallContact = {
-  id: string; list_id: string; company: string | null; contact_name: string | null; phone: string; email: string | null;
+  id: string; list_id: string; position: number | null; company: string | null; contact_name: string | null; phone: string | null; other_phone: string | null; email: string | null;
   website: string | null; address: string | null; city: string | null; country: string | null; status: CallStatus; attempts: number; next_call_at: string | null;
   last_called_at: string | null; last_outcome: Outcome | null; claimed_by: string | null; claimed_at: string | null;
   inquiry_id: string | null; created_at: string;
@@ -55,13 +55,14 @@ export function normalizePhone(raw: unknown, country = "255"): string | null {
 }
 
 // +255754123456 → "+255 754 123 456"
-export function prettyPhone(p: string) {
+export function prettyPhone(p: string | null) {
+  if (!p) return "No phone number";
   const m = p.match(/^\+255(\d{3})(\d{3})(\d{3})$/);
   return m ? `+255 ${m[1]} ${m[2]} ${m[3]}` : p;
 }
 
-export function waLink(phone: string, text?: string) {
-  const d = phone.replace(/\D/g, "");
+export function waLink(phone: string | null, text?: string) {
+  const d = (phone ?? "").replace(/\D/g, "");
   return `https://wa.me/${d}${text ? `?text=${encodeURIComponent(text)}` : ""}`;
 }
 
@@ -151,12 +152,24 @@ export function guessMapping(header: string[], sample: string[][] = []): Field[]
   return out;
 }
 
-export type ImportRow = { company: string | null; contact_name: string | null; phone: string; email: string | null; website: string | null; address: string | null; city: string | null; country: string | null };
+export type ImportRow = { company: string | null; contact_name: string | null; phone: string | null; other_phone: string | null; email: string | null; website: string | null; address: string | null; city: string | null; country: string | null };
 
-// Rows ready to save, plus what was left out and why.
-export function buildImport(rows: string[][], mapping: Field[], skipPhones: Set<string>) {
+// A cell can hold more than one number: "+255 784 778 194; +255 752 918 477".
+export function parsePhones(raw: unknown): string[] {
+  const out: string[] = [];
+  for (const part of String(raw ?? "").split(/[;,/|\n]+|\s+or\s+/i)) {
+    const p = normalizePhone(part);
+    if (p && !out.includes(p)) out.push(p);
+  }
+  return out;
+}
+
+// Rows ready to save, in the order of the file, plus what was left out and why.
+// Rows without a phone number are kept (to add one later) when they have a company or an email.
+export function buildImport(rows: string[][], mapping: Field[], skipPhones: Set<string>, opts: { keepNoPhone?: boolean } = {}) {
+  const keepNoPhone = opts.keepNoPhone ?? true;
   const ok: ImportRow[] = [];
-  let noPhone = 0, duplicate = 0, known = 0;
+  let noPhone = 0, empty = 0, duplicate = 0, known = 0;
   const seen = new Set<string>();
   const get = (r: string[], f: Field, max: number) => {
     const i = mapping.indexOf(f);
@@ -164,19 +177,27 @@ export function buildImport(rows: string[][], mapping: Field[], skipPhones: Set<
     return v || null;
   };
   for (const r of rows) {
-    const phone = normalizePhone(get(r, "phone", 60));
-    if (!phone) { noPhone++; continue; }
-    if (seen.has(phone)) { duplicate++; continue; }
-    seen.add(phone);
-    if (skipPhones.has(phone)) { known++; continue; }
-    const email = get(r, "email", 200);
+    const phones = parsePhones(get(r, "phone", 200));
+    const phone = phones[0] ?? null;
+    const emailRaw = get(r, "email", 200);
+    const email = emailRaw && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailRaw) ? emailRaw.toLowerCase() : null;
+    const company = get(r, "company", 200);
+    if (!phone) {
+      if (!keepNoPhone || (!company && !email)) { empty++; continue; }
+    }
+    const key = phone ?? `~${(company ?? "").toLowerCase()}|${email ?? ""}`;
+    if (seen.has(key)) { duplicate++; continue; }
+    seen.add(key);
+    if (phone && skipPhones.has(phone)) { known++; continue; }
+    if (!phone) noPhone++;
     ok.push({
-      company: get(r, "company", 200), contact_name: get(r, "contact_name", 200), phone,
-      email: email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email.toLowerCase() : null,
-      website: get(r, "website", 300), address: get(r, "address", 300), city: get(r, "city", 120), country: cleanCountry(get(r, "country", 80)) ?? countryFromPhone(phone),
+      company, contact_name: get(r, "contact_name", 200), phone,
+      other_phone: phones.slice(1).map(prettyPhone).join(", ").slice(0, 120) || null,
+      email, website: get(r, "website", 300), address: get(r, "address", 300), city: get(r, "city", 120),
+      country: cleanCountry(get(r, "country", 80)) ?? (phone ? countryFromPhone(phone) : null),
     });
   }
-  return { rows: ok, noPhone, duplicate, known };
+  return { rows: ok, noPhone, empty, duplicate, known };
 }
 
 // "tanzania", "TZ", "Tanzania, United Republic of" → "Tanzania". Anything else is kept, tidied.
@@ -283,7 +304,7 @@ export function whenLabel(iso: string, now = Date.now()) {
 // ───────────── Stats ─────────────
 
 export type HourStat = { hour: number; calls: number; reached: number; rate: number };
-export type ListStat = { id: string; name: string; total: number; called: number; open: number; reached: number; interested: number; calls: number; rate: number };
+export type ListStat = { id: string; name: string; total: number; called: number; open: number; noPhone: number; reached: number; interested: number; calls: number; rate: number };
 
 export function callStats(logs: Pick<CallLog, "outcome" | "created_at" | "list_id" | "contact_id">[], opts: { from: number; until?: number }) {
   const inRange = logs.filter((l) => { const t = Date.parse(l.created_at); return t >= opts.from && (opts.until == null || t < opts.until); });
@@ -304,7 +325,7 @@ export function callStats(logs: Pick<CallLog, "outcome" | "created_at" | "list_i
   return { byHour, best, calls, reached, interested, rate: calls ? reached / calls : 0 };
 }
 
-export function listStats(lists: Pick<CallList, "id" | "name">[], contacts: Pick<CallContact, "list_id" | "status" | "attempts">[], logs: Pick<CallLog, "list_id" | "outcome">[]): ListStat[] {
+export function listStats(lists: Pick<CallList, "id" | "name">[], contacts: Pick<CallContact, "list_id" | "status" | "attempts" | "phone">[], logs: Pick<CallLog, "list_id" | "outcome">[]): ListStat[] {
   return lists.map((l) => {
     const cs = contacts.filter((c) => c.list_id === l.id);
     const ls = logs.filter((x) => x.list_id === l.id);
@@ -312,7 +333,8 @@ export function listStats(lists: Pick<CallList, "id" | "name">[], contacts: Pick
     return {
       id: l.id, name: l.name, total: cs.length,
       called: cs.filter((c) => c.attempts > 0 || !OPEN_STATUSES.includes(c.status)).length,
-      open: cs.filter((c) => OPEN_STATUSES.includes(c.status)).length,
+      open: cs.filter((c) => c.phone && OPEN_STATUSES.includes(c.status)).length,
+      noPhone: cs.filter((c) => !c.phone).length,
       reached, interested: ls.filter((x) => x.outcome === "interested").length, calls: ls.length,
       rate: ls.length ? reached / ls.length : 0,
     };

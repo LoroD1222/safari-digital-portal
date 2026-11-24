@@ -41,9 +41,11 @@ describe("reading lists", () => {
       ["Known", "", "0713 000 111", "bad email", "", "", ""],
     ];
     const r = buildImport(rows, m, new Set(["+255713000111"]));
-    expect(r.rows).toHaveLength(1);
+    expect(r.rows.map((x) => x.company)).toEqual(["Kibo", "No phone"]); // file order, and the row without a phone is kept
     expect(r.rows[0]).toMatchObject({ company: "Kibo", phone: "+255754123456", email: "info@kibo.example", country: "Tanzania" });
-    expect(r).toMatchObject({ noPhone: 1, duplicate: 1, known: 1 });
+    expect(r.rows[1]).toMatchObject({ phone: null, country: null });
+    expect(r).toMatchObject({ noPhone: 1, duplicate: 1, known: 1, empty: 0 });
+    expect(buildImport(rows, m, new Set(), { keepNoPhone: false })).toMatchObject({ noPhone: 0, empty: 1 });
   });
   it("finds the phone column by its values when the header says nothing", () => {
     expect(guessMapping(["Col A", "Col B"], [["x", "0754123456"], ["y", "0713000111"]])).toEqual(["skip", "phone"]);
@@ -115,5 +117,23 @@ describe("free meeting times", () => {
     expect(days[1].times).not.toContain("10:00");
     expect(days[1].times).not.toContain("10:30");
     expect(days[1].times).toContain("11:00");
+  });
+});
+
+describe("the real export format", () => {
+  it("reads Excel-quoted numbers and two numbers in one cell", async () => {
+    const { parsePhones, buildImport, guessMapping, parseCsv } = await import("@/lib/calls");
+    expect(parsePhones("'+255 784 778 194;' +255 752 918 477")).toEqual(["+255784778194", "+255752918477"]);
+    const csv = "Company,Contact person,Phone,Country,Other countries,Email,Website,Other names (merged),Address,Tags\n" +
+      "A Ltd,,'+255 754 270 595,Tanzania,,a@x.com,,,,\"start outreach\"\n" +
+      "B Ltd,,'+255 784 778 194;' +255 752 918 477,Tanzania,,,,,Plot 9,\n" +
+      "C Ltd,,,Tanzania,,c@x.com,https://c.example,,,\n";
+    const [h, ...rows] = parseCsv(csv);
+    const m = guessMapping(h, rows);
+    expect(m.slice(0, 9)).toEqual(["company", "contact_name", "phone", "country", "skip", "email", "website", "skip", "address"]);
+    const r = buildImport(rows, m, new Set());
+    expect(r.rows.map((x) => [x.company, x.phone, x.other_phone])).toEqual([
+      ["A Ltd", "+255754270595", null], ["B Ltd", "+255784778194", "+255 752 918 477"], ["C Ltd", null, null],
+    ]);
   });
 });

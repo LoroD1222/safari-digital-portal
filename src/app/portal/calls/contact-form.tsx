@@ -9,7 +9,7 @@ export function ContactForm({ contact, listId, onDone, onCancel }: {
   contact?: CallContact; listId?: string; onDone: (message: string, contact?: CallContact) => void; onCancel: () => void;
 }) {
   const [v, setV] = useState<ContactInput>({
-    company: contact?.company ?? "", contact_name: contact?.contact_name ?? "", phone: contact?.phone ?? "", email: contact?.email ?? "",
+    company: contact?.company ?? "", contact_name: contact?.contact_name ?? "", phone: contact?.phone ?? "", other_phone: contact?.other_phone ?? "", email: contact?.email ?? "",
     website: contact?.website ?? "", address: contact?.address ?? "", city: contact?.city ?? "", country: contact?.country ?? "",
   });
   const [error, setError] = useState<string | null>(null);
@@ -31,6 +31,7 @@ export function ContactForm({ contact, listId, onDone, onCancel }: {
         {f("company", "Company", { placeholder: "e.g. Kibo Safaris" })}
         {f("contact_name", "Contact name", { placeholder: "e.g. Daniel Mollel" })}
         {f("phone", "Phone number", { inputMode: "tel", placeholder: "0754 123 456" })}
+        {f("other_phone", "Second phone number", { inputMode: "tel", placeholder: "Optional" })}
         {f("email", "Email", { type: "email" })}
         {f("website", "Website", { placeholder: "kibosafaris.com" })}
         {f("address", "Address", { placeholder: "Street, building, P.O. Box" })}
@@ -40,7 +41,7 @@ export function ContactForm({ contact, listId, onDone, onCancel }: {
       <datalist id="call-countries">{["Tanzania", "Kenya", "Uganda", "Rwanda", "South Africa", "USA", "UK", "Germany"].map((c) => <option key={c} value={c} />)}</datalist>
       {error && <Alert>{error}</Alert>}
       <div className="flex gap-2">
-        <Button className="h-9" disabled={pending || !v.phone.trim()} onClick={save}>{pending ? "Saving…" : contact ? "Save details" : "Add number"}</Button>
+        <Button className="h-9" disabled={pending} onClick={save}>{pending ? "Saving…" : contact ? "Save details" : "Add number"}</Button>
         <Button variant="secondary" className="h-9" onClick={onCancel}>Cancel</Button>
       </div>
     </div>

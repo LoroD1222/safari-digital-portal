@@ -1,5 +1,5 @@
 "use client";
-import { useRef, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { unzipSync } from "fflate";
 import { Alert, Button, Input, Select } from "@/components/ui";
 import { Icon } from "@/components/icons";
@@ -31,6 +31,7 @@ export function ImportDialog({ lists, onClose, onDone }: { lists: CallList[]; on
   const [error, setError] = useState<string | null>(null);
   const [drag, setDrag] = useState(false);
   const [saving, start] = useTransition();
+  const [progress, setProgress] = useState(0);
 
   const load = async (f: File | undefined) => {
     if (!f) return;
@@ -41,7 +42,8 @@ export function ImportDialog({ lists, onClose, onDone }: { lists: CallList[]; on
       if (all.length < 2) { setError("The file needs a header row and at least one row of numbers."); return; }
       const [header, ...rows] = all;
       const m = guessMapping(header, rows.slice(0, 20));
-      setParsed({ file: f.name, header, rows: rows.slice(0, 5000) });
+      if (rows.length > 20000) { setError(`That file has ${rows.length} rows. Split it into lists of up to 20,000.`); return; }
+      setParsed({ file: f.name, header, rows });
       setMapping(m);
       setName(f.name.replace(/\.(csv|xlsx|txt)$/i, "").replace(/[-_]+/g, " ").trim().slice(0, 120));
     } catch (e) {
@@ -49,7 +51,10 @@ export function ImportDialog({ lists, onClose, onDone }: { lists: CallList[]; on
     }
   };
 
-  const built = parsed ? buildImport(parsed.rows, mapping, new Set()) : null;
+  const [keepNoPhone, setKeepNoPhone] = useState(true);
+  const all = useMemo(() => (parsed ? buildImport(parsed.rows, mapping, new Set(), { keepNoPhone: true }) : null), [parsed, mapping]);
+  const phoneOnly = useMemo(() => (parsed ? buildImport(parsed.rows, mapping, new Set(), { keepNoPhone: false }) : null), [parsed, mapping]);
+  const built = keepNoPhone ? all : phoneOnly;
   const hasPhone = mapping.includes("phone");
   const setField = (i: number, f: Field) => setMapping((m) => m.map((x, j) => (j === i ? f : f !== "skip" && x === f ? "skip" : x)));
 
@@ -57,13 +62,14 @@ export function ImportDialog({ lists, onClose, onDone }: { lists: CallList[]; on
     if (!built) return;
     setError(null);
     // In batches, so a big list stays under the upload size limit.
-    let listId = target === "new" ? null : target, added = 0, skipped = 0;
+    let listId = target === "new" ? null : target, added = 0, skipped = 0, noPhone = 0;
     for (let i = 0; i < built.rows.length; i += 1000) {
       const r = await importList({ listId, newName: name, rows: built.rows.slice(i, i + 1000) });
       if (!r.ok) { setError(added ? `${added} numbers were imported, then: ${r.error}` : r.error); return; }
-      listId = r.listId; added += r.added; skipped += r.skipped;
+      listId = r.listId; added += r.added; skipped += r.skipped; noPhone += r.noPhone;
+      setProgress(Math.min(built.rows.length, i + 1000));
     }
-    onDone(`${added} ${added === 1 ? "number" : "numbers"} added${skipped ? `, ${skipped} skipped because they're already in a list, already a lead, or on Do not call` : ""}.`);
+    onDone(`${added} ${added === 1 ? "lead" : "leads"} added in the order of your file${noPhone ? ` (${noPhone} without a phone number: add one under Lists to call them)` : ""}${skipped ? `. ${skipped} skipped because the number is already in a list, already a lead, or on Do not call` : ""}.`);
   });
 
   return (
@@ -125,16 +131,23 @@ export function ImportDialog({ lists, onClose, onDone }: { lists: CallList[]; on
             </div>
 
             <div className="flex flex-col gap-1 rounded-control bg-[#FDF6EC] px-3 py-2.5 text-[13px] text-[#6B3E0E]">
-              {!hasPhone ? <span>Pick which column has the phone number.</span> : <span>{built.rows.length} numbers ready to import.</span>}
-              {built.noPhone > 0 && hasPhone && <span>{built.noPhone === 1 ? "1 row has" : `${built.noPhone} rows have`} no usable phone number and {built.noPhone === 1 ? "is" : "are"} left out.</span>}
+              {!hasPhone ? <span>Pick which column has the phone number.</span> : <span><strong className="font-semibold">{built.rows.length} leads</strong> ready to import, in the same order as the file. Start calling goes from the top.</span>}
+              {built.rows.some((r) => r.other_phone) && <span>{built.rows.filter((r) => r.other_phone).length} rows have two numbers; the first is called and the second is kept.</span>}
+              {built.empty > 0 && <span>{built.empty === 1 ? "1 row has" : `${built.empty} rows have`} no phone number{keepNoPhone ? ", company or email" : ""} and {built.empty === 1 ? "is" : "are"} left out.</span>}
               {built.duplicate > 0 && <span>{built.duplicate === 1 ? "1 number appears" : `${built.duplicate} numbers appear`} more than once in the file; each is imported once.</span>}
               <span>Numbers already in a list, already a lead, or on Do not call are skipped when you import.</span>
             </div>
 
+            {hasPhone && (
+              <label className="flex items-start gap-2 text-[13px]">
+                <input type="checkbox" checked={keepNoPhone} onChange={(e) => setKeepNoPhone(e.target.checked)} className="mt-0.5 size-4 accent-[#1A6647]" />
+                <span>Also import the {all?.noPhone ?? 0} rows without a phone number <span className="text-slate">· they stay out of the queue until you add a number</span></span>
+              </label>
+            )}
             {error && <Alert>{error}</Alert>}
             <div className="flex justify-end gap-2">
               <Button variant="secondary" onClick={() => { setParsed(null); setError(null); }}>Choose another file</Button>
-              <Button disabled={saving || !hasPhone || !built.rows.length || (target === "new" && !name.trim())} onClick={save}>{saving ? "Importing…" : `Import ${built.rows.length} numbers`}</Button>
+              <Button disabled={saving || !hasPhone || !built.rows.length || (target === "new" && !name.trim())} onClick={save}>{saving ? `Importing… ${progress}/${built.rows.length}` : `Import ${built.rows.length} leads`}</Button>
             </div>
           </>
         )}

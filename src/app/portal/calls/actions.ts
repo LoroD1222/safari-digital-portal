@@ -9,10 +9,11 @@ import { sendViaResend } from "@/lib/followup-mail";
 import { sendingKey } from "@/lib/resend-keys";
 import { unsubscribeUrl } from "@/lib/followups";
 import {
-  DEFAULT_BODY, DEFAULT_SUBJECT, OUTCOMES, cleanCountry, countryFromPhone, eatToIso, fillTemplate, normalizePhone,
+  DEFAULT_BODY, DEFAULT_SUBJECT, OUTCOMES, cleanCountry, countryFromPhone, eatToIso, parsePhones, prettyPhone, fillTemplate, normalizePhone,
   type CallContact, type CallLog, type ImportRow, type Outcome,
 } from "@/lib/calls";
 import { saveAppointment } from "../calendar/actions";
+import { allRows } from "@/lib/supabase/all-rows";
 
 type R<T = object> = ({ ok: true; message?: string } & T) | { ok: false; error: string };
 export type Current = { contact: CallContact; logs: CallLog[] };
@@ -22,7 +23,9 @@ async function ctx() {
   if (!company?.is_internal) throw new Error("Cold calling is only for Safari Digital's own account.");
   return { company, viewer, supabase: await createClient() };
 }
-const migrate = (m: string) => (/country|address/.test(m) && /column|schema cache/i.test(m) ? "Run 0036_call_country.sql in Supabase first."
+const migrate = (m: string) => (/position|other_phone/.test(m) && /column|schema cache/i.test(m) ? "Run 0037_call_order.sql in Supabase first."
+  : /null value in column "phone"/.test(m) ? "Run 0037_call_order.sql in Supabase first, so rows without a phone number can be kept."
+  : /country|address/.test(m) && /column|schema cache/i.test(m) ? "Run 0036_call_country.sql in Supabase first."
   : /call_|claim_|log_call|can_call/.test(m) && /exist|schema cache|function/i.test(m) ? "Run 0035_cold_calling.sql in Supabase first." : m);
 const done = () => { revalidatePath("/portal/calls"); };
 
@@ -151,10 +154,10 @@ async function sendInterestedEmail(a: { inquiryId: string; to: string; contact: 
 
 // ───────────── Lists ─────────────
 
-export async function importList(input: { listId?: string | null; newName?: string; rows: ImportRow[] }): Promise<R<{ listId: string; added: number; skipped: number }>> {
+export async function importList(input: { listId?: string | null; newName?: string; rows: ImportRow[] }): Promise<R<{ listId: string; added: number; skipped: number; noPhone: number }>> {
   const { company, supabase } = await ctx();
-  const rows = (input.rows ?? []).slice(0, 5000);
-  if (!rows.length) return { ok: false, error: "There are no numbers to import." };
+  const rows = (input.rows ?? []).slice(0, 2000);
+  if (!rows.length) return { ok: false, error: "There are no rows to import." };
   let listId = input.listId || null;
   if (!listId) {
     const name = (input.newName ?? "").trim().slice(0, 120);
@@ -163,24 +166,41 @@ export async function importList(input: { listId?: string | null; newName?: stri
     if (error || !data) return { ok: false, error: migrate(error?.message ?? "Couldn't create the list.") };
     listId = data.id as string;
   }
-  // Skip numbers that are already in a list, on Do not call, or already a lead.
-  const [existing, dnc, leads] = await Promise.all([
-    supabase.from("call_contacts").select("phone").eq("client_id", company.id).limit(20000),
-    supabase.from("call_dnc").select("phone").eq("client_id", company.id).limit(20000),
-    supabase.from("inquiries").select("phone").eq("client_id", company.id).not("phone", "is", null).limit(5000),
+  // Skip numbers that are already in a list, on Do not call, or already a lead (all of them, not just the first 1,000).
+  const [existing, dnc, leads, last, noPhoneRows] = await Promise.all([
+    allRows<{ phone: string | null }>((f, t) => supabase.from("call_contacts").select("phone").eq("client_id", company.id).not("phone", "is", null).order("id").range(f, t)),
+    allRows<{ phone: string }>((f, t) => supabase.from("call_dnc").select("phone").eq("client_id", company.id).order("phone").range(f, t)),
+    allRows<{ phone: string | null }>((f, t) => supabase.from("inquiries").select("phone").eq("client_id", company.id).not("phone", "is", null).order("id").range(f, t)),
+    supabase.from("call_contacts").select("position").eq("list_id", listId).not("position", "is", null).order("position", { ascending: false }).limit(1).maybeSingle(),
+    // Rows without a phone already in this list, so uploading the same file twice doesn't add them again.
+    allRows<{ company: string | null; email: string | null }>((f, t) => supabase.from("call_contacts").select("company, email").eq("list_id", listId).is("phone", null).order("id").range(f, t)),
   ]);
-  const skip = new Set<string>([...(existing.data ?? []), ...(dnc.data ?? [])].map((r) => r.phone as string));
-  for (const l of leads.data ?? []) { const p = normalizePhone(l.phone); if (p) skip.add(p); }
+  const noPhoneKey = (company: string | null, email: string | null) => `${(company ?? "").trim().toLowerCase()}|${(email ?? "").trim().toLowerCase()}`;
+  const knownNoPhone = new Set(noPhoneRows.data.map((r) => noPhoneKey(r.company, r.email)));
+  if (existing.error) return { ok: false, error: migrate(existing.error.message) };
+  const skip = new Set<string>([...existing.data, ...dnc.data].map((r) => r.phone as string));
+  for (const l of leads.data) { const p = normalizePhone(l.phone); if (p) skip.add(p); }
+  let pos = ((last.data?.position as number | null) ?? 0);
   const seen = new Set<string>();
+  const s = (v: unknown, max: number) => String(v ?? "").trim().slice(0, max) || null;
+  let noPhone = 0;
   const clean = rows.flatMap((r) => {
     const phone = normalizePhone(r.phone);
-    if (!phone || skip.has(phone) || seen.has(phone)) return [];
-    seen.add(phone);
-    const s = (v: unknown, max: number) => String(v ?? "").trim().slice(0, max) || null;
     const email = s(r.email, 200);
+    const comp = s(r.company, 200);
+    if (!phone && !comp && !email) return [];
+    if (phone && (skip.has(phone) || seen.has(phone))) return [];
+    if (!phone) {
+      const k = noPhoneKey(comp, email);
+      if (knownNoPhone.has(k)) return [];
+      knownNoPhone.add(k);
+      noPhone++;
+    } else seen.add(phone);
     return [{
-      client_id: company.id, list_id: listId, phone, company: s(r.company, 200), contact_name: s(r.contact_name, 200),
-      email: email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email.toLowerCase() : null, website: s(r.website, 300), address: s(r.address, 300), city: s(r.city, 120), country: cleanCountry(s(r.country, 80)) ?? countryFromPhone(phone),
+      client_id: company.id, list_id: listId, position: ++pos, phone, other_phone: s(r.other_phone, 120),
+      company: comp, contact_name: s(r.contact_name, 200),
+      email: email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email.toLowerCase() : null, website: s(r.website, 300), address: s(r.address, 300), city: s(r.city, 120),
+      country: cleanCountry(s(r.country, 80)) ?? (phone ? countryFromPhone(phone) : null),
     }];
   });
   for (let i = 0; i < clean.length; i += 500) {
@@ -189,7 +209,7 @@ export async function importList(input: { listId?: string | null; newName?: stri
   }
   done();
   const skipped = rows.length - clean.length;
-  return { ok: true, listId: listId!, added: clean.length, skipped, message: `${clean.length} ${clean.length === 1 ? "number" : "numbers"} added${skipped ? `, ${skipped} skipped (already in a list, a lead, on Do not call, or no valid number)` : ""}.` };
+  return { ok: true, listId: listId!, added: clean.length, skipped, noPhone };
 }
 
 export async function saveList(id: string, v: { name: string; script: string }): Promise<R> {
@@ -269,20 +289,24 @@ export async function removeDnc(phone: string): Promise<R> {
 // ───────────── One number: edit or add by hand ─────────────
 
 export type ContactInput = {
-  company: string; contact_name: string; phone: string; email: string; website: string; address: string; city: string; country: string;
+  company: string; contact_name: string; phone: string; other_phone: string; email: string; website: string; address: string; city: string; country: string;
 };
 
 function cleanContact(v: ContactInput): { ok: true; row: Record<string, string | null> } | { ok: false; error: string } {
-  const phone = normalizePhone(v.phone);
-  if (!phone) return { ok: false, error: "That phone number doesn't look right. Use e.g. 0754 123 456 or +44 7700 900123." };
+  const phones = parsePhones(v.phone);
+  const phone = phones[0] ?? null;
+  if (String(v.phone ?? "").trim() && !phone) return { ok: false, error: "That phone number doesn't look right. Use e.g. 0754 123 456 or +44 7700 900123." };
+  const others = parsePhones(v.other_phone);
+  if (String(v.other_phone ?? "").trim() && !others.length) return { ok: false, error: "The second phone number doesn't look right." };
   const t = (s: string, max: number) => String(s ?? "").trim().slice(0, max) || null;
   const email = t(v.email, 200);
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, error: "That email doesn't look right." };
   const website = t(v.website, 300);
   if (website && /\s/.test(website)) return { ok: false, error: "The website shouldn't have spaces, e.g. kibosafaris.com" };
+  if (!phone && !String(v.company ?? "").trim() && !String(v.email ?? "").trim()) return { ok: false, error: "Add at least a phone number, a company or an email." };
   return { ok: true, row: {
-    phone, email: email?.toLowerCase() ?? null, website, company: t(v.company, 200), contact_name: t(v.contact_name, 200),
-    address: t(v.address, 300), city: t(v.city, 120), country: cleanCountry(v.country) ?? countryFromPhone(phone),
+    phone, other_phone: [...phones.slice(1), ...others].filter((p) => p !== phone).map(prettyPhone).join(", ").slice(0, 120) || null, email: email?.toLowerCase() ?? null, website, company: t(v.company, 200), contact_name: t(v.contact_name, 200),
+    address: t(v.address, 300), city: t(v.city, 120), country: cleanCountry(v.country) ?? (phone ? countryFromPhone(phone) : null),
   } };
 }
 
@@ -290,7 +314,7 @@ export async function updateContact(id: string, v: ContactInput): Promise<R<{ co
   const { company, supabase } = await ctx();
   const c = cleanContact(v);
   if (!c.ok) return c;
-  const { data: blocked } = await supabase.from("call_dnc").select("phone").eq("client_id", company.id).eq("phone", c.row.phone!).maybeSingle();
+  const { data: blocked } = c.row.phone ? await supabase.from("call_dnc").select("phone").eq("client_id", company.id).eq("phone", c.row.phone).maybeSingle() : { data: null };
   const { data, error } = await supabase.from("call_contacts").update(c.row).eq("id", id).eq("client_id", company.id).select("*").single();
   if (error) return { ok: false, error: /call_contacts_list_phone|duplicate/.test(error.message) ? "That phone number is already in this list." : migrate(error.message) };
   done();
@@ -301,10 +325,11 @@ export async function addContact(listId: string, v: ContactInput): Promise<R> {
   const { company, supabase } = await ctx();
   const c = cleanContact(v);
   if (!c.ok) return c;
-  const { data: blocked } = await supabase.from("call_dnc").select("phone").eq("client_id", company.id).eq("phone", c.row.phone!).maybeSingle();
+  const { data: blocked } = c.row.phone ? await supabase.from("call_dnc").select("phone").eq("client_id", company.id).eq("phone", c.row.phone).maybeSingle() : { data: null };
   if (blocked) return { ok: false, error: "That number is on Do not call." };
-  const { error } = await supabase.from("call_contacts").insert({ ...c.row, client_id: company.id, list_id: listId });
+  const { data: last } = await supabase.from("call_contacts").select("position").eq("list_id", listId).not("position", "is", null).order("position", { ascending: false }).limit(1).maybeSingle();
+  const { error } = await supabase.from("call_contacts").insert({ ...c.row, client_id: company.id, list_id: listId, position: ((last?.position as number | null) ?? 0) + 1 });
   done();
   if (error) return { ok: false, error: /call_contacts_list_phone|duplicate/.test(error.message) ? "That phone number is already in this list." : migrate(error.message) };
-  return { ok: true, message: "Number added to the queue." };
+  return { ok: true, message: c.row.phone ? "Number added to the queue." : "Added. It goes into the queue once it has a phone number." };
 }

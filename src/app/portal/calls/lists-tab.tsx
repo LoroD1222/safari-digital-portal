@@ -33,9 +33,11 @@ function ListCard({ list, stat, contacts, onToast }: { list: CallList; stat: Ret
   const [script, setScript] = useState(list.script ?? "");
   const [editing, setEditing] = useState(false);
   const [showNumbers, setShowNumbers] = useState(false);
-  const [filter, setFilter] = useState<CallStatus | "all">("all");
+  const [filter, setFilter] = useState<CallStatus | "all" | "no_phone">("all");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [edit, setEdit] = useState<string | null>(null); // a number's id, or "new"
+  const [search, setSearch] = useState("");
+  const [limit, setLimit] = useState(200);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const run = (fn: () => Promise<{ ok: true; message?: string } | { ok: false; error: string }>, after?: () => void) => start(async () => {
@@ -47,15 +49,18 @@ function ListCard({ list, stat, contacts, onToast }: { list: CallList; stat: Ret
     router.refresh();
   });
   const progress = stat.total ? stat.called / stat.total : 0;
-  const shown = contacts.filter((c) => filter === "all" || c.status === filter);
-  const present = [...new Set(contacts.map((c) => c.status))];
+  const q = search.trim().toLowerCase(), qd = q.replace(/\D/g, "");
+  const shown = contacts.filter((c) => (filter === "all" || (filter === "no_phone" ? !c.phone : c.phone && c.status === filter))
+    && (!q || [c.company, c.contact_name, c.email, c.website, c.city, c.country].some((x) => x?.toLowerCase().includes(q)) || (qd.length >= 3 && (c.phone ?? "").includes(qd))));
+  const present = [...new Set(contacts.filter((c) => c.phone).map((c) => c.status))];
+  const noPhone = contacts.filter((c) => !c.phone).length;
 
   return (
     <section aria-label={list.name} className={`flex flex-col gap-4 rounded-card border border-line p-5 ${list.archived ? "bg-sidebar" : ""}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-col gap-0.5">
           <h2 className="text-[16px] font-semibold">{list.name}{list.archived && <span className="ml-2 text-[13px] font-normal text-slate">Archived</span>}</h2>
-          <span className="text-[13px] text-slate">{stat.total} numbers · {stat.open} still to call</span>
+          <span className="text-[13px] text-slate">{stat.total} leads · {stat.open} still to call{stat.noPhone ? ` · ${stat.noPhone} without a phone number` : ""}</span>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="secondary" className="h-9" onClick={() => setEditing((v) => !v)}>{editing ? "Close" : "Name & script"}</Button>
@@ -97,32 +102,37 @@ function ListCard({ list, stat, contacts, onToast }: { list: CallList; stat: Ret
 
       <div className="border-t border-line pt-3">
         <div className="flex flex-wrap gap-4">
-          <button type="button" onClick={() => setShowNumbers((v) => !v)} className="text-[13px] font-medium text-brand">{showNumbers ? "Hide numbers" : `Show the ${stat.total} numbers`}</button>
+          <button type="button" onClick={() => setShowNumbers((v) => !v)} className="text-[13px] font-medium text-brand">{showNumbers ? "Hide leads" : `Show all ${stat.total} leads`}</button>
           {!list.archived && <button type="button" onClick={() => setEdit("new")} className="text-[13px] font-medium text-brand">+ Add a number</button>}
         </div>
         {edit === "new" && <div className="mt-3"><ContactForm listId={list.id} onCancel={() => setEdit(null)} onDone={(m) => { setEdit(null); onToast(m); router.refresh(); }} /></div>}
         {showNumbers && (
           <div className="mt-3 flex flex-col gap-2">
-            <Select aria-label="Show" value={filter} onChange={(e) => setFilter(e.target.value as CallStatus | "all")} className="h-9 w-auto self-start">
+            <div className="flex flex-wrap gap-2">
+            <Input value={search} onChange={(e) => { setSearch(e.target.value); setLimit(200); }} placeholder="Search company, phone, email…" aria-label="Search leads" className="h-9 w-64" />
+            <Select aria-label="Show" value={filter} onChange={(e) => setFilter(e.target.value as CallStatus | "all" | "no_phone")} className="h-9 w-auto self-start">
               <option value="all">All ({contacts.length})</option>
-              {present.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]} ({contacts.filter((c) => c.status === s).length})</option>)}
+              {present.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]} ({contacts.filter((c) => c.phone && c.status === s).length})</option>)}
+              {noPhone > 0 && <option value="no_phone">No phone number ({noPhone})</option>}
             </Select>
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full text-[13px]">
-                <thead><tr className="border-b border-line text-left text-slate"><th className="px-2 py-1.5 font-medium">Company</th><th className="px-2 py-1.5 font-medium">Phone</th><th className="px-2 py-1.5 font-medium">Website</th><th className="px-2 py-1.5 font-medium">Address</th><th className="px-2 py-1.5 font-medium">Country</th><th className="px-2 py-1.5 font-medium">Status</th><th className="px-2 py-1.5 font-medium">Tries</th><th /></tr></thead>
+                <thead><tr className="border-b border-line text-left text-slate"><th className="px-2 py-1.5 font-medium">#</th><th className="px-2 py-1.5 font-medium">Company</th><th className="px-2 py-1.5 font-medium">Phone</th><th className="px-2 py-1.5 font-medium">Website</th><th className="px-2 py-1.5 font-medium">Address</th><th className="px-2 py-1.5 font-medium">Country</th><th className="px-2 py-1.5 font-medium">Status</th><th className="px-2 py-1.5 font-medium">Tries</th><th /></tr></thead>
                 <tbody>
-                  {shown.slice(0, 300).map((c) => edit === c.id ? (
-                    <tr key={c.id}><td colSpan={8} className="py-2">
+                  {shown.slice(0, limit).map((c) => edit === c.id ? (
+                    <tr key={c.id}><td colSpan={9} className="py-2">
                       <ContactForm contact={c} onCancel={() => setEdit(null)} onDone={(m) => { setEdit(null); onToast(m); router.refresh(); }} />
                     </td></tr>
                   ) : (
                     <tr key={c.id} className="border-b border-[#F1F2F4]">
+                      <td className="px-2 py-1.5 tabular-nums text-slate">{c.position ?? ""}</td>
                       <td className="px-2 py-1.5">{c.company ?? c.contact_name ?? "—"}</td>
                       <td className="whitespace-nowrap px-2 py-1.5 tabular-nums">{prettyPhone(c.phone)}</td>
                       <td className="max-w-[180px] truncate px-2 py-1.5">{c.website?.replace(/^https?:\/\//, "").replace(/\/$/, "") ?? "—"}</td>
                       <td className="max-w-[200px] truncate px-2 py-1.5">{[c.address, c.city].filter(Boolean).join(", ") || "—"}</td>
                       <td className="px-2 py-1.5">{c.country ?? "—"}</td>
-                      <td className="px-2 py-1.5">{STATUS_LABEL[c.status]}</td>
+                      <td className="px-2 py-1.5">{c.phone ? STATUS_LABEL[c.status] : <span className="text-[#9A4A12]">Add a phone number</span>}</td>
                       <td className="px-2 py-1.5 tabular-nums">{c.attempts}</td>
                       <td className="whitespace-nowrap px-2 py-1.5 text-right">
                         {c.status === "interested" && c.inquiry_id && <Link href={`/portal/calendar?lead=${c.inquiry_id}`} className="mr-3 text-[13px] font-medium">Book meeting</Link>}
@@ -135,7 +145,11 @@ function ListCard({ list, stat, contacts, onToast }: { list: CallList; stat: Ret
                   ))}
                 </tbody>
               </table>
-              {shown.length > 300 && <p className="px-2 py-2 text-xs text-slate">Showing the first 300.</p>}
+              {shown.length > limit && (
+                <p className="flex items-center gap-3 px-2 py-2 text-xs text-slate">Showing {limit} of {shown.length}.
+                  <button type="button" onClick={() => setLimit((n) => n + 500)} className="text-[13px] font-medium text-brand">Show 500 more</button>
+                </p>
+              )}
             </div>
           </div>
         )}

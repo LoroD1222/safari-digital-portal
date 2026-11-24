@@ -135,6 +135,33 @@ describe("country", () => {
   });
 });
 
+describe("order", () => {
+  it("goes down a list in file order, not by id, and skips rows without a phone", async () => {
+    const L3 = "00000000-0000-0000-0000-0000000000e3";
+    await db.exec(`insert into public.call_lists (id, client_id, name, created_at) values ('${L3}', '${SD}', 'Ordered', now() - interval '1 year');
+      insert into public.call_contacts (client_id, list_id, company, phone, position) values
+        ('${SD}', '${L3}', 'Third', '+255700000003', 3), ('${SD}', '${L3}', 'No phone', null, 1),
+        ('${SD}', '${L3}', 'Second', '+255700000002', 2), ('${SD}', '${L3}', 'Fourth', '+255700000004', 4);`);
+    await as(U1);
+    const got: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      const v = (await one<{ v: string }>(`select public.claim_next_call('${SD}', '${L3}') as v`)).v;
+      got.push(await company(v));
+      await db.exec(`select public.log_call('${v}', 'wrong_number')`);
+    }
+    expect(got).toEqual(["Second", "Third", "Fourth"]);
+    expect((await one<{ v: string | null }>(`select public.claim_next_call('${SD}', '${L3}') as v`)).v).toBeNull();
+    // The oldest list comes first when calling "All lists".
+    await as(null);
+    await db.exec(`insert into public.call_contacts (client_id, list_id, company, phone, position) values ('${SD}', '${L3}', 'Fifth', '+255700000005', 5)`);
+    await as(U2);
+    const v = (await one<{ v: string }>(`select public.claim_next_call('${SD}') as v`)).v;
+    expect(await company(v)).toBe("Fifth");
+    await db.exec(`select public.release_calls('${SD}')`);
+    await as(null);
+  });
+});
+
 describe("access", () => {
   it("a normal client sees nothing and can't claim", async () => {
     await as(UX);
@@ -146,7 +173,7 @@ describe("access", () => {
   });
   it("the internal team sees its own lists", async () => {
     await as(U2);
-    expect((await q(`select * from public.call_lists`)).length).toBe(2);
+    expect((await q(`select * from public.call_lists`)).length).toBe(3);
     await as(null);
   });
 });

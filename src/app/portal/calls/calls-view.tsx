@@ -113,7 +113,7 @@ function Calling(p: Parameters<typeof CallsView>[0] & { onToast: (m: string | nu
 
   // Keep the queue fresh, so you see what colleagues are calling.
   useEffect(() => {
-    const t = setInterval(() => router.refresh(), 30_000);
+    const t = setInterval(() => { if (document.visibilityState === "visible") router.refresh(); }, 60_000);
     return () => clearInterval(t);
   }, [router]);
 
@@ -121,20 +121,23 @@ function Calling(p: Parameters<typeof CallsView>[0] & { onToast: (m: string | nu
     c.claimed_by && c.claimed_by !== p.me && c.claimed_at && p.now - Date.parse(c.claimed_at) < CLAIM_MINUTES * 60_000 ? p.names[c.claimed_by] ?? "A colleague" : null;
   const inCountry = (c: CallContact) => country === null || (country === "" ? !c.country : c.country === country);
   const countries = [...new Set(p.contacts.filter((c) => OPEN_STATUSES.includes(c.status)).map((c) => c.country ?? ""))].sort((a, b) => (a === "" ? 1 : b === "" ? -1 : a.localeCompare(b)));
-  const open: Row[] = p.contacts.filter((c) => OPEN_STATUSES.includes(c.status) && active.has(c.list_id) && (!list || c.list_id === list) && inCountry(c)).map((c) => ({ ...c, lockedBy: lockedBy(c) }));
+  const open: Row[] = p.contacts.filter((c) => c.phone && OPEN_STATUSES.includes(c.status) && active.has(c.list_id) && (!list || c.list_id === list) && inCountry(c)).map((c) => ({ ...c, lockedBy: lockedBy(c) }));
   const isDue = (c: CallContact) => !c.next_call_at || Date.parse(c.next_call_at) <= p.now;
+  // Same order as the list (the file's order), oldest list first.
+  const listIdx = new Map(p.lists.map((l, i) => [l.id, i]));
+  const byList = (a: CallContact, b: CallContact) => (listIdx.get(a.list_id) ?? 0) - (listIdx.get(b.list_id) ?? 0) || (a.position ?? 1e9) - (b.position ?? 1e9) || a.created_at.localeCompare(b.created_at);
   const byTime = (a: CallContact, b: CallContact) => Date.parse(a.next_call_at ?? a.created_at) - Date.parse(b.next_call_at ?? b.created_at);
   const groups = [
     { key: "callback", label: "Callbacks due", dot: "#5B7BE0", rows: open.filter((c) => c.status === "callback" && isDue(c)).sort(byTime) },
     { key: "retry", label: "Up next", dot: "#E0A458", rows: open.filter((c) => c.status === "retry" && isDue(c)).sort(byTime) },
-    { key: "new", label: "Not called yet", dot: "#8A8FA3", rows: open.filter((c) => c.status === "new") },
+    { key: "new", label: "Not called yet", dot: "#8A8FA3", rows: open.filter((c) => c.status === "new").sort(byList) },
     { key: "later", label: "Later", dot: "#C9CDD6", rows: open.filter((c) => c.status !== "new" && !isDue(c)).sort(byTime) },
   ].filter((g) => g.rows.length);
   // Said yes on the phone but no meeting in the Calendar yet.
   const booked = new Set(p.meetings.filter((m) => m.inquiry_id && Date.parse(m.starts_at) >= p.now - 3600e3).map((m) => m.inquiry_id));
   const needMeeting = p.contacts.filter((c) => c.status === "interested" && c.inquiry_id && !booked.has(c.inquiry_id))
     .sort((a, b) => Date.parse(b.last_called_at ?? b.created_at) - Date.parse(a.last_called_at ?? a.created_at));
-  const counts = (id: string | null) => p.contacts.filter((c) => OPEN_STATUSES.includes(c.status) && active.has(c.list_id) && (!id || c.list_id === id) && inCountry(c) && isDue(c)).length;
+  const counts = (id: string | null) => p.contacts.filter((c) => c.phone && OPEN_STATUSES.includes(c.status) && active.has(c.list_id) && (!id || c.list_id === id) && inCountry(c) && isDue(c)).length;
 
   const take = (fn: () => Promise<{ ok: true; current: Current | null } | { ok: false; error: string }>) => start(async () => {
     setError(null);
@@ -255,7 +258,7 @@ function Calling(p: Parameters<typeof CallsView>[0] & { onToast: (m: string | nu
             <div className="flex flex-col items-center gap-2 rounded-card border border-line px-5 py-12 text-center">
               <span className="flex size-11 items-center justify-center rounded-full bg-[#E3F4EA] text-brand"><Icon name="phone" size={20} /></span>
               <span className="text-[15px] font-semibold">{empty ? "Nothing to call right now" : "Ready when you are"}</span>
-              <span className="max-w-sm text-slate">{empty ? "Every number is done, waiting for its call back time, or being called by a colleague." : "Start calling and we'll give you the next number: call backs first, then retries, then new numbers. Colleagues never get the same one."}</span>
+              <span className="max-w-sm text-slate">{empty ? "Every number is done, waiting for its call back time, or being called by a colleague." : "Start calling and we'll go through the list from the top, in the order of your file. Call backs that are due come first, then retries. Colleagues never get the same number."}</span>
               {!empty && <Button className="mt-2" disabled={pending} onClick={() => startNext()}><Icon name="phone" size={16} />{pending ? "Getting a number…" : "Start calling"}</Button>}
             </div>
           )}
@@ -329,6 +332,7 @@ function CallCard({ cur, p, listName, script, pending, onSkip, onStop, onSaved, 
             <h2 className="text-xl font-semibold tracking-[-0.01em]">{c.company ?? c.contact_name ?? "Unknown company"}</h2>
             {(c.contact_name || c.city || c.country) && <span className="text-body">{[c.company ? c.contact_name : null, c.city, c.country].filter(Boolean).join(" · ")}</span>}
             <span className="mt-1.5 text-[26px] font-semibold tabular-nums tracking-[-0.01em]">{prettyPhone(c.phone)}</span>
+            {c.other_phone && <span className="text-[13px] text-body">Also: {c.other_phone.split(/,\s*/).map((o, i) => <a key={i} href={`tel:${o.replace(/[^\d+]/g, "")}`} className="mr-2 tabular-nums">{o}</a>)}</span>}
           </div>
           <div className="flex flex-wrap gap-2">
             <a href={`tel:${c.phone}`} className="inline-flex h-11 items-center gap-2 rounded-control bg-brand px-[18px] font-semibold text-white no-underline hover:bg-brand-hover"><Icon name="phone" size={17} />Call</a>

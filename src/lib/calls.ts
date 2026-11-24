@@ -200,6 +200,9 @@ export function buildImport(rows: string[][], mapping: Field[], skipPhones: Set<
   return { rows: ok, noPhone, empty, duplicate, known };
 }
 
+// The countries we call for now (the country filter and the suggestions when editing a lead).
+export const CALL_COUNTRIES = ["Tanzania", "Kenya", "Uganda"];
+
 // "tanzania", "TZ", "Tanzania, United Republic of" → "Tanzania". Anything else is kept, tidied.
 const COUNTRY_ALIASES: Record<string, string> = {
   tz: "Tanzania", tza: "Tanzania", tanzania: "Tanzania", "united republic of tanzania": "Tanzania", "tanzania, united republic of": "Tanzania",

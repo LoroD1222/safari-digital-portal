@@ -1,7 +1,7 @@
 "use client";
 import { useState, useTransition } from "react";
 import { Alert, Button, Input } from "@/components/ui";
-import type { CallContact } from "@/lib/calls";
+import { CALL_COUNTRIES, type CallContact } from "@/lib/calls";
 import { addContact, updateContact, type ContactInput } from "./actions";
 
 // Edit a number's details, or add one by hand to a list.
@@ -38,7 +38,7 @@ export function ContactForm({ contact, listId, onDone, onCancel }: {
         {f("city", "City", { placeholder: "Arusha" })}
         {f("country", "Country", { placeholder: "Tanzania", list: "call-countries" })}
       </div>
-      <datalist id="call-countries">{["Tanzania", "Kenya", "Uganda", "Rwanda", "South Africa", "USA", "UK", "Germany"].map((c) => <option key={c} value={c} />)}</datalist>
+      <datalist id="call-countries">{CALL_COUNTRIES.map((c) => <option key={c} value={c} />)}</datalist>
       {error && <Alert>{error}</Alert>}
       <div className="flex gap-2">
         <Button className="h-9" disabled={pending} onClick={save}>{pending ? "Saving…" : contact ? "Save details" : "Add number"}</Button>

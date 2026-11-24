@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Alert, Button, Input, Select, Textarea } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import {
-  CLAIM_MINUTES, DEFAULT_SCRIPT, DEFAULT_WHATSAPP, OPEN_STATUSES, OUTCOMES, OUTCOME_LABEL, REACHED,
+  CALL_COUNTRIES, CLAIM_MINUTES, DEFAULT_SCRIPT, DEFAULT_WHATSAPP, OPEN_STATUSES, OUTCOMES, OUTCOME_LABEL, REACHED,
   eatDate, fillTemplate, freeSlots, prettyPhone, shortDay, scriptSteps, waLink, whenLabel,
   type CallContact, type CallList, type CallLog, type CallSettings, type Outcome,
 } from "@/lib/calls";
@@ -120,7 +120,7 @@ function Calling(p: Parameters<typeof CallsView>[0] & { onToast: (m: string | nu
   const lockedBy = (c: CallContact) =>
     c.claimed_by && c.claimed_by !== p.me && c.claimed_at && p.now - Date.parse(c.claimed_at) < CLAIM_MINUTES * 60_000 ? p.names[c.claimed_by] ?? "A colleague" : null;
   const inCountry = (c: CallContact) => country === null || (country === "" ? !c.country : c.country === country);
-  const countries = [...new Set(p.contacts.filter((c) => OPEN_STATUSES.includes(c.status)).map((c) => c.country ?? ""))].sort((a, b) => (a === "" ? 1 : b === "" ? -1 : a.localeCompare(b)));
+  const countries = CALL_COUNTRIES;
   const open: Row[] = p.contacts.filter((c) => c.phone && OPEN_STATUSES.includes(c.status) && active.has(c.list_id) && (!list || c.list_id === list) && inCountry(c)).map((c) => ({ ...c, lockedBy: lockedBy(c) }));
   const isDue = (c: CallContact) => !c.next_call_at || Date.parse(c.next_call_at) <= p.now;
   // Same order as the list (the file's order), oldest list first.
@@ -172,12 +172,10 @@ function Calling(p: Parameters<typeof CallsView>[0] & { onToast: (m: string | nu
             </button>
           );
         })}
-        {countries.length > 1 && (
-          <Select aria-label="Country" value={country ?? "*"} onChange={(e) => { setCountry(e.target.value === "*" ? null : e.target.value); setEmpty(false); }} className="ml-auto h-8 w-auto rounded-full text-[13px]">
+        <Select aria-label="Country" value={country ?? "*"} onChange={(e) => { setCountry(e.target.value === "*" ? null : e.target.value); setEmpty(false); }} className="ml-auto h-8 w-auto rounded-full text-[13px]">
             <option value="*">All countries</option>
-            {countries.map((c) => <option key={c || "none"} value={c}>{c || "No country"}</option>)}
+            {countries.map((c) => <option key={c} value={c}>{c}</option>)}
           </Select>
-        )}
       </div>
 
       {missed && (

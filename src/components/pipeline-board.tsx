@@ -53,6 +53,26 @@ export function PipelineBoard({ items, company, adminHref, followupsOn = false, 
   }, []);
   const now = today();
 
+  // Side-scrolling: arrows when there are more stages than fit, and auto-scroll while dragging near an edge.
+  const [edges, setEdges] = useState({ left: false, right: false });
+  useEffect(() => {
+    const el = boardRef.current;
+    if (!el) return;
+    const check = () => setEdges({ left: el.scrollLeft > 4, right: el.scrollLeft + el.clientWidth < el.scrollWidth - 4 });
+    check();
+    el.addEventListener("scroll", check, { passive: true });
+    window.addEventListener("resize", check);
+    return () => { el.removeEventListener("scroll", check); window.removeEventListener("resize", check); };
+  }, []);
+  const slide = (dir: 1 | -1) => boardRef.current?.scrollBy({ left: dir * Math.max(240, boardRef.current.clientWidth * 0.7), behavior: "smooth" });
+  const edgeScroll = (e: React.DragEvent) => {
+    const el = boardRef.current;
+    if (!el || !drag) return;
+    const r = el.getBoundingClientRect(), zone = 90;
+    if (e.clientX < r.left + zone) el.scrollLeft -= Math.ceil((r.left + zone - e.clientX) / 4);
+    else if (e.clientX > r.right - zone) el.scrollLeft += Math.ceil((e.clientX - (r.right - zone)) / 4);
+  };
+
   const columns = useMemo(() => STAGES.map((s) => {
     const list = rows.filter((r) => r.status === s).sort((a, b) =>
       // overdue follow-ups first, then the newest
@@ -93,13 +113,22 @@ export function PipelineBoard({ items, company, adminHref, followupsOn = false, 
           <span>Hover an icon for details.</span>
         </>}
       </p>
-      <div ref={boardRef} className="-mx-4 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0">
-        <ol className="flex w-max snap-x snap-mandatory gap-2.5 sm:w-full sm:min-w-[1100px]">
+      <div className="relative">
+      {edges.left && (
+        <button type="button" onClick={() => slide(-1)} onDragEnter={() => slide(-1)} aria-label="Earlier stages"
+          className="absolute left-1 top-3 z-20 hidden size-9 items-center justify-center rounded-full border border-line bg-white shadow-[0_2px_8px_rgba(0,3,33,0.15)] hover:bg-[#F4F5F2] sm:flex"><Icon name="chevronLeft" size={18} /></button>
+      )}
+      {edges.right && (
+        <button type="button" onClick={() => slide(1)} onDragEnter={() => slide(1)} aria-label="Later stages"
+          className="absolute right-1 top-3 z-20 hidden size-9 items-center justify-center rounded-full border border-line bg-white shadow-[0_2px_8px_rgba(0,3,33,0.15)] hover:bg-[#F4F5F2] sm:flex"><Icon name="chevronRight" size={18} /></button>
+      )}
+      <div ref={boardRef} onDragOver={edgeScroll} className="-mx-4 overflow-x-auto px-4 pb-3 sm:mx-0 sm:px-0 [scrollbar-color:#C9CDC6_transparent] [scrollbar-width:thin]">
+        <ol className="flex w-max snap-x snap-mandatory gap-2.5 sm:min-w-full sm:snap-none">
           {columns.map(({ s, list, value }) => {
             const [, fg, dot] = stageColor(s);
             const done = s === "booked" || s === "closed";
             return (
-              <li key={s} style={{ minHeight: fill }} className={"flex w-[78vw] flex-none snap-start flex-col " + (done ? "sm:w-[160px]" : "sm:w-auto sm:min-w-[190px] sm:flex-1")}>
+              <li key={s} style={{ minHeight: fill }} className={"flex w-[78vw] flex-none snap-start flex-col " + (done ? "sm:w-[170px]" : "sm:w-[230px] sm:flex-1")}>
                 <div
                   onDragOver={(e) => { if (drag) { e.preventDefault(); setOver(s); } }}
                   onDragLeave={() => setOver((o) => (o === s ? null : o))}
@@ -162,6 +191,7 @@ export function PipelineBoard({ items, company, adminHref, followupsOn = false, 
             );
           })}
         </ol>
+      </div>
       </div>
       {ask && (
         <div role="dialog" aria-label="Start follow-ups" className="fixed inset-x-4 bottom-4 z-40 mx-auto flex max-w-[560px] flex-wrap items-center gap-3 rounded-card border border-line bg-white px-4 py-3 shadow-[0_12px_40px_rgba(0,3,33,0.18)]">

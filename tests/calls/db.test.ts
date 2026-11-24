@@ -121,6 +121,20 @@ describe("outcomes", () => {
   });
 });
 
+describe("country", () => {
+  it("can take the next number from one country only", async () => {
+    await db.exec(`insert into public.call_contacts (client_id, list_id, company, phone, country) values
+      ('${SD}', '${L}', 'Nairobi Tours', '+254712000001', 'Kenya'), ('${SD}', '${L}', 'Moshi Treks', '+255754000009', 'Tanzania')`);
+    await as(U1);
+    const v = (await one<{ v: string }>(`select public.claim_next_call('${SD}', null, null, 'Kenya') as v`)).v;
+    expect(await company(v)).toBe("Nairobi Tours");
+    const t = (await one<{ v: string }>(`select public.claim_next_call('${SD}', null, null, 'Tanzania') as v`)).v;
+    expect(await company(t)).toBe("Moshi Treks");
+    await db.exec(`select public.release_calls('${SD}')`);
+    await as(null);
+  });
+});
+
 describe("access", () => {
   it("a normal client sees nothing and can't claim", async () => {
     await as(UX);

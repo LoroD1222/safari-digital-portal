@@ -9,7 +9,7 @@ import { sendViaResend } from "@/lib/followup-mail";
 import { sendingKey } from "@/lib/resend-keys";
 import { unsubscribeUrl } from "@/lib/followups";
 import {
-  DEFAULT_BODY, DEFAULT_SUBJECT, OUTCOMES, eatToIso, fillTemplate, normalizePhone,
+  DEFAULT_BODY, DEFAULT_SUBJECT, OUTCOMES, cleanCountry, countryFromPhone, eatToIso, fillTemplate, normalizePhone,
   type CallContact, type CallLog, type ImportRow, type Outcome,
 } from "@/lib/calls";
 import { saveAppointment } from "../calendar/actions";
@@ -22,7 +22,8 @@ async function ctx() {
   if (!company?.is_internal) throw new Error("Cold calling is only for Safari Digital's own account.");
   return { company, viewer, supabase: await createClient() };
 }
-const migrate = (m: string) => (/call_|claim_|log_call|can_call/.test(m) && /exist|schema cache|function/i.test(m) ? "Run 0035_cold_calling.sql in Supabase first." : m);
+const migrate = (m: string) => (/country|address/.test(m) && /column|schema cache/i.test(m) ? "Run 0036_call_country.sql in Supabase first."
+  : /call_|claim_|log_call|can_call/.test(m) && /exist|schema cache|function/i.test(m) ? "Run 0035_cold_calling.sql in Supabase first." : m);
 const done = () => { revalidatePath("/portal/calls"); };
 
 async function load(id: string): Promise<Current | null> {
@@ -35,9 +36,11 @@ async function load(id: string): Promise<Current | null> {
 }
 
 // The next number in the shared queue. Numbers a colleague is calling are skipped.
-export async function nextCall(listId: string | null, skip?: string | null): Promise<R<{ current: Current | null }>> {
+export async function nextCall(listId: string | null, skip?: string | null, country?: string | null): Promise<R<{ current: Current | null }>> {
   const { company, supabase } = await ctx();
-  const { data, error } = await supabase.rpc("claim_next_call", { p_client_id: company.id, p_list_id: listId || null, p_skip: skip || null });
+  const args: Record<string, string | null> = { p_client_id: company.id, p_list_id: listId || null, p_skip: skip || null };
+  if (country != null) args.p_country = country; // "" = numbers without a country
+  const { data, error } = await supabase.rpc("claim_next_call", args);
   if (error) return { ok: false, error: migrate(error.message) };
   return { ok: true, current: data ? await load(data as string) : null };
 }
@@ -92,7 +95,7 @@ export async function logCall(input: LogInput): Promise<R<{ status: string; inqu
   const admin = createAdminClient();
   const { data: q, error: qe } = await admin.from("inquiries").insert({
     client_id: company.id, customer_name: name, phone: c.phone, email: email || c.email || null,
-    interested_in: c.company, message: [c.company && `Company: ${c.company}`, c.website && `Website: ${c.website}`, c.city && `City: ${c.city}`, note && `Call notes: ${note}`].filter(Boolean).join("\n") || null,
+    country: c.country, interested_in: c.company, message: [c.company && `Company: ${c.company}`, c.website && `Website: ${c.website}`, c.address && `Address: ${c.address}`, c.city && `City: ${c.city}`, note && `Call notes: ${note}`].filter(Boolean).join("\n") || null,
     source: "direct", channel: "phone", origin: "manual", status: "contacted",
     received_at: new Date().toISOString(), created_by: viewer.id,
   }).select("id").single();
@@ -103,7 +106,7 @@ export async function logCall(input: LogInput): Promise<R<{ status: string; inqu
 
   const notes: string[] = [`${c.company ?? name} added to the Pipeline.`];
   if (input.sendEmail && (email || c.email)) {
-    const sent = await sendInterestedEmail({ inquiryId, to: email || c.email!, contact: name, company: c.company, city: c.city, clientId: company.id, clientName: company.name, agentFallback: viewer.fullName ?? null });
+    const sent = await sendInterestedEmail({ inquiryId, to: email || c.email!, contact: name, company: c.company, city: c.city, country: c.country, clientId: company.id, clientName: company.name, agentFallback: viewer.fullName ?? null });
     notes.push(sent.ok ? `Email sent to ${sent.to}.` : `The email wasn't sent: ${sent.error}`);
   }
   if (input.meeting?.date && input.meeting.time) {
@@ -118,7 +121,7 @@ export async function logCall(input: LogInput): Promise<R<{ status: string; inqu
 }
 
 // "Great speaking with you" + the case study, from the email address connected under Follow-ups.
-async function sendInterestedEmail(a: { inquiryId: string; to: string; contact: string; company: string | null; city: string | null; clientId: string; clientName: string; agentFallback: string | null }):
+async function sendInterestedEmail(a: { inquiryId: string; to: string; contact: string; company: string | null; city: string | null; country: string | null; clientId: string; clientName: string; agentFallback: string | null }):
   Promise<{ ok: true; to: string } | { ok: false; error: string }> {
   const supabase = await createClient();
   const [{ data: s }, { data: cs }] = await Promise.all([
@@ -128,7 +131,7 @@ async function sendInterestedEmail(a: { inquiryId: string; to: string; contact: 
   if (!s?.sender_ready || !s?.from_email) return { ok: false, error: "connect the email address under Follow-ups first." };
   const ours = (s.from_name as string | null)?.trim() || a.clientName.replace(/\s*\(internal\)\s*$/i, "");
   const agent = (s.agent_name as string | null) ?? a.agentFallback;
-  const vars = { contact: a.contact, company: a.company, agent, ourCompany: ours, city: a.city };
+  const vars = { contact: a.contact, company: a.company, agent, ourCompany: ours, city: a.city, country: a.country };
   const subject = fillTemplate((cs?.interested_subject as string | null) || DEFAULT_SUBJECT, vars);
   let body = fillTemplate((cs?.interested_body as string | null) || DEFAULT_BODY, vars);
   const url = cs?.case_study_url as string | null;
@@ -177,7 +180,7 @@ export async function importList(input: { listId?: string | null; newName?: stri
     const email = s(r.email, 200);
     return [{
       client_id: company.id, list_id: listId, phone, company: s(r.company, 200), contact_name: s(r.contact_name, 200),
-      email: email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email.toLowerCase() : null, website: s(r.website, 300), city: s(r.city, 120),
+      email: email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email.toLowerCase() : null, website: s(r.website, 300), address: s(r.address, 300), city: s(r.city, 120), country: cleanCountry(s(r.country, 80)) ?? countryFromPhone(phone),
     }];
   });
   for (let i = 0; i < clean.length; i += 500) {
@@ -261,4 +264,47 @@ export async function removeDnc(phone: string): Promise<R> {
   const { error } = await supabase.from("call_dnc").delete().eq("client_id", company.id).eq("phone", phone);
   done();
   return error ? { ok: false, error: error.message } : { ok: true, message: "Removed from Do not call. Reopen the number in its list to call it again." };
+}
+
+// ───────────── One number: edit or add by hand ─────────────
+
+export type ContactInput = {
+  company: string; contact_name: string; phone: string; email: string; website: string; address: string; city: string; country: string;
+};
+
+function cleanContact(v: ContactInput): { ok: true; row: Record<string, string | null> } | { ok: false; error: string } {
+  const phone = normalizePhone(v.phone);
+  if (!phone) return { ok: false, error: "That phone number doesn't look right. Use e.g. 0754 123 456 or +44 7700 900123." };
+  const t = (s: string, max: number) => String(s ?? "").trim().slice(0, max) || null;
+  const email = t(v.email, 200);
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, error: "That email doesn't look right." };
+  const website = t(v.website, 300);
+  if (website && /\s/.test(website)) return { ok: false, error: "The website shouldn't have spaces, e.g. kibosafaris.com" };
+  return { ok: true, row: {
+    phone, email: email?.toLowerCase() ?? null, website, company: t(v.company, 200), contact_name: t(v.contact_name, 200),
+    address: t(v.address, 300), city: t(v.city, 120), country: cleanCountry(v.country) ?? countryFromPhone(phone),
+  } };
+}
+
+export async function updateContact(id: string, v: ContactInput): Promise<R<{ contact: CallContact }>> {
+  const { company, supabase } = await ctx();
+  const c = cleanContact(v);
+  if (!c.ok) return c;
+  const { data: blocked } = await supabase.from("call_dnc").select("phone").eq("client_id", company.id).eq("phone", c.row.phone!).maybeSingle();
+  const { data, error } = await supabase.from("call_contacts").update(c.row).eq("id", id).eq("client_id", company.id).select("*").single();
+  if (error) return { ok: false, error: /call_contacts_list_phone|duplicate/.test(error.message) ? "That phone number is already in this list." : migrate(error.message) };
+  done();
+  return { ok: true, contact: data as CallContact, message: blocked ? "Saved. Note: this number is on Do not call." : "Saved." };
+}
+
+export async function addContact(listId: string, v: ContactInput): Promise<R> {
+  const { company, supabase } = await ctx();
+  const c = cleanContact(v);
+  if (!c.ok) return c;
+  const { data: blocked } = await supabase.from("call_dnc").select("phone").eq("client_id", company.id).eq("phone", c.row.phone!).maybeSingle();
+  if (blocked) return { ok: false, error: "That number is on Do not call." };
+  const { error } = await supabase.from("call_contacts").insert({ ...c.row, client_id: company.id, list_id: listId });
+  done();
+  if (error) return { ok: false, error: /call_contacts_list_phone|duplicate/.test(error.message) ? "That phone number is already in this list." : migrate(error.message) };
+  return { ok: true, message: "Number added to the queue." };
 }

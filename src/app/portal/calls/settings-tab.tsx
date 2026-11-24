@@ -7,7 +7,7 @@ import { DEFAULT_BODY, DEFAULT_SCRIPT, DEFAULT_SUBJECT, DEFAULT_WHATSAPP, pretty
 import { addDnc, removeDnc, saveCallSettings } from "./actions";
 import type { Dnc, Sender } from "./calls-view";
 
-const TAGS = "{{first_name}} {{company}} {{city}} {{agent_name}} {{our_company}}";
+const TAGS = "{{first_name}} {{company}} {{city}} {{country}} {{agent_name}} {{our_company}}";
 
 export function SettingsTab({ settings, dnc, sender, onToast }: { settings: CallSettings; dnc: Dnc[]; sender: Sender; onToast: (m: string) => void }) {
   const router = useRouter();

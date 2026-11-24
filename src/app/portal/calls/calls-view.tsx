@@ -11,6 +11,7 @@ import {
 } from "@/lib/calls";
 import { logCall, nextCall, openCall, releaseCalls, type Current } from "./actions";
 import { ImportDialog } from "./import-dialog";
+import { ContactForm } from "./contact-form";
 import { ListsTab } from "./lists-tab";
 import { StatsTab } from "./stats-tab";
 import { SettingsTab } from "./settings-tab";
@@ -100,6 +101,7 @@ type Row = CallContact & { lockedBy: string | null };
 function Calling(p: Parameters<typeof CallsView>[0] & { onToast: (m: string | null) => void; onImport: () => void }) {
   const router = useRouter();
   const [list, setList] = useState<string | null>(null);
+  const [country, setCountry] = useState<string | null>(null); // null = all, "" = not set
   const [cur, setCur] = useState<Current | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [empty, setEmpty] = useState(false);
@@ -116,7 +118,9 @@ function Calling(p: Parameters<typeof CallsView>[0] & { onToast: (m: string | nu
 
   const lockedBy = (c: CallContact) =>
     c.claimed_by && c.claimed_by !== p.me && c.claimed_at && p.now - Date.parse(c.claimed_at) < CLAIM_MINUTES * 60_000 ? p.names[c.claimed_by] ?? "A colleague" : null;
-  const open: Row[] = p.contacts.filter((c) => OPEN_STATUSES.includes(c.status) && active.has(c.list_id) && (!list || c.list_id === list)).map((c) => ({ ...c, lockedBy: lockedBy(c) }));
+  const inCountry = (c: CallContact) => country === null || (country === "" ? !c.country : c.country === country);
+  const countries = [...new Set(p.contacts.filter((c) => OPEN_STATUSES.includes(c.status)).map((c) => c.country ?? ""))].sort((a, b) => (a === "" ? 1 : b === "" ? -1 : a.localeCompare(b)));
+  const open: Row[] = p.contacts.filter((c) => OPEN_STATUSES.includes(c.status) && active.has(c.list_id) && (!list || c.list_id === list) && inCountry(c)).map((c) => ({ ...c, lockedBy: lockedBy(c) }));
   const isDue = (c: CallContact) => !c.next_call_at || Date.parse(c.next_call_at) <= p.now;
   const byTime = (a: CallContact, b: CallContact) => Date.parse(a.next_call_at ?? a.created_at) - Date.parse(b.next_call_at ?? b.created_at);
   const groups = [
@@ -125,7 +129,7 @@ function Calling(p: Parameters<typeof CallsView>[0] & { onToast: (m: string | nu
     { key: "new", label: "Not called yet", dot: "#8A8FA3", rows: open.filter((c) => c.status === "new") },
     { key: "later", label: "Later", dot: "#C9CDD6", rows: open.filter((c) => c.status !== "new" && !isDue(c)).sort(byTime) },
   ].filter((g) => g.rows.length);
-  const counts = (id: string | null) => p.contacts.filter((c) => OPEN_STATUSES.includes(c.status) && active.has(c.list_id) && (!id || c.list_id === id) && isDue(c)).length;
+  const counts = (id: string | null) => p.contacts.filter((c) => OPEN_STATUSES.includes(c.status) && active.has(c.list_id) && (!id || c.list_id === id) && inCountry(c) && isDue(c)).length;
 
   const take = (fn: () => Promise<{ ok: true; current: Current | null } | { ok: false; error: string }>) => start(async () => {
     setError(null);
@@ -134,7 +138,7 @@ function Calling(p: Parameters<typeof CallsView>[0] & { onToast: (m: string | nu
     setCur(r.current); setEmpty(!r.current);
     router.refresh();
   });
-  const startNext = (skip?: string) => take(() => nextCall(list, skip ?? null));
+  const startNext = (skip?: string) => take(() => nextCall(list, skip ?? null, country));
   const pick = (id: string) => take(async () => { const r = await openCall(id); return r.ok ? { ok: true as const, current: r.current } : r; });
   const stop = () => start(async () => { await releaseCalls(); setCur(null); router.refresh(); });
 
@@ -142,7 +146,7 @@ function Calling(p: Parameters<typeof CallsView>[0] & { onToast: (m: string | nu
     return (
       <div className="flex flex-col items-center gap-2 rounded-card border border-dashed border-field px-5 py-12 text-center">
         <span className="text-[15px] font-semibold">Upload your first call list</span>
-        <span className="max-w-md text-slate">A CSV or Excel file with one company per row. Only a phone number is needed; company, contact, email, website and city are picked up if they&apos;re there.</span>
+        <span className="max-w-md text-slate">A CSV or Excel file with one company per row. Only a phone number is needed; company, contact, email, website, address, city and country are picked up if they&apos;re there.</span>
         <Button className="mt-2" onClick={p.onImport}><Icon name="upload" size={16} />Upload list</Button>
       </div>
     );
@@ -160,6 +164,12 @@ function Calling(p: Parameters<typeof CallsView>[0] & { onToast: (m: string | nu
             </button>
           );
         })}
+        {countries.length > 1 && (
+          <Select aria-label="Country" value={country ?? "*"} onChange={(e) => { setCountry(e.target.value === "*" ? null : e.target.value); setEmpty(false); }} className="ml-auto h-8 w-auto rounded-full text-[13px]">
+            <option value="*">All countries</option>
+            {countries.map((c) => <option key={c || "none"} value={c}>{c || "No country"}</option>)}
+          </Select>
+        )}
       </div>
 
       {missed && (
@@ -190,7 +200,7 @@ function Calling(p: Parameters<typeof CallsView>[0] & { onToast: (m: string | nu
                         className={`flex w-full items-center gap-2.5 border-b border-[#F1F2F4] px-3.5 py-2.5 text-left disabled:cursor-not-allowed ${isCur ? "bg-[#F4FAF6] shadow-[inset_3px_0_0_#1A6647]" : "hover:bg-sidebar"} ${c.lockedBy ? "opacity-60" : ""}`}>
                         <span className="flex min-w-0 flex-1 flex-col">
                           <span className="truncate font-semibold">{c.company ?? c.contact_name ?? prettyPhone(c.phone)}</span>
-                          <span className="truncate text-xs text-slate">{[c.contact_name && c.company ? c.contact_name : null, c.city, !list ? listName[c.list_id] : null].filter(Boolean).join(" · ") || prettyPhone(c.phone)}</span>
+                          <span className="truncate text-xs text-slate">{[c.contact_name && c.company ? c.contact_name : null, c.city, country === null ? c.country : null, !list ? listName[c.list_id] : null].filter(Boolean).join(" · ") || prettyPhone(c.phone)}</span>
                         </span>
                         <QueueTag c={c} now={p.now} />
                       </button>
@@ -210,6 +220,7 @@ function Calling(p: Parameters<typeof CallsView>[0] & { onToast: (m: string | nu
             <CallCard key={cur.contact.id} cur={cur} p={p} listName={listName[cur.contact.list_id] ?? ""} script={p.lists.find((l) => l.id === cur.contact.list_id)?.script ?? null}
               pending={pending}
               onSkip={() => startNext(cur.contact.id)} onStop={stop}
+              onUpdate={(contact) => { setCur({ ...cur, contact }); router.refresh(); }}
               onSaved={(m, outcome) => {
                 p.onToast(m);
                 setMissed(outcome === "no_answer" ? cur.contact : null);
@@ -237,10 +248,12 @@ function QueueTag({ c, now }: { c: Row; now: number }) {
   return <span className={`${cls} bg-[#F1F2F4] text-[#4A4F63]`}>New</span>;
 }
 
-function CallCard({ cur, p, listName, script, pending, onSkip, onStop, onSaved }: {
+function CallCard({ cur, p, listName, script, pending, onSkip, onStop, onSaved, onUpdate }: {
   cur: Current; p: Parameters<typeof CallsView>[0]; listName: string; script: string | null; pending: boolean;
-  onSkip: () => void; onStop: () => void; onSaved: (message: string, outcome: Outcome) => void;
+  onSkip: () => void; onStop: () => void; onSaved: (message: string, outcome: Outcome) => void; onUpdate: (c: CallContact) => void;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [saved, setSaved] = useState<string | null>(null);
   const c = cur.contact;
   const tomorrow = eatDate(p.now + 864e5);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
@@ -258,7 +271,7 @@ function CallCard({ cur, p, listName, script, pending, onSkip, onStop, onSaved }
   const [showScript, setShowScript] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, start] = useTransition();
-  const vars = { contact: c.contact_name, company: c.company, agent: p.sender.agent, ourCompany: p.sender.company, city: c.city };
+  const vars = { contact: c.contact_name, company: c.company, agent: p.sender.agent, ourCompany: p.sender.company, city: c.city, country: c.country };
   const steps = scriptSteps(fillTemplate(script || p.settings.default_script || DEFAULT_SCRIPT, vars));
   const wa = waLink(c.phone, fillTemplate(p.settings.whatsapp_intro || DEFAULT_WHATSAPP, vars));
   const busy = pending || saving;
@@ -288,7 +301,7 @@ function CallCard({ cur, p, listName, script, pending, onSkip, onStop, onSaved }
           <div className="flex min-w-[220px] flex-1 flex-col gap-0.5">
             <span className="text-xs text-slate">{listName} · {c.attempts ? `try ${c.attempts + 1}` : "first call"}</span>
             <h2 className="text-xl font-semibold tracking-[-0.01em]">{c.company ?? c.contact_name ?? "Unknown company"}</h2>
-            {(c.contact_name || c.city) && <span className="text-body">{[c.company ? c.contact_name : null, c.city].filter(Boolean).join(" · ")}</span>}
+            {(c.contact_name || c.city || c.country) && <span className="text-body">{[c.company ? c.contact_name : null, c.city, c.country].filter(Boolean).join(" · ")}</span>}
             <span className="mt-1.5 text-[26px] font-semibold tabular-nums tracking-[-0.01em]">{prettyPhone(c.phone)}</span>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -297,12 +310,18 @@ function CallCard({ cur, p, listName, script, pending, onSkip, onStop, onSaved }
           </div>
         </div>
 
-        {(c.website || c.email) && (
-          <div className="flex flex-wrap gap-x-5 gap-y-1 rounded-control bg-sidebar px-3 py-2.5 text-[13px] text-body">
-            {c.website && <span><span className="text-slate">Website </span><a href={/^https?:\/\//.test(c.website) ? c.website : `https://${c.website}`} target="_blank" rel="noopener noreferrer">{c.website.replace(/^https?:\/\//, "").replace(/\/$/, "")}</a></span>}
-            {c.email && <span><span className="text-slate">Email </span>{c.email}</span>}
+        {editing ? (
+          <ContactForm contact={c} onCancel={() => setEditing(false)} onDone={(m, updated) => { setEditing(false); setSaved(m); if (updated) onUpdate(updated); }} />
+        ) : (
+          <div className="flex flex-wrap items-start gap-x-5 gap-y-1 rounded-control bg-sidebar px-3 py-2.5 text-[13px] text-body">
+            <span><span className="text-slate">Website </span>{c.website ? <a href={/^https?:\/\//.test(c.website) ? c.website : `https://${c.website}`} target="_blank" rel="noopener noreferrer">{c.website.replace(/^https?:\/\//, "").replace(/\/$/, "")}</a> : "—"}</span>
+            <span><span className="text-slate">Email </span>{c.email ?? "—"}</span>
+            <span><span className="text-slate">Address </span>{[c.address, c.city].filter(Boolean).join(", ") || "—"}</span>
+            <span><span className="text-slate">Country </span>{c.country ?? "—"}</span>
+            <button type="button" onClick={() => { setEditing(true); setSaved(null); }} className="ml-auto font-medium text-brand">Edit details</button>
           </div>
         )}
+        {saved && !editing && <p role="status" className="-mt-2 text-xs text-forest">{saved}</p>}
 
         <section aria-label="Call script" className="flex flex-col gap-2.5 rounded-control border border-line bg-[#FBFCFA] px-4 py-3.5">
           <div className="flex items-center justify-between gap-3">

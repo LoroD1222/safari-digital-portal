@@ -5,6 +5,7 @@ import { Alert, Button, Input, Select, Textarea } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { DEFAULT_SCRIPT, STATUS_LABEL, listStats, pct, prettyPhone, type CallContact, type CallList, type CallLog, type CallStatus } from "@/lib/calls";
 import { archiveList, deleteList, reopenNumber, saveList } from "./actions";
+import { ContactForm } from "./contact-form";
 
 export function ListsTab({ lists, contacts, logs, onToast, onImport }: {
   lists: CallList[]; contacts: CallContact[]; logs: CallLog[]; onToast: (m: string) => void; onImport: () => void;
@@ -33,6 +34,7 @@ function ListCard({ list, stat, contacts, onToast }: { list: CallList; stat: Ret
   const [showNumbers, setShowNumbers] = useState(false);
   const [filter, setFilter] = useState<CallStatus | "all">("all");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [edit, setEdit] = useState<string | null>(null); // a number's id, or "new"
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const run = (fn: () => Promise<{ ok: true; message?: string } | { ok: false; error: string }>, after?: () => void) => start(async () => {
@@ -81,7 +83,7 @@ function ListCard({ list, stat, contacts, onToast }: { list: CallList; stat: Ret
           <label className="flex flex-col gap-1 text-[13px] font-medium">List name<Input value={name} onChange={(e) => setName(e.target.value)} /></label>
           <label className="flex flex-col gap-1 text-[13px] font-medium">Call script for this list
             <Textarea rows={12} value={script} onChange={(e) => setScript(e.target.value)} placeholder={DEFAULT_SCRIPT} className="font-mono text-[13px]" />
-            <span className="text-xs font-normal text-slate">Leave a blank line between steps; the first line of each step is its title. Tags: {"{{first_name}} {{company}} {{city}} {{agent_name}} {{our_company}}"}. Leave it empty to use the main script from Settings.</span>
+            <span className="text-xs font-normal text-slate">Leave a blank line between steps; the first line of each step is its title. Tags: {"{{first_name}} {{company}} {{city}} {{country}} {{agent_name}} {{our_company}}"}. Leave it empty to use the main script from Settings.</span>
           </label>
           <div className="flex gap-2">
             <Button disabled={pending} onClick={() => run(() => saveList(list.id, { name, script }), () => setEditing(false))}>Save</Button>
@@ -93,7 +95,11 @@ function ListCard({ list, stat, contacts, onToast }: { list: CallList; stat: Ret
       {error && <Alert>{error}</Alert>}
 
       <div className="border-t border-line pt-3">
-        <button type="button" onClick={() => setShowNumbers((v) => !v)} className="text-[13px] font-medium text-brand">{showNumbers ? "Hide numbers" : `Show the ${stat.total} numbers`}</button>
+        <div className="flex flex-wrap gap-4">
+          <button type="button" onClick={() => setShowNumbers((v) => !v)} className="text-[13px] font-medium text-brand">{showNumbers ? "Hide numbers" : `Show the ${stat.total} numbers`}</button>
+          {!list.archived && <button type="button" onClick={() => setEdit("new")} className="text-[13px] font-medium text-brand">+ Add a number</button>}
+        </div>
+        {edit === "new" && <div className="mt-3"><ContactForm listId={list.id} onCancel={() => setEdit(null)} onDone={(m) => { setEdit(null); onToast(m); router.refresh(); }} /></div>}
         {showNumbers && (
           <div className="mt-3 flex flex-col gap-2">
             <Select aria-label="Show" value={filter} onChange={(e) => setFilter(e.target.value as CallStatus | "all")} className="h-9 w-auto self-start">
@@ -102,15 +108,23 @@ function ListCard({ list, stat, contacts, onToast }: { list: CallList; stat: Ret
             </Select>
             <div className="overflow-x-auto">
               <table className="w-full text-[13px]">
-                <thead><tr className="border-b border-line text-left text-slate"><th className="px-2 py-1.5 font-medium">Company</th><th className="px-2 py-1.5 font-medium">Phone</th><th className="px-2 py-1.5 font-medium">Status</th><th className="px-2 py-1.5 font-medium">Tries</th><th /></tr></thead>
+                <thead><tr className="border-b border-line text-left text-slate"><th className="px-2 py-1.5 font-medium">Company</th><th className="px-2 py-1.5 font-medium">Phone</th><th className="px-2 py-1.5 font-medium">Website</th><th className="px-2 py-1.5 font-medium">Address</th><th className="px-2 py-1.5 font-medium">Country</th><th className="px-2 py-1.5 font-medium">Status</th><th className="px-2 py-1.5 font-medium">Tries</th><th /></tr></thead>
                 <tbody>
-                  {shown.slice(0, 300).map((c) => (
+                  {shown.slice(0, 300).map((c) => edit === c.id ? (
+                    <tr key={c.id}><td colSpan={8} className="py-2">
+                      <ContactForm contact={c} onCancel={() => setEdit(null)} onDone={(m) => { setEdit(null); onToast(m); router.refresh(); }} />
+                    </td></tr>
+                  ) : (
                     <tr key={c.id} className="border-b border-[#F1F2F4]">
                       <td className="px-2 py-1.5">{c.company ?? c.contact_name ?? "—"}</td>
-                      <td className="px-2 py-1.5 tabular-nums">{prettyPhone(c.phone)}</td>
+                      <td className="whitespace-nowrap px-2 py-1.5 tabular-nums">{prettyPhone(c.phone)}</td>
+                      <td className="max-w-[180px] truncate px-2 py-1.5">{c.website?.replace(/^https?:\/\//, "").replace(/\/$/, "") ?? "—"}</td>
+                      <td className="max-w-[200px] truncate px-2 py-1.5">{[c.address, c.city].filter(Boolean).join(", ") || "—"}</td>
+                      <td className="px-2 py-1.5">{c.country ?? "—"}</td>
                       <td className="px-2 py-1.5">{STATUS_LABEL[c.status]}</td>
                       <td className="px-2 py-1.5 tabular-nums">{c.attempts}</td>
-                      <td className="px-2 py-1.5 text-right">
+                      <td className="whitespace-nowrap px-2 py-1.5 text-right">
+                        <button type="button" onClick={() => setEdit(c.id)} className="mr-3 text-[13px] font-medium text-slate hover:text-ink">Edit</button>
                         {["not_interested", "unreachable", "wrong_number"].includes(c.status) && (
                           <button type="button" disabled={pending} onClick={() => run(() => reopenNumber(c.id))} className="text-[13px] font-medium text-brand">Call again</button>
                         )}

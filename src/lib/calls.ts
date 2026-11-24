@@ -7,7 +7,7 @@ export type Outcome = "no_answer" | "callback" | "interested" | "not_interested"
 export type CallList = { id: string; name: string; script: string | null; archived: boolean; created_at: string };
 export type CallContact = {
   id: string; list_id: string; company: string | null; contact_name: string | null; phone: string; email: string | null;
-  website: string | null; city: string | null; status: CallStatus; attempts: number; next_call_at: string | null;
+  website: string | null; address: string | null; city: string | null; country: string | null; status: CallStatus; attempts: number; next_call_at: string | null;
   last_called_at: string | null; last_outcome: Outcome | null; claimed_by: string | null; claimed_at: string | null;
   inquiry_id: string | null; created_at: string;
 };
@@ -120,10 +120,10 @@ export function readXlsxSheet(sheetXml: string, sharedXml: string | null): strin
   return rows;
 }
 
-export type Field = "company" | "contact_name" | "phone" | "email" | "website" | "city" | "skip";
+export type Field = "company" | "contact_name" | "phone" | "email" | "website" | "address" | "city" | "country" | "skip";
 export const FIELDS: { key: Field; label: string }[] = [
   { key: "company", label: "Company" }, { key: "contact_name", label: "Contact name" }, { key: "phone", label: "Phone" },
-  { key: "email", label: "Email" }, { key: "website", label: "Website" }, { key: "city", label: "City" }, { key: "skip", label: "Don't import" },
+  { key: "email", label: "Email" }, { key: "website", label: "Website" }, { key: "address", label: "Address" }, { key: "city", label: "City" }, { key: "country", label: "Country" }, { key: "skip", label: "Don't import" },
 ];
 const GUESS: [Field, RegExp][] = [
   ["phone", /phone|mobile|simu|tel|whats|namba|number|cell/i],
@@ -131,7 +131,9 @@ const GUESS: [Field, RegExp][] = [
   ["website", /web|site|url|domain/i],
   ["contact_name", /contact|owner|person|manager|first|^name$|full name|jina/i],
   ["company", /company|business|operator|hotel|lodge|organi[sz]ation|brand|name/i],
-  ["city", /city|town|location|region|address|mji|area/i],
+  ["country", /country|nation|nchi/i],
+  ["address", /address|street|location|anwani|p\.?\s?o\.? box/i],
+  ["city", /city|town|region|mji|area/i],
 ];
 
 // Which column is what, from the header row (falls back to looking at the values).
@@ -149,7 +151,7 @@ export function guessMapping(header: string[], sample: string[][] = []): Field[]
   return out;
 }
 
-export type ImportRow = { company: string | null; contact_name: string | null; phone: string; email: string | null; website: string | null; city: string | null };
+export type ImportRow = { company: string | null; contact_name: string | null; phone: string; email: string | null; website: string | null; address: string | null; city: string | null; country: string | null };
 
 // Rows ready to save, plus what was left out and why.
 export function buildImport(rows: string[][], mapping: Field[], skipPhones: Set<string>) {
@@ -171,10 +173,30 @@ export function buildImport(rows: string[][], mapping: Field[], skipPhones: Set<
     ok.push({
       company: get(r, "company", 200), contact_name: get(r, "contact_name", 200), phone,
       email: email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email.toLowerCase() : null,
-      website: get(r, "website", 300), city: get(r, "city", 120),
+      website: get(r, "website", 300), address: get(r, "address", 300), city: get(r, "city", 120), country: cleanCountry(get(r, "country", 80)) ?? countryFromPhone(phone),
     });
   }
   return { rows: ok, noPhone, duplicate, known };
+}
+
+// "tanzania", "TZ", "Tanzania, United Republic of" → "Tanzania". Anything else is kept, tidied.
+const COUNTRY_ALIASES: Record<string, string> = {
+  tz: "Tanzania", tza: "Tanzania", tanzania: "Tanzania", "united republic of tanzania": "Tanzania", "tanzania, united republic of": "Tanzania",
+  ke: "Kenya", ken: "Kenya", kenya: "Kenya", ug: "Uganda", uganda: "Uganda", rw: "Rwanda", rwanda: "Rwanda",
+  us: "USA", usa: "USA", "united states": "USA", "united states of america": "USA", uk: "UK", gb: "UK", "united kingdom": "UK",
+  za: "South Africa", "south africa": "South Africa", de: "Germany", germany: "Germany",
+};
+export function cleanCountry(v: string | null | undefined) {
+  const s = String(v ?? "").trim().replace(/\s+/g, " ").slice(0, 80);
+  if (!s) return null;
+  return COUNTRY_ALIASES[s.toLowerCase()] ?? (s === s.toLowerCase() || s === s.toUpperCase() ? s.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase()) : s);
+}
+
+// Country from the phone's calling code, for numbers uploaded without one.
+const CALLING_CODES: [string, string][] = [["255", "Tanzania"], ["254", "Kenya"], ["256", "Uganda"], ["250", "Rwanda"], ["27", "South Africa"], ["44", "UK"], ["49", "Germany"], ["1", "USA"]];
+export function countryFromPhone(phone: string) {
+  const d = phone.replace(/^\+/, "");
+  return CALLING_CODES.find(([code]) => d.startsWith(code))?.[1] ?? null;
 }
 
 // ───────────── Scripts and messages ─────────────
@@ -206,7 +228,7 @@ As promised, I've attached a short case study showing how we helped another Tanz
 
 Have a look when you have a moment, and let me know if any questions come up. I'm happy to walk you through it on a short call.`;
 
-export type ScriptVars = { contact?: string | null; company?: string | null; agent?: string | null; ourCompany?: string | null; city?: string | null };
+export type ScriptVars = { contact?: string | null; company?: string | null; agent?: string | null; ourCompany?: string | null; city?: string | null; country?: string | null };
 
 export function firstNameOf(full: string | null | undefined) {
   const f = String(full ?? "").trim().split(/\s+/)[0] ?? "";
@@ -224,7 +246,8 @@ export function fillTemplate(text: string, v: ScriptVars) {
     .replace(/\{\{\s*company\s*\}\}/gi, v.company?.trim() || "your company")
     .replace(/\{\{\s*agent_name\s*\}\}/gi, v.agent?.trim() || "the team")
     .replace(/\{\{\s*our_company\s*\}\}/gi, v.ourCompany?.trim() || "Safari Digital")
-    .replace(/\{\{\s*city\s*\}\}/gi, v.city?.trim() || "Tanzania");
+    .replace(/\{\{\s*city\s*\}\}/gi, v.city?.trim() || v.country?.trim() || "Tanzania")
+    .replace(/\{\{\s*country\s*\}\}/gi, v.country?.trim() || "Tanzania");
 }
 
 // A script as blocks: a short title line followed by what to say.

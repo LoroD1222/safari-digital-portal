@@ -33,6 +33,7 @@ describe("reading lists", () => {
     const header = ["Business name", "Owner", "Mobile", "E-mail", "Web", "Town", "Rating"];
     const m = guessMapping(header);
     expect(m).toEqual(["company", "contact_name", "phone", "email", "website", "city", "skip"]);
+    expect(guessMapping(["Company", "Phone", "Street address", "City", "Country"])).toEqual(["company", "phone", "address", "city", "country"]);
     const rows = [
       ["Kibo", "Daniel", "0754 123 456", "INFO@kibo.example", "kibo.example", "Arusha", "4.5"],
       ["Kibo again", "", "+255754123456", "", "", "", ""],
@@ -41,7 +42,7 @@ describe("reading lists", () => {
     ];
     const r = buildImport(rows, m, new Set(["+255713000111"]));
     expect(r.rows).toHaveLength(1);
-    expect(r.rows[0]).toMatchObject({ company: "Kibo", phone: "+255754123456", email: "info@kibo.example" });
+    expect(r.rows[0]).toMatchObject({ company: "Kibo", phone: "+255754123456", email: "info@kibo.example", country: "Tanzania" });
     expect(r).toMatchObject({ noPhone: 1, duplicate: 1, known: 1 });
   });
   it("finds the phone column by its values when the header says nothing", () => {
@@ -83,5 +84,20 @@ describe("interested email", () => {
     const r = resendRequest({ fromEmail: "hi@sd.example", fromName: "Safari Digital", to: "a@b.example", subject: "s", body: "b", inquiryId: "i1", unsubscribeUrl: "https://u", idempotencyKey: "k", threadId: "<t>", kind: "cold_call", attachments: [{ filename: "Case study.pdf", path: "https://files.example/cs.pdf" }] });
     expect(r.body).toMatchObject({ attachments: [{ filename: "Case study.pdf", path: "https://files.example/cs.pdf" }] });
     expect("attachments" in resendRequest({ fromEmail: "a@b.c", fromName: "", to: "x@y.z", subject: "s", body: "b", inquiryId: "i", unsubscribeUrl: "u", idempotencyKey: "k", threadId: "t" }).body).toBe(false);
+  });
+});
+
+describe("countries", () => {
+  it("tidies country names and falls back to the calling code", async () => {
+    const { cleanCountry, countryFromPhone, buildImport } = await import("@/lib/calls");
+    expect(cleanCountry("TZ")).toBe("Tanzania");
+    expect(cleanCountry("united states")).toBe("USA");
+    expect(cleanCountry("KENYA")).toBe("Kenya");
+    expect(cleanCountry("Côte d'Ivoire")).toBe("Côte d'Ivoire");
+    expect(cleanCountry("  ")).toBeNull();
+    expect(countryFromPhone("+254712000111")).toBe("Kenya");
+    expect(countryFromPhone("+33612345678")).toBeNull();
+    const r = buildImport([["Hotel", "+447700900123", "uk", "1 High St"]], ["company", "phone", "country", "address"], new Set());
+    expect(r.rows[0]).toMatchObject({ country: "UK", address: "1 High St" });
   });
 });

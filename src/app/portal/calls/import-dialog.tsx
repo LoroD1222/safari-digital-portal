@@ -86,7 +86,7 @@ export function ImportDialog({ lists, onClose, onDone }: { lists: CallList[]; on
               <span className="text-xs text-slate">Google Sheets: File › Download › CSV or .xlsx. One row per company, names in the first row.</span>
             </button>
             <input ref={input} type="file" accept=".csv,.xlsx,.txt,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="hidden" onChange={(e) => void load(e.target.files?.[0])} />
-            <p className="text-xs text-slate">Only a phone number is required. Numbers like 0754 123 456 are saved as +255 754 123 456 so Call and WhatsApp work. Numbers already in a list, already a lead, or on Do not call are skipped.</p>
+            <p className="text-xs text-slate">Only a phone number is required; company, contact, email, website, address, city and country are picked up too. Without a country column, it&apos;s worked out from the number (+255 → Tanzania). Numbers like 0754 123 456 are saved as +255 754 123 456 so Call and WhatsApp work. Numbers already in a list, already a lead, or on Do not call are skipped.</p>
           </>
         )}
 
@@ -108,8 +108,8 @@ export function ImportDialog({ lists, onClose, onDone }: { lists: CallList[]; on
             {built.rows.length > 0 && (
               <div className="overflow-x-auto rounded-control border border-line">
                 <table className="w-full text-[12px]">
-                  <thead><tr className="border-b border-line text-left text-slate"><th className="px-2.5 py-1.5 font-medium">Company</th><th className="px-2.5 py-1.5 font-medium">Contact</th><th className="px-2.5 py-1.5 font-medium">Phone</th><th className="px-2.5 py-1.5 font-medium">City</th></tr></thead>
-                  <tbody>{built.rows.slice(0, 4).map((r) => <tr key={r.phone} className="border-b border-[#F1F2F4] last:border-0"><td className="px-2.5 py-1.5">{r.company ?? "—"}</td><td className="px-2.5 py-1.5">{r.contact_name ?? "—"}</td><td className="px-2.5 py-1.5 tabular-nums">{prettyPhone(r.phone)}</td><td className="px-2.5 py-1.5">{r.city ?? "—"}</td></tr>)}</tbody>
+                  <thead><tr className="border-b border-line text-left text-slate"><th className="px-2.5 py-1.5 font-medium">Company</th><th className="px-2.5 py-1.5 font-medium">Contact</th><th className="px-2.5 py-1.5 font-medium">Phone</th><th className="px-2.5 py-1.5 font-medium">City</th><th className="px-2.5 py-1.5 font-medium">Country</th></tr></thead>
+                  <tbody>{built.rows.slice(0, 4).map((r) => <tr key={r.phone} className="border-b border-[#F1F2F4] last:border-0"><td className="px-2.5 py-1.5">{r.company ?? "—"}</td><td className="px-2.5 py-1.5">{r.contact_name ?? "—"}</td><td className="px-2.5 py-1.5 tabular-nums">{prettyPhone(r.phone)}</td><td className="px-2.5 py-1.5">{r.city ?? "—"}</td><td className="px-2.5 py-1.5">{r.country ?? "—"}</td></tr>)}</tbody>
                 </table>
               </div>
             )}

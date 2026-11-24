@@ -172,10 +172,20 @@ function Calling(p: Parameters<typeof CallsView>[0] & { onToast: (m: string | nu
             </button>
           );
         })}
-        <Select aria-label="Country" value={country ?? "*"} onChange={(e) => { setCountry(e.target.value === "*" ? null : e.target.value); setEmpty(false); }} className="ml-auto h-8 w-auto rounded-full text-[13px]">
-            <option value="*">All countries</option>
-            {countries.map((c) => <option key={c} value={c}>{c}</option>)}
-          </Select>
+      </div>
+
+      <div role="group" aria-label="Country" className="-mt-2 flex flex-wrap items-center gap-2">
+        <span className="text-[13px] text-slate">Country</span>
+        {[null, ...countries].map((k) => {
+          const on = country === k;
+          const n = p.contacts.filter((c) => c.phone && OPEN_STATUSES.includes(c.status) && active.has(c.list_id) && (!list || c.list_id === list) && (k === null || c.country === k) && (!c.next_call_at || Date.parse(c.next_call_at) <= p.now)).length;
+          return (
+            <button key={k ?? "all"} type="button" aria-pressed={on} onClick={() => { setCountry(k); setEmpty(false); }}
+              className={`h-8 rounded-full border px-3 text-[13px] font-medium ${on ? "border-forest bg-forest text-white" : "border-field bg-white text-ink hover:border-[#C9CDD6]"}`}>
+              {k ?? "All"} <span className="tabular-nums opacity-70">{n}</span>
+            </button>
+          );
+        })}
       </div>
 
       {missed && (

@@ -6,7 +6,7 @@ import { Alert, Button, Input, Select, Textarea } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import {
   CLAIM_MINUTES, DEFAULT_SCRIPT, DEFAULT_WHATSAPP, OPEN_STATUSES, OUTCOMES, OUTCOME_LABEL, REACHED,
-  eatDate, fillTemplate, prettyPhone, scriptSteps, waLink, whenLabel,
+  eatDate, fillTemplate, freeSlots, prettyPhone, shortDay, scriptSteps, waLink, whenLabel,
   type CallContact, type CallList, type CallLog, type CallSettings, type Outcome,
 } from "@/lib/calls";
 import { logCall, nextCall, openCall, releaseCalls, type Current } from "./actions";
@@ -25,6 +25,7 @@ const TAB_LABEL: Record<Tab, string> = { calling: "Calling", lists: "Lists", sta
 export function CallsView(p: {
   tab: Tab; range: number; now: number; me: string; names: Record<string, string>;
   lists: CallList[]; contacts: CallContact[]; logs: CallLog[]; dnc: Dnc[]; settings: CallSettings; sender: Sender; hasMeetingDefaults: boolean;
+  meetings: { inquiry_id: string | null; starts_at: string; duration_min: number }[];
 }) {
   const router = useRouter();
   const [importing, setImporting] = useState(false);
@@ -129,6 +130,10 @@ function Calling(p: Parameters<typeof CallsView>[0] & { onToast: (m: string | nu
     { key: "new", label: "Not called yet", dot: "#8A8FA3", rows: open.filter((c) => c.status === "new") },
     { key: "later", label: "Later", dot: "#C9CDD6", rows: open.filter((c) => c.status !== "new" && !isDue(c)).sort(byTime) },
   ].filter((g) => g.rows.length);
+  // Said yes on the phone but no meeting in the Calendar yet.
+  const booked = new Set(p.meetings.filter((m) => m.inquiry_id && Date.parse(m.starts_at) >= p.now - 3600e3).map((m) => m.inquiry_id));
+  const needMeeting = p.contacts.filter((c) => c.status === "interested" && c.inquiry_id && !booked.has(c.inquiry_id))
+    .sort((a, b) => Date.parse(b.last_called_at ?? b.created_at) - Date.parse(a.last_called_at ?? a.created_at));
   const counts = (id: string | null) => p.contacts.filter((c) => OPEN_STATUSES.includes(c.status) && active.has(c.list_id) && (!id || c.list_id === id) && inCountry(c) && isDue(c)).length;
 
   const take = (fn: () => Promise<{ ok: true; current: Current | null } | { ok: false; error: string }>) => start(async () => {
@@ -212,6 +217,26 @@ function Calling(p: Parameters<typeof CallsView>[0] & { onToast: (m: string | nu
             </div>
           ))}
           {!groups.length && <p className="px-4 py-8 text-center text-[13px] text-slate">Nothing left to call in this list.</p>}
+          {needMeeting.length > 0 && (
+            <div>
+              <div className="flex items-center gap-2 border-y border-[#EEF0F2] bg-[#EEF7F1] px-3.5 py-2.5">
+                <span className="size-2 rounded-full bg-brand" />
+                <h2 className="text-[13px] font-semibold">Interested · no meeting yet</h2>
+                <span className="text-xs text-slate">{needMeeting.length}</span>
+              </div>
+              <ul>
+                {needMeeting.slice(0, 20).map((c) => (
+                  <li key={c.id} className="flex items-center gap-2.5 border-b border-[#F1F2F4] px-3.5 py-2.5">
+                    <span className="flex min-w-0 flex-1 flex-col">
+                      <span className="truncate font-semibold">{c.company ?? c.contact_name ?? prettyPhone(c.phone)}</span>
+                      <span className="truncate text-xs text-slate">{[c.contact_name, c.country].filter(Boolean).join(" · ") || prettyPhone(c.phone)}</span>
+                    </span>
+                    <Link href={`/portal/calendar?lead=${c.inquiry_id}`} className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-control border border-field bg-white px-2.5 text-[13px] font-medium text-ink no-underline hover:bg-sidebar"><Icon name="calendar" size={14} />Book meeting</Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </section>
 
         <div className="order-1 flex min-w-0 flex-col gap-4 lg:order-2">
@@ -265,9 +290,10 @@ function CallCard({ cur, p, listName, script, pending, onSkip, onStop, onSaved, 
   const [email, setEmail] = useState(c.email ?? "");
   const [sendEmail, setSendEmail] = useState(p.sender.ready && !!c.email);
   const [meet, setMeet] = useState(true);
-  const [mDate, setMDate] = useState(tomorrow);
-  const [mTime, setMTime] = useState("11:00");
-  const [mKind, setMKind] = useState<"online" | "in_person">("online");
+  const [slot, setSlot] = useState<Slot>(() => {
+    const first = freeSlots(p.meetings, p.now, { days: 5 }).find((d) => d.times.length);
+    return { date: first?.date ?? tomorrow, time: first?.times[0] ?? "10:00", kind: "online", duration: 30 };
+  });
   const [showScript, setShowScript] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, start] = useTransition();
@@ -283,7 +309,7 @@ function CallCard({ cur, p, listName, script, pending, onSkip, onStop, onSaved, 
       const r = await logCall({
         id: c.id, outcome, note, callbackDate: cbDate, callbackTime: cbTime, dnc,
         name, email, sendEmail: outcome === "interested" && sendEmail,
-        meeting: outcome === "interested" && meet ? { date: mDate, time: mTime, kind: mKind } : null,
+        meeting: outcome === "interested" && meet ? slot : null,
       });
       if (!r.ok) { setError(r.error); return; }
       const who = c.company ?? c.contact_name ?? prettyPhone(c.phone);
@@ -396,13 +422,7 @@ function CallCard({ cur, p, listName, script, pending, onSkip, onStop, onSaved, 
               </span>
             </label>
             <label className="flex items-center gap-2 text-[13px] font-medium"><input type="checkbox" checked={meet} onChange={(e) => setMeet(e.target.checked)} className="size-4 accent-[#1A6647]" />Book a meeting while they&apos;re on the line</label>
-            {meet && (
-              <div className="grid gap-2.5 sm:grid-cols-3">
-                <label className="flex flex-col gap-1 text-[13px] font-medium">Day<Input type="date" min={eatDate(p.now)} value={mDate} onChange={(e) => setMDate(e.target.value)} /></label>
-                <label className="flex flex-col gap-1 text-[13px] font-medium">Time (EAT)<Input type="time" step={900} value={mTime} onChange={(e) => setMTime(e.target.value)} /></label>
-                <label className="flex flex-col gap-1 text-[13px] font-medium">Where<Select value={mKind} onChange={(e) => setMKind(e.target.value as "online" | "in_person")}><option value="online">Online (Meet / Zoom)</option><option value="in_person">In person</option></Select></label>
-              </div>
-            )}
+            {meet && <MeetingPicker p={p} value={slot} onChange={setSlot} />}
             <span className="text-xs text-forest">
               They go into the Pipeline as Contacted{meet ? ", the meeting goes in the Calendar" : ""}{meet && email ? " and they get the invite by email" : ""}.
               {meet && !p.hasMeetingDefaults ? " Set your meeting link under Calendar › Meeting defaults so it's in the invite." : ""}
@@ -416,7 +436,7 @@ function CallCard({ cur, p, listName, script, pending, onSkip, onStop, onSaved, 
 
         {error && <Alert>{error}</Alert>}
         <div className="flex flex-wrap items-center gap-2.5">
-          <Button disabled={!outcome || busy} onClick={save}>{saving ? "Saving…" : outcome === "interested" ? "Save & next call" : outcome === "callback" ? "Schedule & next call" : "Save & next call"}</Button>
+          <Button disabled={!outcome || busy} onClick={save}>{saving ? "Saving…" : outcome === "interested" && meet ? "Book meeting & next call" : outcome === "callback" ? "Schedule & next call" : "Save & next call"}</Button>
           <Button variant="secondary" disabled={busy} onClick={onSkip}>Skip for now</Button>
           <Button variant="ghost" disabled={busy} onClick={onStop}>Stop calling</Button>
           {!outcome && <span className="text-xs text-slate">Pick how it went first.</span>}
@@ -424,5 +444,51 @@ function CallCard({ cur, p, listName, script, pending, onSkip, onStop, onSaved, 
       </section>
 
     </>
+  );
+}
+
+type Slot = { date: string; time: string; kind: "online" | "in_person"; duration: number };
+
+// Pick a free time in one or two clicks: the next working days, minus meetings already booked.
+function MeetingPicker({ p, value, onChange }: { p: Parameters<typeof CallsView>[0]; value: Slot; onChange: (s: Slot) => void }) {
+  const days = useMemo(() => freeSlots(p.meetings, p.now, { days: 5, length: value.duration }), [p.meetings, p.now, value.duration]);
+  const [custom, setCustom] = useState(false);
+  const day = days.find((d) => d.date === value.date);
+  const set = (patch: Partial<Slot>) => onChange({ ...value, ...patch });
+  const chip = (on: boolean) => `h-8 rounded-full border px-3 text-[13px] font-medium tabular-nums ${on ? "border-brand bg-brand text-white" : "border-field bg-white text-ink hover:border-[#9FD3B6]"}`;
+  return (
+    <div className="flex flex-col gap-2.5 rounded-control border border-[#C6E6D3] bg-white p-3">
+      <div role="group" aria-label="Day" className="flex flex-wrap gap-1.5">
+        {days.map((d) => (
+          <button key={d.date} type="button" aria-pressed={!custom && value.date === d.date} disabled={!d.times.length}
+            onClick={() => { setCustom(false); set({ date: d.date, time: d.times.includes(value.time) ? value.time : d.times[0] }); }}
+            className={`${chip(!custom && value.date === d.date)} disabled:cursor-not-allowed disabled:opacity-40`}>
+            {d.label}{!d.times.length && " · full"}
+          </button>
+        ))}
+        <button type="button" aria-pressed={custom} onClick={() => setCustom(true)} className={chip(custom)}>Other time</button>
+      </div>
+
+      {custom ? (
+        <div className="grid gap-2.5 sm:grid-cols-2">
+          <label className="flex flex-col gap-1 text-[13px] font-medium">Day<Input type="date" min={eatDate(p.now)} value={value.date} onChange={(e) => set({ date: e.target.value })} /></label>
+          <label className="flex flex-col gap-1 text-[13px] font-medium">Time (EAT)<Input type="time" step={900} value={value.time} onChange={(e) => set({ time: e.target.value })} /></label>
+        </div>
+      ) : day ? (
+        <div role="group" aria-label={`Free times ${day.label}`} className="flex flex-wrap gap-1.5">
+          {day.times.map((t) => <button key={t} type="button" aria-pressed={value.time === t} onClick={() => set({ time: t })} className={chip(value.time === t)}>{t}</button>)}
+        </div>
+      ) : <p className="text-[13px] text-slate">No free times in the next few days. Use Other time.</p>}
+
+      <div className="flex flex-wrap items-end gap-2.5">
+        <label className="flex flex-col gap-1 text-[13px] font-medium">Where
+          <Select value={value.kind} onChange={(e) => set({ kind: e.target.value as Slot["kind"] })} className="h-9 w-auto"><option value="online">Online (Meet / Zoom)</option><option value="in_person">In person</option></Select>
+        </label>
+        <label className="flex flex-col gap-1 text-[13px] font-medium">Length
+          <Select value={value.duration} onChange={(e) => set({ duration: Number(e.target.value) })} className="h-9 w-auto"><option value={30}>30 min</option><option value={45}>45 min</option><option value={60}>1 hour</option></Select>
+        </label>
+        <span className="pb-2 text-[13px] font-semibold text-forest">{shortDay(value.date)} at {value.time} EAT</span>
+      </div>
+    </div>
   );
 }

@@ -65,7 +65,7 @@ export type LogInput = {
   callbackDate?: string; callbackTime?: string; dnc?: boolean;
   // Interested
   name?: string; email?: string; sendEmail?: boolean;
-  meeting?: { date: string; time: string; kind: "online" | "in_person" } | null;
+  meeting?: { date: string; time: string; kind: "online" | "in_person"; duration?: number } | null;
 };
 
 export async function logCall(input: LogInput): Promise<R<{ status: string; inquiryId?: string }>> {
@@ -111,7 +111,7 @@ export async function logCall(input: LogInput): Promise<R<{ status: string; inqu
   }
   if (input.meeting?.date && input.meeting.time) {
     const m = await saveAppointment({
-      title: `Intro call with ${c.company ?? name}`, date: input.meeting.date, time: input.meeting.time, duration: 30, kind: input.meeting.kind,
+      title: `Intro call with ${c.company ?? name}`, date: input.meeting.date, time: input.meeting.time, duration: [30, 45, 60].includes(Number(input.meeting.duration)) ? Number(input.meeting.duration) : 30, kind: input.meeting.kind,
       meeting_link: company.meeting_link ?? "", location: company.meeting_address ?? "", notes: note, inquiry_id: inquiryId, invite: !!(email || c.email),
     });
     notes.push(m.ok ? (m.message ?? "Meeting booked.") : `The meeting wasn't booked: ${m.error}`);

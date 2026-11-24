@@ -101,3 +101,19 @@ describe("countries", () => {
     expect(r.rows[0]).toMatchObject({ country: "UK", address: "1 High St" });
   });
 });
+
+describe("free meeting times", () => {
+  it("skips weekends, past times and meetings already booked", async () => {
+    const { freeSlots } = await import("@/lib/calls");
+    const now = Date.parse("2026-11-27T11:10:00Z"); // Friday 14:10 EAT
+    const busy = [{ starts_at: "2026-11-30T07:00:00Z", duration_min: 60 }]; // Monday 10:00–11:00 EAT
+    const days = freeSlots(busy, now, { days: 2 });
+    expect(days.map((d) => d.label)).toEqual(["Today", "Mon 30 Nov"]);
+    expect(days[0].times[0]).toBe("15:30"); // an hour from now, on the half hour
+    expect(days[0].times.at(-1)).toBe("16:30");
+    expect(days[1].times).toContain("09:30");
+    expect(days[1].times).not.toContain("10:00");
+    expect(days[1].times).not.toContain("10:30");
+    expect(days[1].times).toContain("11:00");
+  });
+});

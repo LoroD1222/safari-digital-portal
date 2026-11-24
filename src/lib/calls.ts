@@ -323,3 +323,34 @@ export function listStats(lists: Pick<CallList, "id" | "name">[], contacts: Pick
 export const nowMs = () => Date.now();
 
 export const pct = (n: number) => `${Math.round(n * 100)}%`;
+
+// ───────────── Free meeting times ─────────────
+
+export type Busy = { starts_at: string; duration_min: number };
+export type SlotDay = { date: string; label: string; times: string[] };
+
+// Open 30-minute slots on the next working days (Mon–Fri, 09:00–17:00 EAT) that don't clash
+// with a meeting already in the Calendar. Today's slots start at least an hour from now.
+export function freeSlots(busy: Busy[], now: number, opts: { days?: number; length?: number; from?: string; until?: string } = {}): SlotDay[] {
+  const days = opts.days ?? 5, len = opts.length ?? 30, from = opts.from ?? "09:00", until = opts.until ?? "17:00";
+  const toMin = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+  const out: SlotDay[] = [];
+  const earliest = now + 60 * 60_000;
+  for (let i = 0; out.length < days && i < 21; i++) {
+    const date = eatDate(now + i * 864e5);
+    const wd = new Date(`${date}T12:00:00Z`).getUTCDay();
+    if (wd === 0 || wd === 6) continue;
+    const times: string[] = [];
+    for (let m = toMin(from); m + len <= toMin(until); m += 30) {
+      const t = `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+      const start = Date.parse(eatToIso(date, t)), end = start + len * 60_000;
+      if (start < earliest) continue;
+      if (busy.some((b) => { const s = Date.parse(b.starts_at); return start < s + b.duration_min * 60_000 && s < end; })) continue;
+      times.push(t);
+    }
+    const label = date === eatDate(now) ? "Today" : date === eatDate(now + 864e5) ? "Tomorrow" : shortDay(date);
+    if (times.length) out.push({ date, label, times });
+    else if (date !== eatDate(now)) out.push({ date, label, times });
+  }
+  return out;
+}

@@ -21,7 +21,7 @@ export default async function CallsPage(props: PageProps<"/portal/calls">) {
   const now = nowMs();
   const supabase = await createClient();
   const since = new Date(now - 28 * 864e5).toISOString();
-  const [lists, contacts, logs, settings, dnc, sender, people] = await Promise.all([
+  const [lists, contacts, logs, settings, dnc, sender, people, appts] = await Promise.all([
     supabase.from("call_lists").select("id, name, script, archived, created_at").eq("client_id", company.id).order("created_at"),
     supabase.from("call_contacts").select("*").eq("client_id", company.id).order("created_at").limit(10000),
     supabase.from("call_logs").select("id, contact_id, list_id, user_id, outcome, note, created_at").eq("client_id", company.id).gte("created_at", since).order("created_at", { ascending: false }).limit(10000),
@@ -30,6 +30,9 @@ export default async function CallsPage(props: PageProps<"/portal/calls">) {
     supabase.from("followup_settings").select("sender_ready, from_email, from_name, agent_name").eq("client_id", company.id).maybeSingle(),
     // Names of everyone on the account, to show who is calling which number.
     createAdminClient().from("profiles").select("id, full_name, email").eq("client_id", company.id),
+    // Meetings already in the Calendar, to offer free times and see who still needs one.
+    supabase.from("appointments").select("inquiry_id, starts_at, duration_min").eq("client_id", company.id).eq("status", "scheduled")
+      .gte("starts_at", new Date(now - 864e5).toISOString()).order("starts_at").limit(1000),
   ]);
   if (lists.error) {
     return (
@@ -61,6 +64,7 @@ export default async function CallsPage(props: PageProps<"/portal/calls">) {
         company: (sender.data?.from_name as string | null) || company.name.replace(/\s*\(internal\)\s*$/i, ""),
       }}
       hasMeetingDefaults={!!(company.meeting_link || company.meeting_address)}
+      meetings={(appts.data ?? []) as { inquiry_id: string | null; starts_at: string; duration_min: number }[]}
     />
   );
 }

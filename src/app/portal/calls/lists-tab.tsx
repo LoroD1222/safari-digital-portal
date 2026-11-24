@@ -1,5 +1,6 @@
 "use client";
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Alert, Button, Input, Select, Textarea } from "@/components/ui";
 import { Icon } from "@/components/icons";
@@ -124,6 +125,7 @@ function ListCard({ list, stat, contacts, onToast }: { list: CallList; stat: Ret
                       <td className="px-2 py-1.5">{STATUS_LABEL[c.status]}</td>
                       <td className="px-2 py-1.5 tabular-nums">{c.attempts}</td>
                       <td className="whitespace-nowrap px-2 py-1.5 text-right">
+                        {c.status === "interested" && c.inquiry_id && <Link href={`/portal/calendar?lead=${c.inquiry_id}`} className="mr-3 text-[13px] font-medium">Book meeting</Link>}
                         <button type="button" onClick={() => setEdit(c.id)} className="mr-3 text-[13px] font-medium text-slate hover:text-ink">Edit</button>
                         {["not_interested", "unreachable", "wrong_number"].includes(c.status) && (
                           <button type="button" disabled={pending} onClick={() => run(() => reopenNumber(c.id))} className="text-[13px] font-medium text-brand">Call again</button>

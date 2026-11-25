@@ -9,7 +9,7 @@ import {
   eatDate, fillTemplate, freeSlots, prettyPhone, shortDay, scriptSteps, waLink, whenLabel,
   type CallContact, type CallList, type CallLog, type CallSettings, type Outcome,
 } from "@/lib/calls";
-import { logCall, nextCall, openCall, releaseCalls, type Current } from "./actions";
+import { logCall, nextCall, openCall, releaseCalls, rescheduleCall, type Current } from "./actions";
 import { ImportDialog } from "./import-dialog";
 import { ContactForm } from "./contact-form";
 import { ListsTab } from "./lists-tab";
@@ -160,6 +160,8 @@ function Calling(p: Parameters<typeof CallsView>[0] & { onToast: (m: string | nu
     router.replace("/portal/calls", { scroll: false });
   }, [p.openId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const [resched, setResched] = useState<string | null>(null);
+
   // Find any lead, whatever happened before (e.g. they call you back after "No answer").
   const [find, setFind] = useState("");
   const fq = find.trim().toLowerCase(), fd = fq.replace(/\D/g, "");
@@ -249,15 +251,22 @@ function Calling(p: Parameters<typeof CallsView>[0] & { onToast: (m: string | nu
                 {g.rows.slice(0, 40).map((c) => {
                   const isCur = cur?.contact.id === c.id;
                   return (
-                    <li key={c.id}>
-                      <button type="button" disabled={pending || !!c.lockedBy} onClick={() => pick(c.id)} aria-current={isCur ? "true" : undefined}
-                        className={`flex w-full items-center gap-2.5 border-b border-[#F1F2F4] px-3.5 py-2.5 text-left disabled:cursor-not-allowed ${isCur ? "bg-[#F4FAF6] shadow-[inset_3px_0_0_#1A6647]" : "hover:bg-sidebar"} ${c.lockedBy ? "opacity-60" : ""}`}>
-                        <span className="flex min-w-0 flex-1 flex-col">
-                          <span className="truncate font-semibold">{c.company ?? c.contact_name ?? prettyPhone(c.phone)}</span>
-                          <span className="truncate text-xs text-slate">{[c.contact_name && c.company ? c.contact_name : null, c.city, country === null ? c.country : null, !list ? listName[c.list_id] : null].filter(Boolean).join(" · ") || prettyPhone(c.phone)}</span>
-                        </span>
-                        <QueueTag c={c} now={p.now} />
-                      </button>
+                    <li key={c.id} className="border-b border-[#F1F2F4]">
+                      <div className={`flex items-center gap-2 pr-3 ${isCur ? "bg-[#F4FAF6] shadow-[inset_3px_0_0_#1A6647]" : "hover:bg-sidebar"} ${c.lockedBy ? "opacity-60" : ""}`}>
+                        <button type="button" disabled={pending || !!c.lockedBy} aria-current={isCur ? "true" : undefined} aria-expanded={g.key === "later" ? resched === c.id : undefined}
+                          // "Later" numbers open right here on the left, to change the time or the details.
+                          onClick={() => (g.key === "later" ? setResched(resched === c.id ? null : c.id) : pick(c.id))}
+                          className="flex min-w-0 flex-1 flex-col py-2.5 pl-3.5 text-left disabled:cursor-not-allowed">
+                          <span className="w-full truncate font-semibold">{c.company ?? c.contact_name ?? prettyPhone(c.phone)}</span>
+                          <span className="w-full truncate text-xs text-slate">{[c.contact_name && c.company ? c.contact_name : null, c.city, country === null ? c.country : null, !list ? listName[c.list_id] : null].filter(Boolean).join(" · ") || prettyPhone(c.phone)}</span>
+                        </button>
+                        {!c.lockedBy && (c.status === "retry" || c.status === "callback")
+                          ? <button type="button" onClick={() => setResched(resched === c.id ? null : c.id)} aria-expanded={resched === c.id} title="Change when to call"
+                              className="rounded-full outline-offset-2 hover:ring-2 hover:ring-[#E0A458]/40"><QueueTag c={c} now={p.now} /></button>
+                          : <QueueTag c={c} now={p.now} />}
+                      </div>
+                      {resched === c.id && <Reschedule c={c} now={p.now} onClose={() => setResched(null)} onOpen={() => { setResched(null); pick(c.id); }}
+                        onDone={(m) => { setResched(null); p.onToast(m); router.refresh(); }} />}
                     </li>
                   );
                 })}
@@ -311,6 +320,49 @@ function Calling(p: Parameters<typeof CallsView>[0] & { onToast: (m: string | nu
         </div>
       </div>
     </>
+  );
+}
+
+// Change when a retry or call back comes up.
+function Reschedule({ c, now, onClose, onOpen, onDone }: { c: CallContact; now: number; onClose: () => void; onOpen: () => void; onDone: (m: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const at = c.next_call_at && Date.parse(c.next_call_at) > now ? c.next_call_at : new Date(now + 864e5).toISOString();
+  const [date, setDate] = useState(eatDate(at));
+  const [time, setTime] = useState(c.next_call_at ? new Date(Date.parse(at) + 3 * 3600e3).toISOString().slice(11, 16) : "09:00");
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  const go = (when: { date: string; time: string } | "now") => start(async () => {
+    setError(null);
+    const r = await rescheduleCall(c.id, when);
+    if (r.ok) onDone(r.message ?? "Saved."); else setError(r.error);
+  });
+  if (editing) return (
+    <div className="border-t border-[#F1F2F4] bg-sidebar p-2">
+      <ContactForm contact={c} onCancel={() => setEditing(false)} onDone={(m) => { setEditing(false); onDone(m); }} />
+    </div>
+  );
+  return (
+    <div className="flex flex-col gap-2 border-t border-[#F1F2F4] bg-sidebar px-3.5 py-3">
+      <div className="flex flex-col gap-0.5 text-[13px]">
+        <span className="tabular-nums">{prettyPhone(c.phone)}{c.contact_name ? ` · ${c.contact_name}` : ""}</span>
+        {c.last_outcome && <span className="text-xs text-slate">Last call: {OUTCOME_LABEL[c.last_outcome]}{c.attempts > 1 ? ` · ${c.attempts} tries` : ""}</span>}
+      </div>
+      <span className="text-xs font-medium text-slate">{c.status === "callback" ? "Call back on" : "Try again on"}</span>
+      <div className="grid grid-cols-2 gap-2">
+        <Input type="date" min={eatDate(now)} value={date} onChange={(e) => setDate(e.target.value)} aria-label="Day" className="h-9" />
+        <Input type="time" step={900} value={time} onChange={(e) => setTime(e.target.value)} aria-label="Time (EAT)" className="h-9" />
+      </div>
+      {error && <span role="alert" className="text-xs text-[#B42318]">{error}</span>}
+      <div className="flex flex-wrap gap-2">
+        <Button className="h-8 px-3 text-[13px]" disabled={pending} onClick={() => go({ date, time })}>Save</Button>
+        <Button variant="secondary" className="h-8 px-3 text-[13px]" disabled={pending} onClick={() => go("now")}>Move to top</Button>
+        <Button variant="ghost" className="h-8 px-3 text-[13px]" onClick={onClose}>Close</Button>
+      </div>
+      <div className="flex flex-wrap gap-4 border-t border-line pt-2 text-[13px]">
+        <button type="button" onClick={onOpen} className="font-medium text-brand">Open call card</button>
+        <button type="button" onClick={() => setEditing(true)} className="font-medium text-brand">Edit details</button>
+      </div>
+    </div>
   );
 }
 

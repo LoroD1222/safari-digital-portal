@@ -9,7 +9,7 @@ import { sendViaResend } from "@/lib/followup-mail";
 import { sendingKey } from "@/lib/resend-keys";
 import { unsubscribeUrl } from "@/lib/followups";
 import {
-  DEFAULT_BODY, DEFAULT_SUBJECT, OUTCOMES, cleanCountry, countryFromPhone, eatToIso, parsePhones, prettyPhone, fillTemplate, normalizePhone,
+  DEFAULT_BODY, DEFAULT_SUBJECT, OUTCOMES, cleanCountry, countryFromPhone, eatToIso, parsePhones, prettyPhone, whenLabel, fillTemplate, normalizePhone,
   type CallContact, type CallLog, type ImportRow, type Outcome,
 } from "@/lib/calls";
 import { saveAppointment } from "../calendar/actions";
@@ -349,4 +349,22 @@ export async function addContact(listId: string, v: ContactInput): Promise<R> {
   done();
   if (error) return { ok: false, error: /call_contacts_list_phone|duplicate/.test(error.message) ? "That phone number is already in this list." : migrate(error.message) };
   return { ok: true, message: c.row.phone ? "Number added to the queue." : "Added. It goes into the queue once it has a phone number." };
+}
+
+// Change when a retry or call back comes up, or bring it forward to now.
+export async function rescheduleCall(id: string, when: { date: string; time: string } | "now"): Promise<R> {
+  const { company, supabase } = await ctx();
+  let at: string;
+  if (when === "now") at = new Date().toISOString();
+  else {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(when.date) || !/^\d{2}:\d{2}$/.test(when.time)) return { ok: false, error: "Pick a day and a time." };
+    at = eatToIso(when.date, when.time);
+    if (Date.parse(at) <= Date.now()) return { ok: false, error: "That time has already passed. Pick a later one, or use Call now." };
+  }
+  const { data, error } = await supabase.from("call_contacts").update({ next_call_at: at })
+    .eq("id", id).eq("client_id", company.id).in("status", ["retry", "callback"]).select("id");
+  if (error) return { ok: false, error: error.message };
+  if (!data?.length) return { ok: false, error: "This number isn't waiting for a call any more." };
+  done();
+  return { ok: true, message: when === "now" ? "Moved to the top of the queue." : `Moved to ${whenLabel(at)}.` };
 }

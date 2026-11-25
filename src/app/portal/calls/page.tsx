@@ -14,8 +14,8 @@ const TABS: Tab[] = ["calling", "lists", "stats", "settings"];
 
 // Safari Digital's own account only: call lists, a shared queue, scripts and stats.
 export default async function CallsPage(props: PageProps<"/portal/calls">) {
-  const { company, viewer } = await getPortalContext();
-  if (!company?.is_internal) redirect("/portal");
+  const { company, viewer } = await getPortalContext(true);
+  if (!company?.is_internal) redirect(viewer.role === "admin" ? "/admin" : "/portal");
   const sp = await props.searchParams;
   const tab = (TABS as string[]).includes(String(sp.tab)) ? (sp.tab as Tab) : "calling";
   const range = sp.range === "28" ? 28 : 7;
@@ -34,7 +34,7 @@ export default async function CallsPage(props: PageProps<"/portal/calls">) {
       .order("created_at", { ascending: false }).order("phone").range(f, t), 10_000),
     supabase.from("followup_settings").select("sender_ready, from_email, from_name, agent_name").eq("client_id", company.id).maybeSingle(),
     // Names of everyone on the account, to show who is calling which number.
-    createAdminClient().from("profiles").select("id, full_name, email").eq("client_id", company.id),
+    createAdminClient().from("profiles").select("id, full_name, email").or(`client_id.eq.${company.id},role.eq.admin`),
     // Meetings already in the Calendar, to offer free times and see who still needs one.
     supabase.from("appointments").select("inquiry_id, starts_at, duration_min").eq("client_id", company.id).eq("status", "scheduled")
       .gte("starts_at", new Date(now - 864e5).toISOString()).order("starts_at").limit(1000),

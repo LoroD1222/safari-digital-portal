@@ -10,7 +10,7 @@ export const metadata: Metadata = { title: "Calendar" };
 
 // Safari Digital's own account only: meetings we book with leads.
 export default async function CalendarPage(props: PageProps<"/portal/calendar">) {
-  const { company } = await getPortalContext();
+  const { company } = await getPortalContext(true);
   if (!company?.is_internal) redirect("/portal");
   const sp = await props.searchParams;
   const today = todayEat();

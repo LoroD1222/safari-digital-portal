@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Alert, Button, Input, Select, Textarea } from "@/components/ui";
 import { Icon } from "@/components/icons";
+import { useBase } from "@/lib/use-base";
 import {
   CALL_COUNTRIES, CLAIM_MINUTES, DEFAULT_SCRIPT, STATUS_LABEL, DEFAULT_WHATSAPP, OPEN_STATUSES, OUTCOMES, OUTCOME_LABEL, REACHED,
   eatDate, fillTemplate, freeSlots, prettyPhone, shortDay, scriptSteps, waLink, whenLabel,
@@ -29,6 +30,7 @@ export function CallsView(p: {
   openId?: string | null;
 }) {
   const router = useRouter();
+  const { base } = useBase();
   const [importing, setImporting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const today = eatDate(p.now);
@@ -49,7 +51,7 @@ export function CallsView(p: {
 
       <nav aria-label="Cold calling" className="flex gap-1 border-b border-line">
         {(Object.keys(TAB_LABEL) as Tab[]).map((t) => (
-          <Link key={t} href={t === "calling" ? "/portal/calls" : `/portal/calls?tab=${t}`} scroll={false} aria-current={p.tab === t ? "page" : undefined}
+          <Link key={t} href={t === "calling" ? `${base}/calls` : `${base}/calls?tab=${t}`} scroll={false} aria-current={p.tab === t ? "page" : undefined}
             className={`-mb-px border-b-2 px-3 pb-2.5 pt-1 text-sm font-medium no-underline ${p.tab === t ? "border-brand text-ink" : "border-transparent text-slate hover:text-ink"}`}>
             {TAB_LABEL[t]}
           </Link>
@@ -102,6 +104,7 @@ type Row = CallContact & { lockedBy: string | null };
 
 function Calling(p: Parameters<typeof CallsView>[0] & { onToast: (m: string | null) => void; onImport: () => void }) {
   const router = useRouter();
+  const { base } = useBase();
   const [list, setList] = useState<string | null>(null);
   const [country, setCountry] = useState<string | null>(null); // null = all, "" = not set
   const [cur, setCur] = useState<Current | null>(null);
@@ -157,7 +160,7 @@ function Calling(p: Parameters<typeof CallsView>[0] & { onToast: (m: string | nu
     if (!p.openId || opened.current === p.openId) return;
     opened.current = p.openId;
     pick(p.openId);
-    router.replace("/portal/calls", { scroll: false });
+    router.replace(`${base}/calls`, { scroll: false });
   }, [p.openId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [resched, setResched] = useState<string | null>(null);
@@ -289,7 +292,7 @@ function Calling(p: Parameters<typeof CallsView>[0] & { onToast: (m: string | nu
                       <span className="truncate font-semibold">{c.company ?? c.contact_name ?? prettyPhone(c.phone)}</span>
                       <span className="truncate text-xs text-slate">{[c.contact_name, c.country].filter(Boolean).join(" · ") || prettyPhone(c.phone)}</span>
                     </span>
-                    <Link href={`/portal/calendar?lead=${c.inquiry_id}`} className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-control border border-field bg-white px-2.5 text-[13px] font-medium text-ink no-underline hover:bg-sidebar"><Icon name="calendar" size={14} />Book meeting</Link>
+                    <Link href={`${base}/calendar?lead=${c.inquiry_id}`} className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-control border border-field bg-white px-2.5 text-[13px] font-medium text-ink no-underline hover:bg-sidebar"><Icon name="calendar" size={14} />Book meeting</Link>
                   </li>
                 ))}
               </ul>
@@ -381,6 +384,7 @@ function CallCard({ cur, p, listName, script, pending, onSkip, onStop, onSaved, 
   const [editing, setEditing] = useState(false);
   const [saved, setSaved] = useState<string | null>(null);
   const c = cur.contact;
+  const links = useBase();
   const tomorrow = eatDate(p.now + 864e5);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [note, setNote] = useState("");
@@ -455,7 +459,7 @@ function CallCard({ cur, p, listName, script, pending, onSkip, onStop, onSaved, 
           <div className="flex items-center justify-between gap-3">
             <h3 className="text-[13px] font-semibold">Script · {listName}</h3>
             <div className="flex items-center gap-3 text-[13px]">
-              <Link href={script ? "/portal/calls?tab=lists" : "/portal/calls?tab=settings"}>Edit</Link>
+              <Link href={script ? `${links.base}/calls?tab=lists` : `${links.base}/calls?tab=settings`}>Edit</Link>
               <button type="button" onClick={() => setShowScript((v) => !v)} className="font-medium text-slate hover:text-ink">{showScript ? "Hide" : "Show"}</button>
             </div>
           </div>
@@ -519,8 +523,8 @@ function CallCard({ cur, p, listName, script, pending, onSkip, onStop, onSaved, 
             <label className="flex items-start gap-2 text-[13px]">
               <input type="checkbox" checked={sendEmail} disabled={!p.sender.ready || !email.trim()} onChange={(e) => setSendEmail(e.target.checked)} className="mt-0.5 size-4 accent-[#1A6647]" />
               <span>Email them now{p.settings.case_study_url ? <> with the case study attached</> : null}
-                {!p.sender.ready ? <span className="text-slate"> · connect the email address under <Link href="/portal/followups">Follow-ups</Link> first</span>
-                  : !p.settings.case_study_url ? <span className="text-slate"> · add a case study in <Link href="/portal/calls?tab=settings">Settings</Link> to attach it</span> : null}
+                {!p.sender.ready ? <span className="text-slate"> · connect the email address under <Link href={links.followups}>Follow-ups</Link> first</span>
+                  : !p.settings.case_study_url ? <span className="text-slate"> · add a case study in <Link href={`${links.base}/calls?tab=settings`}>Settings</Link> to attach it</span> : null}
               </span>
             </label>
             <label className="flex items-center gap-2 text-[13px] font-medium"><input type="checkbox" checked={meet} onChange={(e) => setMeet(e.target.checked)} className="size-4 accent-[#1A6647]" />Book a meeting while they&apos;re on the line</label>

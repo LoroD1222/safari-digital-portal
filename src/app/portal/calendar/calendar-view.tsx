@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import Link from "next/link";
+import { useBase } from "@/lib/use-base";
 import { useRouter } from "next/navigation";
 import { Button, Input, Select, Textarea } from "@/components/ui";
 import { Icon } from "@/components/icons";
@@ -27,6 +28,7 @@ export function CalendarView({ monday, today, appointments, leads, defaults, ope
   monday: string; today: string; appointments: Appointment[]; leads: Lead[]; defaults: { link: string; address: string }; openForLead: string | null;
 }) {
   const router = useRouter();
+  const { base } = useBase();
   const days = Array.from({ length: 7 }, (_, i) => addDays(monday, i));
   const week = appointments.filter((a) => eat(a.starts_at).date <= days[6]);
   const upcoming = appointments.filter((a) => a.status === "scheduled" && Date.parse(a.starts_at) + a.duration_min * 60_000 >= Date.parse(`${today}T00:00:00+03:00`)).slice(0, 8);
@@ -46,7 +48,7 @@ export function CalendarView({ monday, today, appointments, leads, defaults, ope
   const [toast, setToast] = useState<string | null>(null);
 
 
-  const nav = (w: string) => `/portal/calendar?w=${w}`;
+  const nav = (w: string) => `${base}/calendar?w=${w}`;
   // The red "now" line: only in the browser, so the server and browser render the same page.
   const nowMin = useSyncExternalStore(noop, () => eat(new Date().toISOString()).minutes, () => null);
 
@@ -346,6 +348,7 @@ function LeadPicker({ leads, value, onChange }: { leads: Lead[]; value: Lead | n
 function Details({ a, leadName, leadEmail, onClose, onEdit, onDone }: {
   a: Appointment; leadName: string | null; leadEmail: string | null; onClose: () => void; onEdit: () => void; onDone: (m?: string) => void;
 }) {
+  const { inquiry } = useBase();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const run = (f: () => Promise<{ ok: boolean; message?: string; error?: string }>) => start(async () => {
@@ -366,7 +369,7 @@ function Details({ a, leadName, leadEmail, onClose, onEdit, onDone }: {
             ? <span className="flex items-center gap-2"><a href={a.meeting_link} target="_blank" rel="noopener noreferrer" className="truncate text-brand">{a.meeting_link}</a><CopyButton text={a.meeting_link} /></span>
             : <span className="text-slate">Online · no link yet</span>)
           : <span>{a.location ?? "In person"}</span>}
-        {leadName && a.inquiry_id && <span className="text-body">Lead: <Link href={`/portal/inquiries?open=${a.inquiry_id}`} className="font-medium text-brand">{leadName}</Link></span>}
+        {leadName && a.inquiry_id && <span className="text-body">Lead: <Link href={inquiry(a.inquiry_id)} className="font-medium text-brand">{leadName}</Link></span>}
         {a.notes && <p className="whitespace-pre-line rounded-control bg-sidebar px-3 py-2 text-[13px] text-body">{a.notes}</p>}
         {error && <p role="alert" className="text-[13px] text-danger-text">{error}</p>}
         <div className="flex flex-wrap gap-2 border-t border-line-soft pt-3">

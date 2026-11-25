@@ -1,9 +1,12 @@
+"use client";
 import Link from "next/link";
+import { useBase } from "@/lib/use-base";
 import { callStats, listStats, pct, REACHED, type CallContact, type CallList, type CallLog } from "@/lib/calls";
 
 export function StatsTab({ range, now, lists, contacts, logs, names }: {
   range: number; now: number; lists: CallList[]; contacts: CallContact[]; logs: CallLog[]; names: Record<string, string>;
 }) {
+  const { base } = useBase();
   const from = now - range * 864e5;
   const inRange = logs.filter((l) => Date.parse(l.created_at) >= from);
   const s = callStats(inRange, { from });
@@ -20,7 +23,7 @@ export function StatsTab({ range, now, lists, contacts, logs, names }: {
     <div className="flex flex-col gap-5">
       <div role="group" aria-label="Period" className="flex gap-2">
         {[7, 28].map((d) => (
-          <Link key={d} href={`/portal/calls?tab=stats${d === 28 ? "&range=28" : ""}`} scroll={false} aria-current={range === d ? "page" : undefined}
+          <Link key={d} href={`${base}/calls?tab=stats${d === 28 ? "&range=28" : ""}`} scroll={false} aria-current={range === d ? "page" : undefined}
             className={`inline-flex h-8 items-center rounded-full border px-3 text-[13px] font-medium no-underline ${range === d ? "border-forest bg-forest text-white" : "border-field bg-white text-ink"}`}>
             {d === 7 ? "Last 7 days" : "Last 4 weeks"}
           </Link>

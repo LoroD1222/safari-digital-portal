@@ -5,12 +5,14 @@ import { useRouter } from "next/navigation";
 import { Alert, Button, Input, Textarea } from "@/components/ui";
 import { DEFAULT_BODY, DEFAULT_SCRIPT, DEFAULT_SUBJECT, DEFAULT_WHATSAPP, prettyPhone, shortDay, eatDate, type CallSettings } from "@/lib/calls";
 import { addDnc, removeDnc, saveCallSettings } from "./actions";
+import { useBase } from "@/lib/use-base";
 import type { Dnc, Sender } from "./calls-view";
 
 const TAGS = "{{first_name}} {{company}} {{city}} {{country}} {{agent_name}} {{our_company}}";
 
 export function SettingsTab({ settings, dnc, sender, onToast }: { settings: CallSettings; dnc: Dnc[]; sender: Sender; onToast: (m: string) => void }) {
   const router = useRouter();
+  const { followups } = useBase();
   const [v, setV] = useState({
     default_script: settings.default_script ?? DEFAULT_SCRIPT, daily_target: String(settings.daily_target), whatsapp_intro: settings.whatsapp_intro ?? DEFAULT_WHATSAPP,
     interested_subject: settings.interested_subject ?? DEFAULT_SUBJECT, interested_body: settings.interested_body ?? DEFAULT_BODY,
@@ -63,8 +65,8 @@ export function SettingsTab({ settings, dnc, sender, onToast }: { settings: Call
           <div>
             <h2 className="text-[15px] font-semibold">Email after an &ldquo;Interested&rdquo; call</h2>
             <p className="text-[13px] text-slate">
-              {sender.ready ? <>Sent from {sender.email}, the address connected under <Link href="/portal/followups">Follow-ups</Link>. Your signature is added at the end.</>
-                : <>Connect an email address under <Link href="/portal/followups">Follow-ups</Link> first; this email is sent from it.</>}
+              {sender.ready ? <>Sent from {sender.email}, the address connected under <Link href={followups}>Follow-ups</Link>. Your signature is added at the end.</>
+                : <>Connect an email address under <Link href={followups}>Follow-ups</Link> first; this email is sent from it.</>}
             </p>
           </div>
           <label className="flex flex-col gap-1 text-[13px] font-medium">Subject<Input value={v.interested_subject} onChange={set("interested_subject")} /></label>

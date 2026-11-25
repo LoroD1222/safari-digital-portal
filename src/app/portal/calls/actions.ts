@@ -19,7 +19,7 @@ type R<T = object> = ({ ok: true; message?: string } & T) | { ok: false; error: 
 export type Current = { contact: CallContact; logs: CallLog[] };
 
 async function ctx() {
-  const { company, viewer } = await getPortalContext();
+  const { company, viewer } = await getPortalContext(true);
   if (!company?.is_internal) throw new Error("Cold calling is only for Safari Digital's own account.");
   return { company, viewer, supabase: await createClient() };
 }
@@ -27,7 +27,7 @@ const migrate = (m: string) => (/position|other_phone/.test(m) && /column|schema
   : /null value in column "phone"/.test(m) ? "Run 0037_call_order.sql in Supabase first, so rows without a phone number can be kept."
   : /country|address/.test(m) && /column|schema cache/i.test(m) ? "Run 0036_call_country.sql in Supabase first."
   : /call_|claim_|log_call|can_call/.test(m) && /exist|schema cache|function/i.test(m) ? "Run 0035_cold_calling.sql in Supabase first." : m);
-const done = () => { revalidatePath("/portal/calls"); };
+const done = () => { revalidatePath("/portal/calls"); revalidatePath("/admin/calls"); };
 
 async function load(id: string): Promise<Current | null> {
   const supabase = await createClient();
@@ -136,7 +136,7 @@ async function interestedExtras(a: {
     });
     notes.push(m.ok ? (m.message ?? "Meeting booked.") : `The meeting wasn't booked: ${m.error}`);
   }
-  done(); revalidatePath("/portal/pipeline");
+  done(); revalidatePath("/portal/pipeline"); revalidatePath("/admin/inquiries");
   return { ok: true, status: status as string, inquiryId, message: notes.join(" ") };
 }
 

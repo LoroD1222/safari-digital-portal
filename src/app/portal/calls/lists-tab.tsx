@@ -7,6 +7,7 @@ import { Icon } from "@/components/icons";
 import { DEFAULT_SCRIPT, STATUS_LABEL, listStats, pct, prettyPhone, type CallContact, type CallList, type CallLog, type CallStatus } from "@/lib/calls";
 import { archiveList, deleteList, reopenNumber, saveList } from "./actions";
 import { ContactForm } from "./contact-form";
+import { useBase } from "@/lib/use-base";
 
 export function ListsTab({ lists, contacts, logs, onToast, onImport }: {
   lists: CallList[]; contacts: CallContact[]; logs: CallLog[]; onToast: (m: string) => void; onImport: () => void;
@@ -29,6 +30,7 @@ export function ListsTab({ lists, contacts, logs, onToast, onImport }: {
 
 function ListCard({ list, stat, contacts, onToast }: { list: CallList; stat: ReturnType<typeof listStats>[number]; contacts: CallContact[]; onToast: (m: string) => void }) {
   const router = useRouter();
+  const { base } = useBase();
   const [name, setName] = useState(list.name);
   const [script, setScript] = useState(list.script ?? "");
   const [editing, setEditing] = useState(false);
@@ -135,8 +137,8 @@ function ListCard({ list, stat, contacts, onToast }: { list: CallList; stat: Ret
                       <td className="px-2 py-1.5">{c.phone ? STATUS_LABEL[c.status] : <span className="text-[#9A4A12]">Add a phone number</span>}</td>
                       <td className="px-2 py-1.5 tabular-nums">{c.attempts}</td>
                       <td className="whitespace-nowrap px-2 py-1.5 text-right">
-                        {c.status === "interested" && c.inquiry_id && <Link href={`/portal/calendar?lead=${c.inquiry_id}`} className="mr-3 text-[13px] font-medium">Book meeting</Link>}
-                        {c.phone && <Link href={`/portal/calls?open=${c.id}`} className="mr-3 text-[13px] font-medium">Open</Link>}
+                        {c.status === "interested" && c.inquiry_id && <Link href={`${base}/calendar?lead=${c.inquiry_id}`} className="mr-3 text-[13px] font-medium">Book meeting</Link>}
+                        {c.phone && <Link href={`${base}/calls?open=${c.id}`} className="mr-3 text-[13px] font-medium">Open</Link>}
                         <button type="button" onClick={() => setEdit(c.id)} className="mr-3 text-[13px] font-medium text-slate hover:text-ink">Edit</button>
                         {["not_interested", "unreachable", "wrong_number"].includes(c.status) && (
                           <button type="button" disabled={pending} onClick={() => run(() => reopenNumber(c.id))} className="text-[13px] font-medium text-brand">Call again</button>

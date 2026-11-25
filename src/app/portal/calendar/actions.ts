@@ -11,7 +11,7 @@ import { unsubscribeUrl } from "@/lib/followups";
 type R = { ok: true; message?: string; id?: string } | { ok: false; error: string };
 
 async function ctx() {
-  const { company } = await getPortalContext();
+  const { company } = await getPortalContext(true);
   if (!company?.is_internal) throw new Error("The calendar is only for Safari Digital's own account.");
   return { company, supabase: await createClient() };
 }
@@ -53,7 +53,7 @@ export async function saveAppointment(input: AppointmentInput, id?: string): Pro
     const sent = await sendInvite(appt, company.name);
     note += sent.ok ? ` Invite emailed to ${sent.to}.` : ` The invite wasn't sent: ${sent.error}`;
   }
-  revalidatePath("/portal/calendar"); revalidatePath("/portal/pipeline");
+  revalidatePath("/portal/calendar"); revalidatePath("/admin/calendar"); revalidatePath("/portal/pipeline"); revalidatePath("/admin/inquiries");
   return { ok: true, message: note, id: appt.id };
 }
 
@@ -96,7 +96,7 @@ export async function sendAppointmentInvite(id: string): Promise<R> {
   const { data } = await supabase.from("appointments").select("*").eq("id", id).eq("client_id", company.id).maybeSingle();
   if (!data) return { ok: false, error: "Meeting not found." };
   const r = await sendInvite(data as Appointment, company.name);
-  revalidatePath("/portal/calendar");
+  revalidatePath("/portal/calendar"); revalidatePath("/admin/calendar");
   return r.ok ? { ok: true, message: `Invite emailed to ${r.to}.` } : { ok: false, error: `Not sent: ${r.error}` };
 }
 
@@ -107,14 +107,14 @@ export async function setAppointmentStatus(id: string, status: Appointment["stat
     .eq("id", id).eq("client_id", company.id).select("inquiry_id").single();
   if (error) return { ok: false, error: migrate(error.message) };
   if (status === "no_show" && data?.inquiry_id) await supabase.rpc("set_inquiry_status", { inquiry_id: data.inquiry_id, new_status: "no_show" });
-  revalidatePath("/portal/calendar"); revalidatePath("/portal/pipeline");
+  revalidatePath("/portal/calendar"); revalidatePath("/admin/calendar"); revalidatePath("/portal/pipeline"); revalidatePath("/admin/inquiries");
   return { ok: true, message: status === "no_show" && data?.inquiry_id ? "Marked as no show. The lead moved to No show and its follow-ups start." : undefined };
 }
 
 export async function deleteAppointment(id: string): Promise<R> {
   const { company, supabase } = await ctx();
   const { error } = await supabase.from("appointments").delete().eq("id", id).eq("client_id", company.id);
-  revalidatePath("/portal/calendar");
+  revalidatePath("/portal/calendar"); revalidatePath("/admin/calendar");
   return error ? { ok: false, error: error.message } : { ok: true, message: "Deleted." };
 }
 
@@ -123,6 +123,6 @@ export async function saveMeetingDefaults(link: string, address: string): Promis
   const l = link.trim();
   if (l && !/^https?:\/\/\S+$/.test(l)) return { ok: false, error: "The meeting link should start with https://" };
   const { error } = await supabase.rpc("set_meeting_defaults", { p_client_id: company.id, p_link: l, p_address: address.trim().slice(0, 300) });
-  revalidatePath("/portal/calendar");
+  revalidatePath("/portal/calendar"); revalidatePath("/admin/calendar");
   return error ? { ok: false, error: migrate(error.message) } : { ok: true, message: "Saved." };
 }

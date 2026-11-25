@@ -14,9 +14,11 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
         { href: "/admin/clients", label: "Clients", icon: "users" },
         { href: "/admin/content", label: "Content", icon: "film" },
         { href: "/admin/inquiries", label: "Inquiries", icon: "inbox" },
+        { href: "/admin/calendar", label: "Calendar", icon: "calendar" },
+        { href: "/admin/calls", label: "Cold calling", icon: "phone" },
         { href: "/admin/requests", label: "Requests", icon: "message" },
         { href: "/admin/invoices", label: "Invoices", icon: "receipt" },
-        { href: "/admin/payments", label: "Payments", icon: "calendar" },
+        { href: "/admin/payments", label: "Payments", icon: "clock" },
         { href: "/admin/settings", label: "Settings", icon: "settings" },
       ]}
       footer={<AccountFooter name={viewer.fullName ?? viewer.email} sub="Safari Digital" dark />}

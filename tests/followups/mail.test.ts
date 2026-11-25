@@ -75,3 +75,16 @@ describe("WhatsApp tags", () => {
     expect(out).toBe("Hi Sarah,\n\nThanks!\n\nTalk soon");
   });
 });
+
+describe("own sign-off", () => {
+  it("doesn't add our signature when the message signs off by itself", async () => {
+    const { composeEmail, hasSignOff } = await import("@/lib/followup-presets");
+    const v = { firstName: "Anna", trip: null, travelDates: null, agent: null, company: "Asanja Africa", whatsapp: null };
+    const own = composeEmail({ subject: "Hi", body: "Thanks!\n\nWarm regards,\nThe Asanja Africa Team\nWhere Luxury Meets the Wild." }, v);
+    expect(own.body).not.toContain("Best regards");
+    expect(own.body.endsWith("Where Luxury Meets the Wild.")).toBe(true);
+    expect(composeEmail({ subject: "Hi", body: "Thanks for your message." }, v).body).toContain("Best regards,\n\nAsanja Africa");
+    expect(hasSignOff("Thank you for reaching out to us about your safari.")).toBe(false);
+    expect(hasSignOff("Asante sana,\nJoel")).toBe(true);
+  });
+});

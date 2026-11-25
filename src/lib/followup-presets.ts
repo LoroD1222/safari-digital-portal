@@ -552,10 +552,18 @@ export function signature(v: Pick<Personal, "agent" | "company">) {
     : `Best regards,\n\n${company}`;
 }
 
+// Does the message already end with its own sign-off ("Warm regards, The Asanja Africa Team")?
+export function hasSignOff(body: string) {
+  const tail = body.trim().split("\n").slice(-6).join("\n");
+  return /^\s*(best|kind|warm|warmest)?\s*(regards|wishes)\b|^\s*(sincerely|cheers|asante( sana)?|thank you|many thanks|yours (truly|sincerely))\s*[,!.]?\s*$/im.test(tail);
+}
+
 export function composeEmail(rule: { subject: string; body: string }, v: Personal) {
+  const body = personalize(rule.body, v).trim();
   return {
     subject: personalize(rule.subject, v).replace(/\s+/g, " ").trim().slice(0, 200),
-    body: `${personalize(rule.body, v).trim()}\n\n${signature(v)}`,
+    // Our signature is added only when the message doesn't sign off by itself.
+    body: hasSignOff(body) ? body : `${body}\n\n${signature(v)}`,
   };
 }
 

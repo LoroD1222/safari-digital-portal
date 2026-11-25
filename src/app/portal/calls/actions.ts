@@ -96,6 +96,11 @@ export async function logCall(input: LogInput): Promise<R<{ status: string; inqu
   // Interested: into the Pipeline as Contacted (its follow-ups start), then the email and the meeting.
   const name = (input.name ?? "").trim().slice(0, 200) || c.contact_name || c.company || "New lead";
   const admin = createAdminClient();
+  // Already in the Pipeline from an earlier call? Use that lead instead of adding a second one.
+  if (c.inquiry_id) {
+    const { data: prev } = await admin.from("inquiries").select("id, status").eq("id", c.inquiry_id).eq("client_id", company.id).maybeSingle();
+    if (prev) return interestedExtras({ inquiryId: prev.id as string, c, name, email, note, input, company, viewer, status: status as string, added: false });
+  }
   const { data: q, error: qe } = await admin.from("inquiries").insert({
     client_id: company.id, customer_name: name, phone: c.phone, email: email || c.email || null,
     country: c.country, interested_in: c.company, message: [c.company && `Company: ${c.company}`, c.website && `Website: ${c.website}`, c.address && `Address: ${c.address}`, c.city && `City: ${c.city}`, note && `Call notes: ${note}`].filter(Boolean).join("\n") || null,
@@ -103,11 +108,23 @@ export async function logCall(input: LogInput): Promise<R<{ status: string; inqu
     received_at: new Date().toISOString(), created_by: viewer.id,
   }).select("id").single();
   if (qe || !q) return { ok: true, status: status as string, message: "Saved, but it couldn't be added to the Pipeline. Add them under Inquiries." };
-  const inquiryId = q.id as string;
-  await supabase.from("call_contacts").update({ inquiry_id: inquiryId, email: email || c.email }).eq("id", c.id);
-  await logActivity({ clientId: company.id, actor: "client", message: `${c.company ?? name} is interested (cold call)`, clientLink: `/portal/inquiries?open=${inquiryId}`, adminLink: `/admin/inquiries/${inquiryId}` });
+  return interestedExtras({ inquiryId: q.id as string, c, name, email, note, input, company, viewer, status: status as string, added: true });
+}
 
-  const notes: string[] = [`${c.company ?? name} added to the Pipeline.`];
+// After "Interested": link the lead, email them, book the meeting.
+async function interestedExtras(a: {
+  inquiryId: string; c: CallContact; name: string; email: string; note: string; input: LogInput; status: string; added: boolean;
+  company: NonNullable<Awaited<ReturnType<typeof getPortalContext>>["company"]>; viewer: Awaited<ReturnType<typeof getPortalContext>>["viewer"];
+}): Promise<R<{ status: string; inquiryId?: string }>> {
+  const { inquiryId, c, name, email, note, input, company, viewer, status } = a;
+  const supabase = await createClient();
+  await supabase.from("call_contacts").update({ inquiry_id: inquiryId, email: email || c.email }).eq("id", c.id);
+  if (!a.added) {
+    // Back from the dead: put the existing lead back to Contacted unless it's already further along.
+    await createAdminClient().from("inquiries").update({ status: "contacted" }).eq("id", inquiryId).in("status", ["new", "no_answer", "no_show", "closed"]);
+  } else await logActivity({ clientId: company.id, actor: "client", message: `${c.company ?? name} is interested (cold call)`, clientLink: `/portal/inquiries?open=${inquiryId}`, adminLink: `/admin/inquiries/${inquiryId}` });
+
+  const notes: string[] = [a.added ? `${c.company ?? name} added to the Pipeline.` : `${c.company ?? name} was already in the Pipeline.`];
   if (input.sendEmail && (email || c.email)) {
     const sent = await sendInterestedEmail({ inquiryId, to: email || c.email!, contact: name, company: c.company, city: c.city, country: c.country, clientId: company.id, clientName: company.name, agentFallback: viewer.fullName ?? null });
     notes.push(sent.ok ? `Email sent to ${sent.to}.` : `The email wasn't sent: ${sent.error}`);

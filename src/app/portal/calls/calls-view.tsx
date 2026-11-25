@@ -1,11 +1,11 @@
 "use client";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Alert, Button, Input, Select, Textarea } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import {
-  CALL_COUNTRIES, CLAIM_MINUTES, DEFAULT_SCRIPT, DEFAULT_WHATSAPP, OPEN_STATUSES, OUTCOMES, OUTCOME_LABEL, REACHED,
+  CALL_COUNTRIES, CLAIM_MINUTES, DEFAULT_SCRIPT, STATUS_LABEL, DEFAULT_WHATSAPP, OPEN_STATUSES, OUTCOMES, OUTCOME_LABEL, REACHED,
   eatDate, fillTemplate, freeSlots, prettyPhone, shortDay, scriptSteps, waLink, whenLabel,
   type CallContact, type CallList, type CallLog, type CallSettings, type Outcome,
 } from "@/lib/calls";
@@ -26,6 +26,7 @@ export function CallsView(p: {
   tab: Tab; range: number; now: number; me: string; names: Record<string, string>;
   lists: CallList[]; contacts: CallContact[]; logs: CallLog[]; dnc: Dnc[]; settings: CallSettings; sender: Sender; hasMeetingDefaults: boolean;
   meetings: { inquiry_id: string | null; starts_at: string; duration_min: number }[];
+  openId?: string | null;
 }) {
   const router = useRouter();
   const [importing, setImporting] = useState(false);
@@ -150,6 +151,21 @@ function Calling(p: Parameters<typeof CallsView>[0] & { onToast: (m: string | nu
   const pick = (id: string) => take(async () => { const r = await openCall(id); return r.ok ? { ok: true as const, current: r.current } : r; });
   const stop = () => start(async () => { await releaseCalls(); setCur(null); router.refresh(); });
 
+  // Opened from Lists ("Open") with ?open=<id>: show that lead straight away.
+  const opened = useRef<string | null>(null);
+  useEffect(() => {
+    if (!p.openId || opened.current === p.openId) return;
+    opened.current = p.openId;
+    pick(p.openId);
+    router.replace("/portal/calls", { scroll: false });
+  }, [p.openId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Find any lead, whatever happened before (e.g. they call you back after "No answer").
+  const [find, setFind] = useState("");
+  const fq = find.trim().toLowerCase(), fd = fq.replace(/\D/g, "");
+  const found = fq.length < 2 ? [] : p.contacts.filter((c) =>
+    [c.company, c.contact_name, c.email].some((x) => x?.toLowerCase().includes(fq)) || (fd.length >= 4 && ((c.phone ?? "") + (c.other_phone ?? "").replace(/\D/g, "")).includes(fd))).slice(0, 8);
+
   if (!p.lists.length) {
     return (
       <div className="flex flex-col items-center gap-2 rounded-card border border-dashed border-field px-5 py-12 text-center">
@@ -162,6 +178,28 @@ function Calling(p: Parameters<typeof CallsView>[0] & { onToast: (m: string | nu
 
   return (
     <>
+      <div className="relative">
+        <Input value={find} onChange={(e) => setFind(e.target.value)} placeholder="Someone called you back? Find them by name, company or number" aria-label="Find a lead" className="h-10 pl-9" />
+        <Icon name="search" size={16} className="pointer-events-none absolute left-3 top-3 text-slate" />
+        {fq.length >= 2 && (
+          <ul className="absolute inset-x-0 top-11 z-20 overflow-hidden rounded-card border border-line bg-white shadow-[0_12px_30px_rgba(0,3,33,0.12)]">
+            {found.map((c) => (
+              <li key={c.id}>
+                <button type="button" disabled={pending} onClick={() => { setFind(""); pick(c.id); }}
+                  className="flex w-full items-center gap-3 border-b border-[#F1F2F4] px-3.5 py-2.5 text-left last:border-0 hover:bg-sidebar">
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <span className="truncate font-semibold">{c.company ?? c.contact_name ?? prettyPhone(c.phone)}</span>
+                    <span className="truncate text-xs text-slate">{[prettyPhone(c.phone), c.contact_name && c.company ? c.contact_name : null, listName[c.list_id]].filter(Boolean).join(" · ")}</span>
+                  </span>
+                  <span className="whitespace-nowrap rounded-full bg-[#F1F2F4] px-2 py-0.5 text-[11px] font-semibold text-[#4A4F63]">{c.phone ? STATUS_LABEL[c.status] : "No phone"}</span>
+                </button>
+              </li>
+            ))}
+            {!found.length && <li className="px-3.5 py-3 text-[13px] text-slate">No lead matches &ldquo;{find.trim()}&rdquo;.</li>}
+          </ul>
+        )}
+      </div>
+
       <div role="group" aria-label="Which list" className="flex flex-wrap gap-2">
         {[{ id: null as string | null, name: "All lists" }, ...p.lists.filter((l) => !l.archived)].map((l) => {
           const on = list === l.id;
@@ -336,7 +374,7 @@ function CallCard({ cur, p, listName, script, pending, onSkip, onStop, onSaved, 
       <section aria-label="Current call" className="flex flex-col gap-4 rounded-card border border-line p-5">
         <div className="flex flex-wrap items-start gap-4">
           <div className="flex min-w-[220px] flex-1 flex-col gap-0.5">
-            <span className="text-xs text-slate">{listName} · {c.attempts ? `try ${c.attempts + 1}` : "first call"}</span>
+            <span className="text-xs text-slate">{listName} · {OPEN_STATUSES.includes(c.status) ? (c.attempts ? `try ${c.attempts + 1}` : "first call") : `was: ${STATUS_LABEL[c.status]}`}</span>
             <h2 className="text-xl font-semibold tracking-[-0.01em]">{c.company ?? c.contact_name ?? "Unknown company"}</h2>
             {(c.contact_name || c.city || c.country) && <span className="text-body">{[c.company ? c.contact_name : null, c.city, c.country].filter(Boolean).join(" · ")}</span>}
             <span className="mt-1.5 text-[26px] font-semibold tabular-nums tracking-[-0.01em]">{prettyPhone(c.phone)}</span>

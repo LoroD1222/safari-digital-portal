@@ -77,6 +77,7 @@ export default async function CallsPage(props: PageProps<"/portal/calls">) {
         agent: viewer.fullName?.split(" ")[0] || (sender.data?.agent_name as string | null) || null,
         company: (sender.data?.from_name as string | null) || company.name.replace(/\s*\(internal\)\s*$/i, ""),
       }}
+      openId={typeof sp.open === "string" && /^[0-9a-f-]{36}$/i.test(sp.open) ? sp.open : null}
       hasMeetingDefaults={!!(company.meeting_link || company.meeting_address)}
       meetings={(appts.data ?? []) as { inquiry_id: string | null; starts_at: string; duration_min: number }[]}
     />

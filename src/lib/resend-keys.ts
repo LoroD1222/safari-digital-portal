@@ -18,8 +18,20 @@ export async function sendingKey(clientId: string) {
   return (await clientResend(clientId))?.apiKey || cleanKey(process.env.RESEND_API_KEY) || undefined;
 }
 
-// What the admin card shows: whether a key is saved, and its last characters.
+// How the client's webhook last went (null error = it worked). Quietly does nothing before 0038 has run.
+export async function noteWebhook(clientId: string, error: string | null) {
+  await createAdminClient().from("client_resend").update({ webhook_last_at: new Date().toISOString(), webhook_last_error: error }).eq("client_id", clientId);
+}
+
+export type WebhookHealth = { at: string; error: string | null } | null;
+
+// What the admin card shows: whether a key is saved, its last characters, and how the webhook last went.
 export async function clientResendSummary(clientId: string) {
   const r = await clientResend(clientId);
-  return r ? { hasKey: true, keyEnd: r.apiKey.slice(-4), hasWebhook: !!r.webhookSecret } : { hasKey: false, keyEnd: "", hasWebhook: false };
+  let webhook: WebhookHealth = null;
+  if (r) {
+    const { data } = await createAdminClient().from("client_resend").select("webhook_last_at, webhook_last_error").eq("client_id", clientId).maybeSingle();
+    if (data?.webhook_last_at) webhook = { at: data.webhook_last_at as string, error: (data.webhook_last_error as string | null) ?? null };
+  }
+  return r ? { hasKey: true, keyEnd: r.apiKey.slice(-4), hasWebhook: !!r.webhookSecret, webhook } : { hasKey: false, keyEnd: "", hasWebhook: false, webhook };
 }

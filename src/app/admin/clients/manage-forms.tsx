@@ -227,7 +227,7 @@ export function MetaEventsForm({ clientId, datasetId, hasToken }: { clientId: st
 
 export function FollowupSenderForm({ clientId, email, name, clientName, own, webhookUrl }: {
   clientId: string; email: string | null; name: string | null; clientName: string;
-  own: { hasKey: boolean; keyEnd: string; hasWebhook: boolean }; webhookUrl: string;
+  own: { hasKey: boolean; keyEnd: string; hasWebhook: boolean; webhook?: { at: string; error: string | null } | null }; webhookUrl: string;
 }) {
   const [state, action] = useActionState<FormState, FormData>(saveFollowupSender.bind(null, clientId), {});
   return (
@@ -249,6 +249,10 @@ export function FollowupSenderForm({ clientId, email, name, clientName, own, web
         <div className="flex flex-col gap-1 text-xs text-slate">
           <span>Webhook endpoint for the client&apos;s Resend (Webhooks → Add endpoint, events: email.bounced, email.complained, email.delivered):</span>
           <code className="select-all break-all rounded-[6px] border border-line bg-white px-2 py-1.5 font-mono text-[12px] text-ink">{webhookUrl}</code>
+          {own.webhook ? (own.webhook.error
+            ? <span className="text-danger-text">Last webhook call failed ({own.webhook.at.slice(0, 16).replace("T", " ")} UTC): {own.webhook.error}. Paste the signing secret from this webhook in Resend above, save, then re-enable the webhook in Resend.</span>
+            : <span className="text-forest">Webhook working · last event {own.webhook.at.slice(0, 16).replace("T", " ")} UTC</span>)
+            : own.hasKey ? <span>No webhook events received yet.</span> : null}
         </div>
         {own.hasKey && (
           <label className="flex items-center gap-2 text-[13px] text-body">

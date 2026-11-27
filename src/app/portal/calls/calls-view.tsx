@@ -6,7 +6,7 @@ import { Alert, Button, Input, Select, Textarea } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { useBase } from "@/lib/use-base";
 import {
-  CALL_COUNTRIES, CLAIM_MINUTES, DEFAULT_SCRIPT, STATUS_LABEL, DEFAULT_WHATSAPP, OPEN_STATUSES, OUTCOMES, OUTCOME_LABEL, REACHED,
+  CALL_COUNTRIES, CLAIM_MINUTES, DEFAULT_SCRIPT, STATUS_LABEL, whatsappIntro, OPEN_STATUSES, OUTCOMES, OUTCOME_LABEL, REACHED,
   eatDate, fillTemplate, freeSlots, prettyPhone, shortDay, scriptSteps, waLink, whenLabel,
   type CallContact, type CallList, type CallLog, type CallSettings, type Outcome,
 } from "@/lib/calls";
@@ -234,7 +234,7 @@ function Calling(p: Parameters<typeof CallsView>[0] & { onToast: (m: string | nu
       {missed && (
         <div className="flex flex-wrap items-center gap-3 rounded-control border border-[#BFE3CF] bg-[#F1FAF6] px-3.5 py-2.5 text-[13px] text-forest">
           <span className="flex-1">No answer from {missed.company ?? missed.contact_name ?? prettyPhone(missed.phone)}. Send a WhatsApp intro so they know who called?</span>
-          <a href={waLink(missed.phone, fillTemplate(p.settings.whatsapp_intro || DEFAULT_WHATSAPP, { contact: missed.contact_name, company: missed.company, agent: p.sender.agent, ourCompany: p.sender.company, city: missed.city }))}
+          <a href={waLink(missed.phone, fillTemplate(whatsappIntro(p.settings.whatsapp_intro), { contact: missed.contact_name, company: missed.company, agent: p.sender.agent, ourCompany: p.sender.company, city: missed.city }))}
             target="_blank" rel="noopener noreferrer" onClick={() => setMissed(null)}
             className="inline-flex h-8 items-center gap-1.5 rounded-control bg-brand px-3 font-semibold text-white no-underline hover:bg-brand-hover"><Icon name="whatsapp" size={14} />Send WhatsApp intro</a>
           <button type="button" onClick={() => setMissed(null)} className="font-medium text-slate hover:text-ink">Not now</button>
@@ -404,7 +404,7 @@ function CallCard({ cur, p, listName, script, pending, onSkip, onStop, onSaved, 
   const [saving, start] = useTransition();
   const vars = { contact: c.contact_name, company: c.company, agent: p.sender.agent, ourCompany: p.sender.company, city: c.city, country: c.country };
   const steps = scriptSteps(fillTemplate(script || p.settings.default_script || DEFAULT_SCRIPT, vars));
-  const wa = waLink(c.phone, fillTemplate(p.settings.whatsapp_intro || DEFAULT_WHATSAPP, vars));
+  const wa = waLink(c.phone, fillTemplate(whatsappIntro(p.settings.whatsapp_intro), vars));
   const busy = pending || saving;
 
   const save = () => {

@@ -3,7 +3,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Alert, Button, Input, Textarea } from "@/components/ui";
-import { DEFAULT_BODY, DEFAULT_SCRIPT, DEFAULT_SUBJECT, DEFAULT_WHATSAPP, prettyPhone, shortDay, eatDate, type CallSettings } from "@/lib/calls";
+import { DEFAULT_BODY, DEFAULT_SCRIPT, DEFAULT_SUBJECT, whatsappIntro, prettyPhone, shortDay, eatDate, type CallSettings } from "@/lib/calls";
 import { addDnc, removeDnc, saveCallSettings } from "./actions";
 import { useBase } from "@/lib/use-base";
 import type { Dnc, Sender } from "./calls-view";
@@ -14,7 +14,7 @@ export function SettingsTab({ settings, dnc, sender, onToast }: { settings: Call
   const router = useRouter();
   const { followups } = useBase();
   const [v, setV] = useState({
-    default_script: settings.default_script ?? DEFAULT_SCRIPT, daily_target: String(settings.daily_target), whatsapp_intro: settings.whatsapp_intro ?? DEFAULT_WHATSAPP,
+    default_script: settings.default_script ?? DEFAULT_SCRIPT, daily_target: String(settings.daily_target), whatsapp_intro: whatsappIntro(settings.whatsapp_intro),
     interested_subject: settings.interested_subject ?? DEFAULT_SUBJECT, interested_body: settings.interested_body ?? DEFAULT_BODY,
     case_study_url: settings.case_study_url ?? "", case_study_name: settings.case_study_name ?? "",
   });

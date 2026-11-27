@@ -242,7 +242,13 @@ I just wanted to ask, are you currently doing any online advertising for your co
 Why I'm calling
 Okay, I see. The reason I'm calling is we're working with other tour operators here in Tanzania, and I wanted to see if this might be something useful for your business as well.`
 
-export const DEFAULT_WHATSAPP = `Hello {{first_name}}, it's {{agent_name}} from {{our_company}} in Arusha. I tried calling you just now. We build websites and run Facebook and Instagram ads that help safari companies like {{company}} get more inquiries from tourists. When is a good time for a quick 5-minute call?`;
+export const DEFAULT_WHATSAPP = `Hello, are you still doing safari tours in Tanzania?`;
+// Earlier standard messages: if one of these is still saved in Settings, the new standard one is used instead.
+const OLD_WHATSAPP = [
+  `Hello {{first_name}}, it's {{agent_name}} from {{our_company}} in Arusha. I tried calling you just now. We build websites and run Facebook and Instagram ads that help safari companies like {{company}} get more inquiries from tourists. When is a good time for a quick 5-minute call?`,
+  `Hi {{first_name}}, it's {{agent_name}} from {{our_company}}. I tried calling you just now about getting {{company}} more direct bookings from online ads. When is a good time for a quick 5-minute call?`,
+];
+export const whatsappIntro = (saved: string | null | undefined) => (saved?.trim() && !OLD_WHATSAPP.includes(saved.trim()) ? saved : DEFAULT_WHATSAPP);
 export const DEFAULT_SUBJECT = "Great speaking with you, {{first_name}}";
 export const DEFAULT_BODY = `Hi {{first_name}},
 
